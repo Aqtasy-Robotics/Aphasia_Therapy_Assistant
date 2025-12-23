@@ -5,3 +5,81 @@ The Basic Hardware is to be used
 - Speaker
 - 7 Inch touch display(Body)
 - 1.5 Inch OLED display (Face)
+- Micro SD Card
+- 3D Printed encoluser 
+- Cabels,Screws and Nuts
+- Power adapter
+
+Raspberry Pi OS Installation Guide
+
+This guide outlines the steps to install Raspberry Pi OS on a Raspberry Pi 4 for headless (remote) access via SSH.
+Prerequisites
+
+    Raspberry Pi 4
+
+    MicroSD card (8GB minimum, 16GB+ recommended)
+
+    Computer with SD card reader
+
+    Network connection for initial setup
+
+Installation Steps
+1. Prepare Installation Medium
+
+    Install Raspberry Pi Imager
+
+        Download from raspberrypi.com/software
+
+        Available for Windows, macOS, and Linux
+
+    Insert SD Card
+
+        Insert the microSD card into your computer's card reader
+
+2. Configure and Write OS Image
+
+    Launch Raspberry Pi Imager
+
+    Select Device: Choose "Raspberry Pi 4"
+
+    Choose OS: Select "Raspberry Pi OS (other)" → "Raspberry Pi OS Lite" (or your preferred variant)
+
+    Select Storage: Choose your inserted SD card
+
+    Configure Settings (Click gear icon or Ctrl+Shift+X):
+
+        Enable SSH: Set password authentication
+
+        Configure Wi-Fi (optional for wireless setup):
+
+            Enter SSID and password
+
+            Select your country
+
+        Set username and password
+
+        Configure locale settings if needed
+
+    Write Image: Click "WRITE" and confirm to begin writing
+
+3. Boot Raspberry Pi
+
+    Eject SD card safely from your computer
+
+    Insert SD card into Raspberry Pi 4
+
+    Connect power to boot the Raspberry Pi
+
+    Wait 1-2 minutes for initial boot process to complete
+
+4. Remote Access
+
+    SSH Access: Connect using your computer's terminal:
+    bash
+
+ssh username@raspberrypi.local
+
+or use the IP address if known:
+bash
+
+ssh username@[IP_ADDRESS]
