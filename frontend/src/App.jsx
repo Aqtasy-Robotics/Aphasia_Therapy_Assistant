@@ -5,6 +5,7 @@ import {
   Navigate,
 } from "react-router-dom";
 import AuthPage from "./pages/AuthPage";
+import PatientDashboard from "./pages/PatientDashboard";
 
 function App() {
   return (
@@ -16,6 +17,7 @@ function App() {
         {/* Auth Routes */}
         <Route path="/login" element={<AuthPage type="login" />} />
         <Route path="/signup" element={<AuthPage type="signup" />} />
+        <Route path="/patient-dashboard" element={<PatientDashboard />} />
 
         {/* Fallback if anything happens*/}
         <Route
