@@ -6,6 +6,8 @@ import {
 } from "react-router-dom";
 import AuthPage from "./pages/AuthPage";
 import PatientDashboard from "./pages/PatientDashboard";
+import TherapistDashboard from "./pages/TherapistDashboard";
+import ProtectedRoute from "./components/ProtectedRoute";
 
 function App() {
   return (
@@ -18,6 +20,17 @@ function App() {
         <Route path="/login" element={<AuthPage type="login" />} />
         <Route path="/signup" element={<AuthPage type="signup" />} />
         <Route path="/patient-dashboard" element={<PatientDashboard />} />
+        <Route path="/therapist-dashboard" element={<TherapistDashboard />} />
+
+        {/* Protected Therapist Routes */}
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute requiredRole="therapist">
+              <TherapistDashboard />
+            </ProtectedRoute>
+          }
+        />
 
         {/* Fallback if anything happens*/}
         <Route
