@@ -22,7 +22,8 @@ function App() {
         <Route path="/patient-dashboard" element={<PatientDashboard />} />
         <Route path="/therapist-dashboard" element={<TherapistDashboard />} />
 
-        {/* Protected Therapist Routes */}
+        {/*Protected Therapist Routes*/}
+        {/*Security checkpoint inside your code and wraps aroun your private pages*/}
         <Route
           path="/dashboard"
           element={
@@ -35,6 +36,7 @@ function App() {
         {/* Fallback if anything happens*/}
         <Route
           path="*"
+          //incase the app doesn't have any redirections installed
           element={<div className="p-10 text-center">404 - Not Found</div>}
         />
       </Routes>
