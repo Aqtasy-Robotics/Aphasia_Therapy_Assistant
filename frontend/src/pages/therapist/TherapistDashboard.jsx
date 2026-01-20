@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { auth, db } from "../firebase";
+import { auth, db } from "../../firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { signOut, onAuthStateChanged } from "firebase/auth";
 import { useNavigate } from "react-router-dom";
-import logo from "../assets/black_logo.svg";
+import logo from "../../assets/black_logo.svg";
 
 const TherapistDashboard = () => {
   const [userData, setUserData] = useState({
@@ -142,7 +142,6 @@ const TherapistDashboard = () => {
     </div>
   );
 };
-
 
 const NavItem = ({ label, active = false }) => (
   <div

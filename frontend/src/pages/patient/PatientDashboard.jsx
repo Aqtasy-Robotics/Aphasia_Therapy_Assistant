@@ -1,56 +1,48 @@
 import React, { useState, useEffect } from "react";
-import { auth, db } from "../firebase";
+import { auth, db } from "../../firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { signOut, onAuthStateChanged } from "firebase/auth";
-import { useNavigate } from "react-router-dom";
-import ProgressChart from "../components/ProgressChart";
-import logo from "../assets/black_logo.svg";
+import { useNavigate, useLocation } from "react-router-dom";
+import ProgressChart from "../../components/ProgressChart";
+import logo from "../../assets/black_logo.svg";
 
 const PatientDashboard = () => {
   const [userName, setUserName] = useState("User");
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
-        try {
-          const docRef = doc(db, "users", user.uid);
-          const docSnap = await getDoc(docRef);
-          if (docSnap.exists()) {
-            setUserName(docSnap.data().fullName); // Dynamically set the Full Name
-          }
-        } catch (error) {
-          console.error("Error fetching user data:", error);
-        }
+        const docRef = doc(db, "users", user.uid);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) setUserName(docSnap.data().fullName);
+        setLoading(false);
       } else {
-        navigate("/login"); // Redirect if not authenticated
+        navigate("/login");
       }
-      setLoading(false);
     });
     return () => unsubscribe();
   }, [navigate]);
 
   const handleLogout = async () => {
-    try {
-      await signOut(auth); // Clear Firebase session
-      navigate("/login");
-    } catch (error) {
-      console.error("Logout failed", error);
-    }
+    await signOut(auth);
+    navigate("/login");
   };
 
-  if (loading) {
+  const handleNav = (path) => navigate(path);
+  const isActive = (path) => location.pathname === path;
+
+  if (loading)
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#4f6ef7]"></div>
+      <div className="flex h-screen items-center justify-center">
+        Loading...
       </div>
     );
-  }
 
   return (
     <div className="flex min-h-screen bg-[#f8fafc]">
-      {/* Sidebar Section */}
       <aside className="w-64 bg-white border-r border-gray-100 flex flex-col p-6 sticky top-0 h-screen">
         <div className="flex flex-col items-center mb-10">
           <img src={logo} alt="Aqtasy Logo" className="h-12 mb-2" />
@@ -59,16 +51,38 @@ const PatientDashboard = () => {
           </span>
         </div>
 
+        {/* NAVIGATION LINKS */}
         <nav className="flex-1 space-y-1">
           <NavItem
             label="Home"
-            active
-            onClick={() => navigate("/patient-dashboard")}
+            active={isActive("/patient-dashboard")}
+            onClick={() => handleNav("/patient-dashboard")}
           />
-          <NavItem label="My Progress" onClick={() => {}} />
-          <NavItem label="My Words" onClick={() => {}} />
-          <NavItem label="Sessions" onClick={() => {}} />
-          <NavItem label="Profile" onClick={() => {}} />
+          <NavItem
+            label="My Progress"
+            active={isActive("/patient-progress")}
+            onClick={() => handleNav("/patient-progress")}
+          />
+          <NavItem
+            label="My Words"
+            active={isActive("/patient-words")}
+            onClick={() => handleNav("/patient-words")}
+          />
+          <NavItem
+            label="My Sessions"
+            active={isActive("/patient-sessions")}
+            onClick={() => handleNav("/patient-sessions")}
+          />
+          <NavItem
+            label="Chat"
+            active={isActive("/patient-chat")}
+            onClick={() => handleNav("/patient-chat")}
+          />
+          <NavItem
+            label="Profile"
+            active={isActive("/profile")}
+            onClick={() => handleNav("/profile")}
+          />
         </nav>
 
         <button
@@ -79,7 +93,6 @@ const PatientDashboard = () => {
         </button>
       </aside>
 
-      {/* Main Content Area */}
       <main className="flex-1 p-10 overflow-y-auto">
         <header className="mb-8 flex justify-between items-end">
           <div>
@@ -95,40 +108,10 @@ const PatientDashboard = () => {
           </div>
         </header>
 
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-          <StatCard
-            title="Words Mastered"
-            value="24"
-            sub="+6 this week"
-            color="border-blue-500"
-          />
-          <StatCard
-            title="Session Time"
-            value="1.5h"
-            sub="Next session tomorrow"
-            color="border-green-500"
-          />
-          <StatCard
-            title="Daily Streak"
-            value="12"
-            sub="Keep the momentum!"
-            color="border-orange-500"
-          />
-        </div>
-
-        {/* Chart Section */}
         <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-gray-50">
-          <div className="flex justify-between items-center mb-8">
-            <div>
-              <h2 className="text-xl font-bold text-gray-800">
-                Therapy Progress
-              </h2>
-              <p className="text-xs text-gray-400 font-medium">
-                Average speech accuracy (%)
-              </p>
-            </div>
-          </div>
+          <h2 className="text-xl font-bold text-gray-800 mb-8">
+            Therapy Progress
+          </h2>
           <ProgressChart />
         </div>
       </main>
@@ -136,8 +119,7 @@ const PatientDashboard = () => {
   );
 };
 
-// Reusable Sub-components
-const NavItem = ({ label, active = false, onClick }) => (
+const NavItem = ({ label, active, onClick }) => (
   <div
     onClick={onClick}
     className={`px-4 py-3 rounded-xl cursor-pointer transition-all flex items-center gap-3 ${
@@ -147,18 +129,6 @@ const NavItem = ({ label, active = false, onClick }) => (
     }`}
   >
     <span className="text-sm">{label}</span>
-  </div>
-);
-
-const StatCard = ({ title, value, sub, color }) => (
-  <div
-    className={`bg-white p-6 rounded-[2rem] shadow-sm border-l-4 ${color} hover:shadow-md transition-shadow`}
-  >
-    <p className="text-xs font-bold text-gray-400 mb-2 uppercase tracking-wider">
-      {title}
-    </p>
-    <h3 className="text-4xl font-bold text-gray-800">{value}</h3>
-    <p className="text-xs text-gray-400 mt-2 font-medium">{sub}</p>
   </div>
 );
 
