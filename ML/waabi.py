@@ -1,8 +1,10 @@
-import pyaudio
-import wave
+import sounddevice as sd
+import soundfile as sf
+import numpy as np
 import os
 from groq import Groq
 import time
+from dotenv import load_dotenv
 
 class AphasisSpeechCorrectionAgent:
     def __init__(self, api_key=None, aphasia_mode=True):
@@ -13,14 +15,12 @@ class AphasisSpeechCorrectionAgent:
             api_key: Groq API key (or set GROQ_API_KEY env variable)
             aphasia_mode: Enable special handling for Aphasia speech patterns
         """
-        self.client = Groq(api_key='waabi_py')
+        self.client = Groq(api_key=api_key or os.environ.get("waabi_py"))
         self.aphasia_mode = aphasia_mode
         
         # Audio recording settings optimized for Aphasia
-        self.chunk = 1024
-        self.format = pyaudio.paInt16
-        self.channels = 1
-        self.rate = 16000
+        self.sample_rate = 16000  # 16kHz is optimal for Whisper
+        self.channels = 1  # Mono audio
         self.record_seconds = 10  # Longer default for Aphasia speakers
         self.temp_audio_file = "temp_audio.wav"
         
@@ -38,56 +38,43 @@ class AphasisSpeechCorrectionAgent:
         if duration is None:
             duration = self.record_seconds
             
-        audio = pyaudio.PyAudio()
-        
         try:
             print("🎤 Recording will start in 3 seconds...")
             print("Take your time and speak naturally.")
             time.sleep(3)
             print("\n🔴 RECORDING NOW! Speak whenever you're ready...")
             
-            stream = audio.open(
-                format=self.format,
+            # Record audio
+            recording = sd.rec(
+                int(duration * self.sample_rate),
+                samplerate=self.sample_rate,
                 channels=self.channels,
-                rate=self.rate,
-                input=True,
-                frames_per_buffer=self.chunk
+                dtype='int16'
             )
             
-            frames = []
+            # Show countdown during recording
+            if show_countdown:
+                for remaining in range(duration, 0, -1):
+                    print(f"⏱️  {remaining} seconds remaining...", end='\r')
+                    time.sleep(1)
+            else:
+                sd.wait()  # Wait until recording is finished
             
-            # Record with countdown
-            for i in range(0, int(self.rate / self.chunk * duration)):
-                data = stream.read(self.chunk)
-                frames.append(data)
-                
-                # Show progress every second
-                if show_countdown and i % (self.rate // self.chunk) == 0:
-                    elapsed = i // (self.rate // self.chunk)
-                    remaining = duration - elapsed
-                    if remaining > 0:
-                        print(f"⏱️  {remaining} seconds remaining...", end='\r')
-            
+            sd.wait()  # Ensure recording is complete
             print("\n✅ Recording finished!                    ")
             
-            stream.stop_stream()
-            stream.close()
-            
-            # Save the recorded audio to a file
-            wf = wave.open(self.temp_audio_file, 'wb')
-            wf.setnchannels(self.channels)
-            wf.setsampwidth(audio.get_sample_size(self.format))
-            wf.setframerate(self.rate)
-            wf.writeframes(b''.join(frames))
-            wf.close()
+            # Save to WAV file
+            sf.write(self.temp_audio_file, recording, self.sample_rate)
             
             return self.temp_audio_file
             
         except Exception as e:
             print(f"❌ Error recording audio: {e}")
+            print("\n💡 Troubleshooting tips:")
+            print("   - Check if your microphone is connected")
+            print("   - Make sure no other app is using the microphone")
+            print("   - Try running: python -m sounddevice")
             return None
-        finally:
-            audio.terminate()
     
     def transcribe_with_whisper(self, audio_file):
         """
@@ -97,7 +84,7 @@ class AphasisSpeechCorrectionAgent:
             audio_file: Path to audio file
             
         Returns:
-            dict: Transcription data including text and word-level timestamps
+            dict: Transcription data including text and metadata
         """
         try:
             print("⏳ Transcribing with Whisper (optimized for speech difficulties)...")
@@ -207,6 +194,35 @@ Be patient, understanding, and focus on what WAS communicated rather than what w
                 "success": False
             }
     
+    def test_microphone(self):
+        """Test if microphone is working properly."""
+        print("\n🎤 Testing microphone...")
+        print("Available audio devices:")
+        print(sd.query_devices())
+        
+        print("\n🔴 Recording 3 seconds for test...")
+        try:
+            test_recording = sd.rec(
+                int(3 * self.sample_rate),
+                samplerate=self.sample_rate,
+                channels=self.channels,
+                dtype='int16'
+            )
+            sd.wait()
+            
+            # Check if we captured any sound
+            if np.max(np.abs(test_recording)) > 100:
+                print("✅ Microphone is working! Sound detected.")
+                return True
+            else:
+                print("⚠️  Microphone detected but no sound captured.")
+                print("   Try speaking louder or check microphone settings.")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Microphone test failed: {e}")
+            return False
+    
     def run_interactive_session(self, recording_duration=10):
         """
         Run an Aphasia-friendly interactive session.
@@ -225,6 +241,12 @@ Be patient, understanding, and focus on what WAS communicated rather than what w
         print(f"⏱️  Recording duration: {recording_duration} seconds per session")
         print("💡 Take your time - there's no rush!")
         print("🛑 Press Ctrl+C anytime to exit\n")
+        
+        # Test microphone first
+        test = input("Would you like to test your microphone first? (y/n): ")
+        if test.lower() == 'y':
+            self.test_microphone()
+            input("\nPress Enter to continue...")
         
         session_count = 0
         

@@ -1,5 +1,5 @@
 from groq import Groq
-client=Groq(api_key="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")
+client=Groq(api_key="chatbot_py")
 print("Chatbot streaming : Type quit , exit or bye inorder to stop ")
 
 while True:
