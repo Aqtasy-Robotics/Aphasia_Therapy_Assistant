@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { auth, db } from "../firebase";
+import { auth, db } from "../../firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { signOut, onAuthStateChanged } from "firebase/auth";
-import { useNavigate } from "react-router-dom";
-import logo from "../assets/black_logo.svg";
+import { useNavigate, useLocation } from "react-router-dom"; 
+import logo from "../../assets/black_logo.svg";
 
 const TherapistDashboard = () => {
   const [userData, setUserData] = useState({
@@ -13,6 +13,7 @@ const TherapistDashboard = () => {
   });
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const location = useLocation(); // To track active button
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -35,6 +36,10 @@ const TherapistDashboard = () => {
     navigate("/login");
   };
 
+
+  const handleNav = (path) => navigate(path);
+  const isActive = (path) => location.pathname === path;
+
   if (loading)
     return (
       <div className="flex min-h-screen items-center justify-center text-[#5cb338] font-bold">
@@ -44,6 +49,7 @@ const TherapistDashboard = () => {
 
   return (
     <div className="flex min-h-screen bg-[#f8fafc]">
+      {/* SIDEBAR */}
       <aside className="w-64 bg-white border-r flex flex-col p-6 sticky top-0 h-screen">
         <div className="flex flex-col items-center mb-10">
           <img src={logo} alt="Logo" className="h-12 mb-2" />
@@ -51,21 +57,50 @@ const TherapistDashboard = () => {
             Therapist Portal
           </span>
         </div>
+        
+
         <nav className="flex-1 space-y-1">
-          <NavItem label="Dashboard" active />
-          <NavItem label="My Patients" />
-          <NavItem label="Calendar" />
-          <NavItem label="Reports" />
-          <NavItem label="Settings" />
+          <NavItem 
+            label="Dashboard" 
+            active={isActive('/dashboard')} 
+            onClick={() => handleNav('/dashboard')} 
+          />
+          <NavItem 
+            label="My Patients" 
+            active={isActive('/therapist-patients')} 
+            onClick={() => handleNav('/therapist-patients')} 
+          />
+          <NavItem 
+            label="Calendar" 
+            active={isActive('/therapist-calendar')} 
+            onClick={() => handleNav('/therapist-calendar')} 
+          />
+          <NavItem 
+            label="Reports" 
+            active={isActive('/therapist-reports')} 
+            onClick={() => handleNav('/therapist-reports')} 
+          />
+           <NavItem 
+            label="Messages" 
+            active={isActive('/therapist-messages')} 
+            onClick={() => handleNav('/therapist-messages')} 
+          />
+          <NavItem 
+            label="Settings" 
+            active={isActive('/therapist-settings')} 
+            onClick={() => handleNav('/therapist-settings')} 
+          />
         </nav>
+
         <button
           onClick={handleLogout}
-          className="text-gray-400 hover:text-red-500 font-bold text-sm p-3 mt-auto"
+          className="text-gray-400 hover:text-red-500 font-bold text-sm p-3 mt-auto flex items-center gap-2 group transition-all"
         >
           Logout
         </button>
       </aside>
 
+      {/* MAIN DASHBOARD CONTENT */}
       <main className="flex-1 p-10 overflow-y-auto">
         <header className="mb-8 flex justify-between items-start">
           <div>
@@ -82,56 +117,22 @@ const TherapistDashboard = () => {
         </header>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
-          <StatCard
-            title="Patients"
-            value="24"
-            sub="+2 this month"
-            color="border-green-500"
-          />
-          <StatCard
-            title="Sessions"
-            value="18"
-            sub="This week"
-            color="border-blue-500"
-          />
-          <StatCard
-            title="Avg Progress"
-            value="81%"
-            sub="+5% increase"
-            color="border-purple-500"
-          />
-          <StatCard
-            title="Clinics"
-            value="1"
-            sub="Primary Clinic"
-            color="border-orange-500"
-          />
+          <StatCard title="Patients" value="24" sub="+2 this month" color="border-green-500" />
+          <StatCard title="Sessions" value="18" sub="This week" color="border-blue-500" />
+          <StatCard title="Avg Progress" value="81%" sub="+5% increase" color="border-purple-500" />
+          <StatCard title="Clinics" value="1" sub="Primary Clinic" color="border-orange-500" />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <div className="bg-white p-8 rounded-[2rem] border border-gray-50 shadow-sm">
-            <h2 className="text-xl font-bold text-gray-800 mb-6">
-              Recent Activity
-            </h2>
+            <h2 className="text-xl font-bold text-gray-800 mb-6">Recent Activity</h2>
             <div className="space-y-6">
-              <ActivityItem
-                name="Sarah Johnson"
-                action="Session Complete"
-                time="2h ago"
-                color="bg-green-500"
-              />
-              <ActivityItem
-                name="Michael Brown"
-                action="Sent Message"
-                time="4h ago"
-                color="bg-blue-500"
-              />
+              <ActivityItem name="Sarah Johnson" action="Session Complete" time="2h ago" color="bg-green-500" />
+              <ActivityItem name="Michael Brown" action="Sent Message" time="4h ago" color="bg-blue-500" />
             </div>
           </div>
           <div className="bg-white p-8 rounded-[2rem] border border-gray-50 shadow-sm">
-            <h2 className="text-xl font-bold text-gray-800 mb-6">
-              Patient Focus
-            </h2>
+            <h2 className="text-xl font-bold text-gray-800 mb-6">Patient Focus</h2>
             <div className="space-y-4">
               <PatientRow name="Sarah Johnson" progress={88} />
               <PatientRow name="Emma Wilson" progress={92} />
@@ -144,10 +145,11 @@ const TherapistDashboard = () => {
 };
 
 
-const NavItem = ({ label, active = false }) => (
+const NavItem = ({ label, active = false, onClick }) => (
   <div
-    className={`px-4 py-3 rounded-xl cursor-pointer ${
-      active ? "bg-[#f0fff4] text-[#5cb338] font-bold" : "text-gray-400"
+    onClick={onClick}
+    className={`px-4 py-3 rounded-xl cursor-pointer transition-all ${
+      active ? "bg-[#f0fff4] text-[#5cb338] font-bold" : "text-gray-400 hover:bg-gray-50"
     }`}
   >
     <span className="text-sm">{label}</span>
@@ -156,9 +158,7 @@ const NavItem = ({ label, active = false }) => (
 
 const StatCard = ({ title, value, sub, color }) => (
   <div className={`bg-white p-6 rounded-[2rem] border-l-4 ${color} shadow-sm`}>
-    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-      {title}
-    </p>
+    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{title}</p>
     <h3 className="text-3xl font-bold text-gray-800">{value}</h3>
     <p className="text-xs text-gray-400 mt-2">{sub}</p>
   </div>
