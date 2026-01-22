@@ -11,6 +11,11 @@ import ProtectedRoute from "./components/ProtectedRoute";
 
 // Therapist Pages
 import TherapistDashboard from "./pages/therapist/TherapistDashboard";
+import MyPatients from "./pages/therapist/MyPatients";
+import Calender from "./pages/therapist/Calender";
+import Reports from "./pages/therapist/Reports";
+import Messages from "./pages/therapist/Messages";
+import Settings from "./pages/therapist/Settings";
 
 // Patient Pages
 import PatientDashboard from "./pages/patient/PatientDashboard";
@@ -94,6 +99,52 @@ function App() {
             </ProtectedRoute>
           }
         />
+
+        <Route
+          path="/therapist-patients"
+          element={
+            <ProtectedRoute requiredRole="therapist">
+              <MyPatients/>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/therapist-calendar"
+          element={
+            <ProtectedRoute requiredRole="therapist">
+              <Calender/>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/therapist-reports"
+          element={
+            <ProtectedRoute requiredRole="therapist">
+              <Reports/>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/therapist-messages"
+          element={
+            <ProtectedRoute requiredRole="therapist">
+              <Messages/>
+            </ProtectedRoute>
+          }
+        />
+
+          <Route
+          path="/therapist-settings"
+          element={
+            <ProtectedRoute requiredRole="therapist">
+              <Settings/>
+            </ProtectedRoute>
+          }
+        />
+
 
         {/* --- FALLBACK (404) --- */}
         <Route
