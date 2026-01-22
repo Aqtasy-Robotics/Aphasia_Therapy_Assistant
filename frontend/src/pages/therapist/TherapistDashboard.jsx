@@ -1,161 +1,53 @@
-import React, { useState, useEffect } from "react";
-import { auth, db } from "../../firebase";
-import { doc, getDoc } from "firebase/firestore";
-import { signOut, onAuthStateChanged } from "firebase/auth";
-import { useNavigate, useLocation } from "react-router-dom"; 
-import logo from "../../assets/black_logo.svg";
+import React from "react";
+import { useOutletContext } from "react-router-dom";
 
 const TherapistDashboard = () => {
-  const [userData, setUserData] = useState({
-    fullName: "Therapist",
-    title: "Dr.",
-    clinicName: "Aqtasy Clinic",
-  });
-  const [loading, setLoading] = useState(true);
-  const navigate = useNavigate();
-  const location = useLocation(); // To track active button
-
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        const docRef = doc(db, "users", user.uid);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          setUserData(docSnap.data());
-        }
-      } else {
-        navigate("/login");
-      }
-      setLoading(false);
-    });
-    return () => unsubscribe();
-  }, [navigate]);
-
-  const handleLogout = async () => {
-    await signOut(auth);
-    navigate("/login");
-  };
-
-
-  const handleNav = (path) => navigate(path);
-  const isActive = (path) => location.pathname === path;
-
-  if (loading)
-    return (
-      <div className="flex min-h-screen items-center justify-center text-[#5cb338] font-bold">
-        Loading Practice...
-      </div>
-    );
+  const { userData } = useOutletContext(); // Receives data from the shared layout
 
   return (
-    <div className="flex min-h-screen bg-[#f8fafc]">
-      {/* SIDEBAR */}
-      <aside className="w-64 bg-white border-r flex flex-col p-6 sticky top-0 h-screen">
-        <div className="flex flex-col items-center mb-10">
-          <img src={logo} alt="Logo" className="h-12 mb-2" />
-          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-            Therapist Portal
-          </span>
+    <>
+      <header className="mb-8 flex justify-between items-start">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-800">
+            Welcome back, {userData.title} {userData.fullName}! 👋
+          </h1>
+          <p className="text-[#5cb338] font-bold text-sm mt-1">
+            {userData.clinicName}
+          </p>
         </div>
-        
-
-        <nav className="flex-1 space-y-1">
-          <NavItem 
-            label="Dashboard" 
-            active={isActive('/dashboard')} 
-            onClick={() => handleNav('/dashboard')} 
-          />
-          <NavItem 
-            label="My Patients" 
-            active={isActive('/therapist-patients')} 
-            onClick={() => handleNav('/therapist-patients')} 
-          />
-          <NavItem 
-            label="Calendar" 
-            active={isActive('/therapist-calendar')} 
-            onClick={() => handleNav('/therapist-calendar')} 
-          />
-          <NavItem 
-            label="Reports" 
-            active={isActive('/therapist-reports')} 
-            onClick={() => handleNav('/therapist-reports')} 
-          />
-           <NavItem 
-            label="Messages" 
-            active={isActive('/therapist-messages')} 
-            onClick={() => handleNav('/therapist-messages')} 
-          />
-          <NavItem 
-            label="Settings" 
-            active={isActive('/therapist-settings')} 
-            onClick={() => handleNav('/therapist-settings')} 
-          />
-        </nav>
-
-        <button
-          onClick={handleLogout}
-          className="text-gray-400 hover:text-red-500 font-bold text-sm p-3 mt-auto flex items-center gap-2 group transition-all"
-        >
-          Logout
-        </button>
-      </aside>
-
-      {/* MAIN DASHBOARD CONTENT */}
-      <main className="flex-1 p-10 overflow-y-auto">
-        <header className="mb-8 flex justify-between items-start">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-800">
-              Welcome back, {userData.title} {userData.fullName}! 👋
-            </h1>
-            <p className="text-[#5cb338] font-bold text-sm mt-1">
-              {userData.clinicName}
-            </p>
-          </div>
-          <div className="bg-green-50 text-[#5cb338] text-[10px] font-bold px-4 py-2 rounded-full uppercase">
-            Therapist Account
-          </div>
-        </header>
-
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
-          <StatCard title="Patients" value="24" sub="+2 this month" color="border-green-500" />
-          <StatCard title="Sessions" value="18" sub="This week" color="border-blue-500" />
-          <StatCard title="Avg Progress" value="81%" sub="+5% increase" color="border-purple-500" />
-          <StatCard title="Clinics" value="1" sub="Primary Clinic" color="border-orange-500" />
+        <div className="bg-green-50 text-[#5cb338] text-[10px] font-bold px-4 py-2 rounded-full uppercase">
+          Therapist Account
         </div>
+      </header>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <div className="bg-white p-8 rounded-[2rem] border border-gray-50 shadow-sm">
-            <h2 className="text-xl font-bold text-gray-800 mb-6">Recent Activity</h2>
-            <div className="space-y-6">
-              <ActivityItem name="Sarah Johnson" action="Session Complete" time="2h ago" color="bg-green-500" />
-              <ActivityItem name="Michael Brown" action="Sent Message" time="4h ago" color="bg-blue-500" />
-            </div>
-          </div>
-          <div className="bg-white p-8 rounded-[2rem] border border-gray-50 shadow-sm">
-            <h2 className="text-xl font-bold text-gray-800 mb-6">Patient Focus</h2>
-            <div className="space-y-4">
-              <PatientRow name="Sarah Johnson" progress={88} />
-              <PatientRow name="Emma Wilson" progress={92} />
-            </div>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
+        <StatCard title="Patients" value="24" sub="+2 this month" color="border-green-500" />
+        <StatCard title="Sessions" value="18" sub="This week" color="border-blue-500" />
+        <StatCard title="Avg Progress" value="81%" sub="+5% increase" color="border-purple-500" />
+        <StatCard title="Clinics" value="1" sub="Primary Clinic" color="border-orange-500" />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="bg-white p-8 rounded-[2rem] border border-gray-50 shadow-sm">
+          <h2 className="text-xl font-bold text-gray-800 mb-6">Recent Activity</h2>
+          <div className="space-y-6">
+            <ActivityItem name="Sarah Johnson" action="Session Complete" time="2h ago" color="bg-green-500" />
+            <ActivityItem name="Michael Brown" action="Sent Message" time="4h ago" color="bg-blue-500" />
           </div>
         </div>
-      </main>
-    </div>
+        <div className="bg-white p-8 rounded-[2rem] border border-gray-50 shadow-sm">
+          <h2 className="text-xl font-bold text-gray-800 mb-6">Patient Focus</h2>
+          <div className="space-y-4">
+            <PatientRow name="Sarah Johnson" progress={88} />
+            <PatientRow name="Emma Wilson" progress={92} />
+          </div>
+        </div>
+      </div>
+    </>
   );
 };
 
-
-const NavItem = ({ label, active = false, onClick }) => (
-  <div
-    onClick={onClick}
-    className={`px-4 py-3 rounded-xl cursor-pointer transition-all ${
-      active ? "bg-[#f0fff4] text-[#5cb338] font-bold" : "text-gray-400 hover:bg-gray-50"
-    }`}
-  >
-    <span className="text-sm">{label}</span>
-  </div>
-);
-
+// Sub-components (StatCard, ActivityItem, PatientRow) remain the same as your original snippet
 const StatCard = ({ title, value, sub, color }) => (
   <div className={`bg-white p-6 rounded-[2rem] border-l-4 ${color} shadow-sm`}>
     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{title}</p>

@@ -8,6 +8,7 @@ import {
 // Auth & Core Components
 import AuthPage from "./pages/AuthPage";
 import ProtectedRoute from "./components/ProtectedRoute";
+import TherapistLayout from "./pages/therapist/TherapistLayout"; // Import the layout we created
 
 // Therapist Pages
 import TherapistDashboard from "./pages/therapist/TherapistDashboard";
@@ -30,16 +31,12 @@ function App() {
     <Router>
       <Routes>
         {/* --- PUBLIC ROUTES --- */}
-
-        {/* Redirect base URL to login */}
         <Route path="/" element={<Navigate to="/login" />} />
-
-        {/* Auth Routes */}
         <Route path="/login" element={<AuthPage type="login" />} />
         <Route path="/signup" element={<AuthPage type="signup" />} />
 
         {/* --- PROTECTED PATIENT ROUTES --- */}
-
+        {/* If patients need a sidebar too, you would follow the same layout pattern here */}
         <Route
           path="/patient-dashboard"
           element={
@@ -89,62 +86,22 @@ function App() {
           }
         />
 
-        {/* --- PROTECTED THERAPIST ROUTES --- */}
-
+        {/* --- PROTECTED THERAPIST ROUTES (NESTED) --- */}
         <Route
-          path="/dashboard"
           element={
             <ProtectedRoute requiredRole="therapist">
-              <TherapistDashboard />
+              <TherapistLayout />
             </ProtectedRoute>
           }
-        />
-
-        <Route
-          path="/therapist-patients"
-          element={
-            <ProtectedRoute requiredRole="therapist">
-              <MyPatients/>
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/therapist-calendar"
-          element={
-            <ProtectedRoute requiredRole="therapist">
-              <Calender/>
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/therapist-reports"
-          element={
-            <ProtectedRoute requiredRole="therapist">
-              <Reports/>
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/therapist-messages"
-          element={
-            <ProtectedRoute requiredRole="therapist">
-              <Messages/>
-            </ProtectedRoute>
-          }
-        />
-
-          <Route
-          path="/therapist-settings"
-          element={
-            <ProtectedRoute requiredRole="therapist">
-              <Settings/>
-            </ProtectedRoute>
-          }
-        />
-
+        >
+          {/* All routes inside here will render the Sidebar from TherapistLayout */}
+          <Route path="/dashboard" element={<TherapistDashboard />} />
+          <Route path="/therapist-patients" element={<MyPatients />} />
+          <Route path="/therapist-calendar" element={<Calender />} />
+          <Route path="/therapist-reports" element={<Reports />} />
+          <Route path="/therapist-messages" element={<Messages />} />
+          <Route path="/therapist-settings" element={<Settings />} />
+        </Route>
 
         {/* --- FALLBACK (404) --- */}
         <Route
