@@ -8,7 +8,10 @@ import {
 // Auth & Core Components
 import AuthPage from "./pages/AuthPage";
 import ProtectedRoute from "./components/ProtectedRoute";
-import TherapistLayout from "./pages/therapist/TherapistLayout"; // Import the layout we created
+
+// Layouts
+import TherapistLayout from "./pages/therapist/TherapistLayout";
+import PatientLayout from "./pages/patient/PatientLayout";
 
 // Therapist Pages
 import TherapistDashboard from "./pages/therapist/TherapistDashboard";
@@ -35,56 +38,21 @@ function App() {
         <Route path="/login" element={<AuthPage type="login" />} />
         <Route path="/signup" element={<AuthPage type="signup" />} />
 
-        {/* --- PROTECTED PATIENT ROUTES --- */}
-        {/* If patients need a sidebar too, you would follow the same layout pattern here */}
+        {/* --- PROTECTED PATIENT ROUTES (NESTED) --- */}
         <Route
-          path="/patient-dashboard"
           element={
             <ProtectedRoute requiredRole="patient">
-              <PatientDashboard />
+              <PatientLayout />
             </ProtectedRoute>
           }
-        />
-        <Route
-          path="/patient-progress"
-          element={
-            <ProtectedRoute requiredRole="patient">
-              <MyProgress />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/patient-words"
-          element={
-            <ProtectedRoute requiredRole="patient">
-              <MyWords />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/patient-sessions"
-          element={
-            <ProtectedRoute requiredRole="patient">
-              <MySessions />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/patient-chat"
-          element={
-            <ProtectedRoute requiredRole="patient">
-              <Chat />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/profile"
-          element={
-            <ProtectedRoute requiredRole="patient">
-              <Profile />
-            </ProtectedRoute>
-          }
-        />
+        >
+          <Route path="/patient-dashboard" element={<PatientDashboard />} />
+          <Route path="/patient-progress" element={<MyProgress />} />
+          <Route path="/patient-words" element={<MyWords />} />
+          <Route path="/patient-sessions" element={<MySessions />} />
+          <Route path="/patient-chat" element={<Chat />} />
+          <Route path="/profile" element={<Profile />} />
+        </Route>
 
         {/* --- PROTECTED THERAPIST ROUTES (NESTED) --- */}
         <Route
@@ -94,7 +62,6 @@ function App() {
             </ProtectedRoute>
           }
         >
-          {/* All routes inside here will render the Sidebar from TherapistLayout */}
           <Route path="/dashboard" element={<TherapistDashboard />} />
           <Route path="/therapist-patients" element={<MyPatients />} />
           <Route path="/therapist-calendar" element={<Calender />} />
