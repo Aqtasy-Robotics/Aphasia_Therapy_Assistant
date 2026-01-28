@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { auth, db } from "../../firebase";
-import { doc, getDoc } from "firebase/firestore";
-import { signOut, onAuthStateChanged } from "firebase/auth";
+import { supabase } from "../../supabaseClient"; 
 import { useNavigate, useLocation, Outlet } from "react-router-dom";
 import logo from "../../assets/black_logo.svg";
 
@@ -12,24 +10,28 @@ const PatientLayout = () => {
   const location = useLocation();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        const docRef = doc(db, "users", user.uid);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          setUserName(docSnap.data().fullName);
-        }
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session) {
+        setUserName(session.user.user_metadata.full_name || "User");
         setLoading(false);
       } else {
         navigate("/login");
       }
+    };
+
+    checkSession();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_OUT") navigate("/login");
     });
-    return () => unsubscribe();
+
+    return () => subscription.unsubscribe();
   }, [navigate]);
 
   const handleLogout = async () => {
-    await signOut(auth);
-    navigate("/login");
+    await supabase.auth.signOut();
   };
 
   const handleNav = (path) => navigate(path);
@@ -43,7 +45,6 @@ const PatientLayout = () => {
 
   return (
     <div className="flex min-h-screen bg-[#f8fafc]">
-      {/* --- PERSISTENT PATIENT SIDEBAR --- */}
       <aside className="w-64 bg-white border-r border-gray-100 flex flex-col p-6 sticky top-0 h-screen">
         <div className="flex flex-col items-center mb-10">
           <img src={logo} alt="Aqtasy Logo" className="h-12 mb-2" />
@@ -66,7 +67,6 @@ const PatientLayout = () => {
         </button>
       </aside>
 
-      {/* --- DYNAMIC CONTENT AREA --- */}
       <main className="flex-1 p-10 overflow-y-auto">
         <header className="mb-8 flex justify-between items-center">
           <h2 className="text-sm font-bold text-[#4f6ef7] bg-blue-50 px-4 py-2 rounded-full">
@@ -74,7 +74,6 @@ const PatientLayout = () => {
           </h2>
         </header>
 
-        {/* The current page (Dashboard, Progress, etc.) will render here */}
         <Outlet /> 
       </main>
     </div>

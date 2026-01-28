@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { auth, db } from "../../firebase";
-import { doc, getDoc } from "firebase/firestore";
-import { signOut, onAuthStateChanged } from "firebase/auth";
+import { supabase } from "../../supabaseClient"; 
 import { useNavigate, useLocation, Outlet } from "react-router-dom"; 
 import logo from "../../assets/black_logo.svg";
 
@@ -16,24 +14,35 @@ const TherapistLayout = () => {
   const location = useLocation();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        const docRef = doc(db, "users", user.uid);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          setUserData(docSnap.data());
-        }
+    // Check initial session
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session) {
+        // Data comes from the user_metadata we set during signup
+        setUserData({
+          fullName: session.user.user_metadata.full_name || "Therapist",
+          title: "Dr.",
+          clinicName: "Aqtasy Clinic",
+        });
       } else {
         navigate("/login");
       }
       setLoading(false);
+    };
+
+    checkSession();
+
+    // Listen for auth changes (like sign out)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_OUT") navigate("/login");
     });
-    return () => unsubscribe();
+
+    return () => subscription.unsubscribe();
   }, [navigate]);
 
   const handleLogout = async () => {
-    await signOut(auth);
-    navigate("/login");
+    await supabase.auth.signOut();
   };
 
   const isActive = (path) => location.pathname === path;
@@ -46,7 +55,6 @@ const TherapistLayout = () => {
 
   return (
     <div className="flex min-h-screen bg-[#f8fafc]">
-      {/* SIDEBAR */}
       <aside className="w-64 bg-white border-r flex flex-col p-6 sticky top-0 h-screen z-10">
         <div className="flex flex-col items-center mb-10">
           <img src={logo} alt="Logo" className="h-12 mb-2" />
@@ -72,7 +80,6 @@ const TherapistLayout = () => {
         </button>
       </aside>
 
-      {/* MAIN CONTENT AREA */}
       <main className="flex-1 p-10 ml-2 overflow-y-auto">
         <div className="max-w-7xl mx-auto">
           <Outlet context={{ userData }} />

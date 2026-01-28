@@ -1,31 +1,43 @@
 import React, { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
-import { auth, db } from "../firebase";
-import { doc, getDoc } from "firebase/firestore";
-import { onAuthStateChanged } from "firebase/auth";
+import { supabase } from "../supabaseClient";
 
+// Handles role-based access control using Supabase session metadata
 const ProtectedRoute = ({ children, requiredRole }) => {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        setUser(firebaseUser);
-        //fetches if the person signing up is a patient or therapist
-        const docRef = doc(db, "users", firebaseUser.uid);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          setRole(docSnap.data().role);
-        }
+    const checkAuth = async () => {
+      // Retrieves current session from Supabase
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session) {
+        setUser(session.user);
+        // Role is pulled from user_metadata set during signup
+        setRole(session.user.user_metadata.role);
       } else {
         setUser(null);
       }
       setLoading(false);
+    };
+
+    checkAuth();
+
+    // Listens for authentication state changes (login, logout, token refresh)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        setUser(session.user);
+        setRole(session.user.user_metadata.role);
+      } else {
+        setUser(null);
+        setRole(null);
+      }
+      setLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => subscription.unsubscribe();
   }, []);
 
   if (loading)
@@ -35,10 +47,10 @@ const ProtectedRoute = ({ children, requiredRole }) => {
       </div>
     );
 
-  // If not logged in, send to login
+  // Redirects unauthenticated users to login
   if (!user) return <Navigate to="/login" replace />;
 
-  // automatically sends the user to the signed up dashboard, patient and therapist can't have the same emails
+  // Redirects users to their specific dashboard if they attempt to access the wrong portal
   if (requiredRole && role !== requiredRole) {
     return (
       <Navigate
