@@ -12,6 +12,7 @@ const AuthPage = ({ type }) => {
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false); // Added loading state
 
   const [title, setTitle] = useState("Mr.");
   const [clinicName, setClinicName] = useState("");
@@ -21,33 +22,38 @@ const AuthPage = ({ type }) => {
 
   const updateTherapistProfile = async (userId) => {
     if (role === "therapist") {
-      await supabase
+      const { error: updateError } = await supabase
         .from("profiles")
         .update({ title, clinic_name: clinicName })
         .eq("id", userId);
+      if (updateError) console.error("Profile update error:", updateError.message);
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    setIsSubmitting(true); // Start loading
 
     try {
       if (isLogin) {
         // --- LOGIN LOGIC ---
-        const { data, error: loginError } =
-          await supabase.auth.signInWithPassword({
-            email,
-            password,
-          });
-        if (loginError) throw loginError;
+        const { data, error: loginError } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+
+        if (loginError) {
+          // Specifically handle wrong passwords/emails
+          throw new Error(loginError.message === "Invalid login credentials" 
+            ? "Incorrect email or password. Please try again." 
+            : loginError.message);
+        }
 
         const userRole = data.user.user_metadata.role;
-        navigate(
-          userRole === "therapist" ? "/dashboard" : "/patient-dashboard",
-        );
+        navigate(userRole === "therapist" ? "/dashboard" : "/patient-dashboard");
       } else {
-        // --- SIGN UP LOGIC (Direct Entry) ---
+        // --- SIGN UP LOGIC ---
         const { data, error: signUpError } = await supabase.auth.signUp({
           email,
           password,
@@ -58,15 +64,19 @@ const AuthPage = ({ type }) => {
             },
           },
         });
+
         if (signUpError) throw signUpError;
 
-        if (role === "therapist") await updateTherapistProfile(data.user.id);
+        if (role === "therapist" && data.user) {
+          await updateTherapistProfile(data.user.id);
+        }
 
-        // Direct navigation after signup
         navigate(role === "therapist" ? "/dashboard" : "/patient-dashboard");
       }
     } catch (err) {
       setError(err.message);
+    } finally {
+      setIsSubmitting(false); // Stop loading regardless of success/fail
     }
   };
 
@@ -80,9 +90,11 @@ const AuthPage = ({ type }) => {
           </h2>
 
           {error && (
-            <p className="text-red-500 text-xs mt-2 bg-red-50 p-2 rounded w-full font-medium">
-              {error}
-            </p>
+            <div className="mt-4 p-3 bg-red-50 border border-red-100 rounded-xl w-full">
+              <p className="text-red-600 text-xs font-bold text-center">
+                ⚠️ {error}
+              </p>
+            </div>
           )}
         </div>
 
@@ -113,9 +125,7 @@ const AuthPage = ({ type }) => {
               {role === "therapist" && (
                 <div className="flex gap-3 animate-in fade-in slide-in-from-top-2">
                   <div className="w-24">
-                    <label className="text-[10px] font-bold text-gray-400 uppercase ml-1">
-                      Title
-                    </label>
+                    <label className="text-[10px] font-bold text-gray-400 uppercase ml-1">Title</label>
                     <select
                       className="w-full bg-gray-50 border border-transparent rounded-xl px-3 py-3 mt-1 text-sm font-medium"
                       value={title}
@@ -128,9 +138,7 @@ const AuthPage = ({ type }) => {
                     </select>
                   </div>
                   <div className="flex-1">
-                    <label className="text-[10px] font-bold text-gray-400 uppercase ml-1">
-                      Clinic Name
-                    </label>
+                    <label className="text-[10px] font-bold text-gray-400 uppercase ml-1">Clinic Name</label>
                     <input
                       type="text"
                       placeholder="e.g. Words Speech Therapy"
@@ -160,22 +168,21 @@ const AuthPage = ({ type }) => {
             onChange={(e) => setEmail(e.target.value)}
           />
 
-          <div className="relative">
-            <input
-              type="password"
-              placeholder="Password"
-              value={password}
-              required
-              className="w-full bg-gray-50 border border-transparent rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-gray-100"
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </div>
+          <input
+            type="password"
+            placeholder="Password"
+            value={password}
+            required
+            className="w-full bg-gray-50 border border-transparent rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-gray-100"
+            onChange={(e) => setPassword(e.target.value)}
+          />
 
           <button
             type="submit"
-            className={`w-full ${themeColor} text-white font-bold py-3.5 rounded-xl shadow-lg mt-4 active:scale-95 transition-all`}
+            disabled={isSubmitting}
+            className={`w-full ${themeColor} text-white font-bold py-3.5 rounded-xl shadow-lg mt-4 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed`}
           >
-            {isLogin ? "Sign In" : "Create Account"}
+            {isSubmitting ? "Processing..." : (isLogin ? "Sign In" : "Create Account")}
           </button>
         </form>
 
@@ -184,7 +191,11 @@ const AuthPage = ({ type }) => {
           <Link
             to={isLogin ? "/signup" : "/login"}
             className={`font-bold ${textColor} hover:underline`}
-            onClick={() => setError("")}
+            onClick={() => {
+              setError("");
+              setEmail("");
+              setPassword("");
+            }}
           >
             {isLogin ? "Create Account" : "Log In"}
           </Link>
