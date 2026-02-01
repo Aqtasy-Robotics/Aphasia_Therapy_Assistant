@@ -47,7 +47,7 @@ def run_perception(target_word: str, session_id: str) -> Dict[str, Any]:
             "transcribed_text": "",
             "phonemes_transcribed": [],
             "audio_metadata": audio_metadata,
-            "perception_error": audio_metadata.get("error", "unknown_recording_error"),
+            "perception_error": audio_metadata.get("error", "unknown_recording_error issue with the recording "),
         }
 
     try:
