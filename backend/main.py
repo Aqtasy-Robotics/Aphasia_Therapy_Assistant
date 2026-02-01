@@ -16,7 +16,7 @@ if not os.getenv("SUPABASE_URL") or not os.getenv("SUPABASE_KEY"):
 
 # Initialize the connection to Supabase (The Memory)
 supabase: Client = create_client(
-    os.getenv("https://vqjtcniicxoxvqqsbeog.supabase.co"), 
+    os.getenv("SUPABASE_URL"), 
     os.getenv("SUPABASE_KEY")
 )
 
