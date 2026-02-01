@@ -1,6 +1,7 @@
 from typing import Any, Dict, List, Tuple
 
 from utils.phoneme_utils import text_to_phonemes
+from utils.word_utils import is_neologism, is_real_word
 from config import config
 
 
@@ -114,12 +115,17 @@ def run_analysis(
     errors, match_score, primary_error_type = _align_phonemes(phonemes_target, phonemes_transcribed)
     is_perfect_match = match_score >= config.match_success_threshold and not errors
 
+    transcribed_is_real_word = is_real_word(transcribed_text)
+    transcribed_is_neologism = is_neologism(transcribed_text)
+
     error_report: Dict[str, Any] = {
         "phonemes_target": phonemes_target,
         "phonemes_transcribed": phonemes_transcribed,
         "errors": errors,
         "match_score": match_score,
         "primary_error_type": primary_error_type,
+        "is_real_word": transcribed_is_real_word,
+        "is_neologism": transcribed_is_neologism,
     }
 
     return {
@@ -129,5 +135,7 @@ def run_analysis(
         "error_report": error_report,
         "is_perfect_match": is_perfect_match,
         "error_type": "Success" if is_perfect_match else primary_error_type,
+        "is_real_word": transcribed_is_real_word,
+        "is_neologism": transcribed_is_neologism,
     }
 
