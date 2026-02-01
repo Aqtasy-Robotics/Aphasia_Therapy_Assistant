@@ -16,7 +16,7 @@ if not os.getenv("SUPABASE_URL") or not os.getenv("SUPABASE_KEY"):
 
 # Initialize the connection to Supabase (The Memory)
 supabase: Client = create_client(
-    os.getenv("SUPABASE_URL"), 
+    os.getenv("https://vqjtcniicxoxvqqsbeog.supabase.co"), 
     os.getenv("SUPABASE_KEY")
 )
 
@@ -45,7 +45,10 @@ class RobotCommand(BaseModel):
 @app.get("/")
 def health_check():
     """Simple check to see if the server is alive."""
-    return {"status": "online", "system": "Aqtasy Core"}
+    return {
+        "status": "online",
+        "system": "Aqtasy Core"
+        }
 
 @app.post("/start-session")
 def start_session(patient_id: str):
@@ -62,7 +65,10 @@ def start_session(patient_id: str):
         # This inserts a row into your 'sessions' table
         response = supabase.table("sessions").insert(data).execute()
         
-        return {"message": "Session started", "session_id": response.data[0]['id']}
+        return {
+            "message": "Session started", 
+            "session_id": response.data[0]['id']
+            }
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
