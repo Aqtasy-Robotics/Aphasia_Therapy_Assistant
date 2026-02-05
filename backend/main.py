@@ -1,112 +1,157 @@
 import os
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from uuid import UUID
+from typing import List, Optional
+from fastapi import FastAPI, HTTPException, status
+from pydantic import BaseModel, Field
 from supabase import create_client, Client
 from dotenv import load_dotenv
 
-# ---------------------------------------------------------
-# 1. SETUP & SECURITY
-# ---------------------------------------------------------
-# Load the secrets from your .env file
+# Load credentials from .env
 load_dotenv()
 
-# Verify keys exist (Sanity Check)
-if not os.getenv("SUPABASE_URL") or not os.getenv("SUPABASE_KEY"):
-    raise ValueError("CRITICAL ERROR: Supabase keys are missing from .env file!")
-
-# Initialize the connection to Supabase (The Memory)
-supabase: Client = create_client(
-    os.getenv("SUPABASE_URL"), 
-    os.getenv("SUPABASE_KEY")
+#Creating the Fast API App
+app = FastAPI(
+    title="Waabi Robot Bridge API",
+    description="Backend bridge between Waabi hardware and Aqtasy Supabase DB",
+    version="1.1.0"
 )
 
-app = FastAPI(title="Aqtasy Robotics Backend")
+# Initialize Supabase Client
+url: str = os.getenv("SUPABASE_URL")
+key: str = os.getenv("SUPABASE_SERVICE_KEY")
 
-# ---------------------------------------------------------
-# 2. DATA MODELS (The "Systematic Output" Recipes)
-# ---------------------------------------------------------
-# This ensures the robot only receives strict, valid commands.
+if not url or not key:
+    raise RuntimeError("Missing Supabase credentials in environment variables.")
 
-class PatientInput(BaseModel):
-    patient_id: str
-    audio_text: str  # Text from Whisper (Agent 1)
-    detected_object: str = None  # From Camera (Agent 1)
+# Connecting to Supabase
+supabase: Client = create_client(url, key)
 
-class RobotCommand(BaseModel):
-    action: str  # "speak", "listen", "wait"
-    text_to_speak: str
-    face_expression: str # "happy", "thinking", "listening"
-    screen_display: str # "star_reward", "next_exercise"
 
-# ---------------------------------------------------------
-# 3. API ENDPOINTS (The Robot's Actions)
-# ---------------------------------------------------------
+# --- DATA MODELS (PYDANTIC) ---
 
-@app.get("/")
-def health_check():
-    """Simple check to see if the server is alive."""
-    return {
-        "status": "online",
-        "system": "Aqtasy Core"
-        }
+class SessionUpdate(BaseModel):
+    """Schema for updating session status from the robot."""
+    status: str = Field(..., pattern="^(upcoming|in-progress|completed|cancelled)$")
 
-@app.post("/start-session")
-def start_session(patient_id: str):
+# This session response structure is based on the way the supabase tables were created
+class SessionResponse(BaseModel):
+    """Schema for session data returned to the robot."""
+    id: int
+    patient_id: UUID
+    therapist_id: UUID
+    session_date: str
+    session_time: str
+    bot_name: str
+    status: str
+
+
+class PatientProfile(BaseModel):
+    """Simplified profile for robot greeting logic."""
+    full_name: str
+#the only data the robot need is the patient name
+
+
+# --- ROBOT ENDPOINTS ---
+
+@app.get("/", tags=["Health"]) # Check if the bridge is active
+async def health_check():
+    return {"status": "online", "robot": "Waabi", "bridge": "Active"} # Monitors status of the robot
+
+# GEts the robot agenda for that particular day
+@app.get(
+    "/robot/agenda/{therapist_id}",
+    response_model=List[SessionResponse],
+    tags=["Robot Core"]
+)
+
+# The robot gets the therapist id to obtain the agenda
+async def get_robot_agenda(therapist_id: UUID):
     """
-    Called when the Therapist clicks 'Start Session' on the dashboard.
+    Fetches all 'upcoming' sessions for Waabi's specific therapist.
+    Ensures the robot knows who it is seeing today.
     """
     try:
-        # 1. Log the start time in Supabase
-        data = {
-            "patient_id": patient_id,
-            "status": "active",
-            "notes": "Session started via Robot"
-        }
-        # This inserts a row into your 'sessions' table
-        response = supabase.table("sessions").insert(data).execute()
-        
-        return {
-            "message": "Session started", 
-            "session_id": response.data[0]['id']
-            }
-    
+        # Query sessions filtered by therapist and 'upcoming' status
+        response = supabase.table("sessions") \
+            .select("*") \
+            .eq("therapist_id", str(therapist_id)) \
+            .eq("status", "upcoming") \
+            .order("session_date", desc=False) \
+            .execute()
+
+        return response.data
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch agenda: {str(e)}"
+        )
 
-@app.post("/process-interaction", response_model=RobotCommand)
-def process_interaction(input_data: PatientInput):
+
+@app.patch(
+    "/robot/session/{session_id}",
+    response_model=SessionResponse,
+    tags=["Robot Core"]
+)
+
+# The session data is taken from the session table in supabase
+async def update_session_status(session_id: int, update: SessionUpdate):
     """
-    THE CORE LOOP: 
-    1. Receives input (Text/Vision)
-    2. Decides what to do (The 'Brain')
-    3. Returns a command for the robot (The 'Execution Agent')
+    Updates session status (e.g., Robot moves session to 'in-progress' upon start).
     """
-    
-    # --- PHASE 2: AI LOGIC GOES HERE ---
-    # In the future, you will put your OpenAI / Azure code here.
-    # For now, we will simulate the "Reasoning Agent" logic.
-    
-    print(f"Received input from Patient {input_data.patient_id}: {input_data.audio_text}")
+    try:
+        response = supabase.table("sessions") \
+            .update({"status": update.status}) \
+            .eq("id", session_id) \
+            .execute()
 
-    # SIMULATED LOGIC (The "Brain"):
-    response_text = ""
-    emotion = "neutral"
-    
-    if "hello" in input_data.audio_text.lower():
-        response_text = "Hello! I am ready to help you practice."
-        emotion = "happy"
-    elif "cup" in input_data.audio_text.lower():
-        response_text = "Great job! That is indeed a cup."
-        emotion = "excited"
-    else:
-        response_text = "I didn't quite catch that. Can you try again?"
-        emotion = "listening"
+        if not response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Session ID not found in database."
+            )
 
-    # --- RETURN THE SYSTEMATIC OUTPUT ---
-    # This JSON is exactly what the Raspberry Pi needs to move and speak.
-    return RobotCommand(
-        action="speak",
-        text_to_speak=response_text,
-        face_expression=emotion,
-        screen_display="default_view"
-    )
+        return response.data[0]
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Status update failed: {str(e)}"
+        )
+
+# Gets the patient name from the profiles table
+@app.get(
+    "/robot/patient/{patient_id}",
+    response_model=PatientProfile,
+    tags=["Utility"]
+)
+async def get_patient_name(patient_id: UUID):
+    """
+    Allows Waabi to fetch a patient's name for personalized greetings.
+    """
+    try:
+        response = supabase.table("profiles") \
+            .select("full_name") \
+            .eq("id", str(patient_id)) \
+            .single() \
+            .execute()
+
+        if not response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Patient profile not found."
+            )
+
+        return response.data
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching patient data: {str(e)}"
+        )
+
+
+# --- SERVER START ---
+
+if __name__ == "__main__":
+    import uvicorn
+
+    # Use 0.0.0.0 so the Raspberry Pi can connect over your local network
+    uvicorn.run(app, host="0.0.0.0", port=8000)
