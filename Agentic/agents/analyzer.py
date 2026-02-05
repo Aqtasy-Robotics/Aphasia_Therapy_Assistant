@@ -1,6 +1,8 @@
 from typing import Any, Dict, List, Tuple
 
 from utils.phoneme_utils import text_to_phonemes
+from utils.semantic_utils import classify_semantic_error
+
 from utils.word_utils import is_neologism, is_real_word
 from config import config
 
@@ -107,35 +109,38 @@ def _align_phonemes(
 def run_analysis(
     transcribed_text: str, target_word: str, phonemes_transcribed: list[str]
 ) -> Dict[str, Any]:
-    """
-    Compare transcribed phonemes against target phonemes and produce an error_report.
-    """
+
     phonemes_target = text_to_phonemes(target_word)
 
-    errors, match_score, primary_error_type = _align_phonemes(phonemes_target, phonemes_transcribed)
+    errors, match_score, primary_error_type = _align_phonemes(
+        phonemes_target, phonemes_transcribed
+    )
+
     is_perfect_match = match_score >= config.match_success_threshold and not errors
 
-    transcribed_is_real_word = is_real_word(transcribed_text)
-    transcribed_is_neologism = is_neologism(transcribed_text)
-
-    error_report: Dict[str, Any] = {
-        "phonemes_target": phonemes_target,
-        "phonemes_transcribed": phonemes_transcribed,
-        "errors": errors,
-        "match_score": match_score,
-        "primary_error_type": primary_error_type,
-        "is_real_word": transcribed_is_real_word,
-        "is_neologism": transcribed_is_neologism,
-    }
+    # 🔹 SEMANTIC ANALYSIS
+    semantic_report = classify_semantic_error(
+        target_word=target_word,
+        transcribed_word=transcribed_text,
+    )
 
     return {
         "target_word": target_word,
         "transcribed_text": transcribed_text,
-        "phonemes_target": phonemes_target,
-        "error_report": error_report,
-        "is_perfect_match": is_perfect_match,
-        "error_type": "Success" if is_perfect_match else primary_error_type,
-        "is_real_word": transcribed_is_real_word,
-        "is_neologism": transcribed_is_neologism,
-    }
 
+        # Phonological
+        "phonemes_target": phonemes_target,
+        "phonological_errors": errors,
+        "phonological_match_score": match_score,
+        "phonological_error_type": (
+            "Success" if is_perfect_match else primary_error_type
+        ),
+
+        # Semantic
+        "semantic_similarity": semantic_report["semantic_similarity"],
+        "semantic_error_type": semantic_report["semantic_error_type"],
+
+        # Meta
+        "is_real_word": semantic_report["is_real_word"],
+        "is_perfect_match": is_perfect_match,
+    }
