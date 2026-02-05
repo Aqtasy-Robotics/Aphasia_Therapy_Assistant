@@ -1,0 +1,143 @@
+from typing import Any, Dict, List, Tuple
+
+from utils.phoneme_utils import text_to_phonemes
+from utils.semantic_utils import classify_semantic_error
+
+from utils.word_utils import is_neologism, is_real_word
+from config import config
+
+
+def _align_phonemes(
+    target: List[str], attempt: List[str]
+) -> Tuple[List[Dict[str, Any]], float, str]:
+    """
+    Simple Levenshtein-style alignment between target and attempt phoneme lists.
+    Returns (errors, match_score, primary_error_type).
+    """
+    n, m = len(target), len(attempt)
+    # dp[i][j] = (cost, operation)
+    dp: List[List[Tuple[int, str]]] = [[(0, "") for _ in range(m + 1)] for _ in range(n + 1)]
+
+    for i in range(1, n + 1):
+        dp[i][0] = (i, "delete")
+    for j in range(1, m + 1):
+        dp[0][j] = (j, "insert")
+
+    for i in range(1, n + 1):
+        for j in range(1, m + 1):
+            if target[i - 1] == attempt[j - 1]:
+                dp[i][j] = dp[i - 1][j - 1]
+            else:
+                del_cost = dp[i - 1][j][0] + 1
+                ins_cost = dp[i][j - 1][0] + 1
+                sub_cost = dp[i - 1][j - 1][0] + 1
+                min_cost = min(del_cost, ins_cost, sub_cost)
+                if min_cost == sub_cost:
+                    dp[i][j] = (min_cost, "sub")
+                elif min_cost == del_cost:
+                    dp[i][j] = (min_cost, "del")
+                else:
+                    dp[i][j] = (min_cost, "ins")
+
+    # Backtrack to get operations
+    i, j = n, m
+    errors: List[Dict[str, Any]] = []
+    correct_matches = 0
+
+    while i > 0 or j > 0:
+        if i > 0 and j > 0 and target[i - 1] == attempt[j - 1]:
+            correct_matches += 1
+            i -= 1
+            j -= 1
+        else:
+            op = dp[i][j][1]
+            if op == "sub":
+                errors.append(
+                    {
+                        "type": "Substitution",
+                        "target_phoneme": target[i - 1] if i > 0 else None,
+                        "attempt_phoneme": attempt[j - 1] if j > 0 else None,
+                        "target_index": i - 1,
+                        "attempt_index": j - 1,
+                    }
+                )
+                i -= 1
+                j -= 1
+            elif op == "del":
+                errors.append(
+                    {
+                        "type": "Omission",
+                        "target_phoneme": target[i - 1] if i > 0 else None,
+                        "attempt_phoneme": None,
+                        "target_index": i - 1,
+                        "attempt_index": None,
+                    }
+                )
+                i -= 1
+            elif op == "ins":
+                errors.append(
+                    {
+                        "type": "Addition",
+                        "target_phoneme": None,
+                        "attempt_phoneme": attempt[j - 1] if j > 0 else None,
+                        "target_index": None,
+                        "attempt_index": j - 1,
+                    }
+                )
+                j -= 1
+            else:
+                # Fallback: treat as deletion if indices remain
+                if i > 0:
+                    i -= 1
+                elif j > 0:
+                    j -= 1
+
+    # Reverse to go left-to-right
+    errors.reverse()
+
+    match_score = float(correct_matches) / float(len(target)) if target else 0.0
+
+    # Determine primary error type
+    error_counts: Dict[str, int] = {}
+    for e in errors:
+        error_counts[e["type"]] = error_counts.get(e["type"], 0) + 1
+    primary_error_type = "Success" if not errors else max(error_counts, key=error_counts.get)
+
+    return errors, match_score, primary_error_type
+
+
+def run_analysis(
+    transcribed_text: str, target_word: str, phonemes_transcribed: list[str]
+) -> Dict[str, Any]:
+    """
+    Compare transcribed phonemes against target phonemes and produce an error_report.
+    """
+    phonemes_target = text_to_phonemes(target_word)
+
+    errors, match_score, primary_error_type = _align_phonemes(phonemes_target, phonemes_transcribed)
+    is_perfect_match = match_score >= config.match_success_threshold and not errors
+
+    transcribed_is_real_word = is_real_word(transcribed_text)
+    transcribed_is_neologism = is_neologism(transcribed_text)
+
+    error_report: Dict[str, Any] = {
+        "phonemes_target": phonemes_target,
+        "phonemes_transcribed": phonemes_transcribed,
+        "errors": errors,
+        "match_score": match_score,
+        "primary_error_type": primary_error_type,
+        "is_real_word": transcribed_is_real_word,
+        "is_neologism": transcribed_is_neologism,
+    }
+
+    return {
+        "target_word": target_word,
+        "transcribed_text": transcribed_text,
+        "phonemes_target": phonemes_target,
+        "error_report": error_report,
+        "is_perfect_match": is_perfect_match,
+        "error_type": "Success" if is_perfect_match else primary_error_type,
+        "is_real_word": transcribed_is_real_word,
+        "is_neologism": transcribed_is_neologism,
+    }
+
