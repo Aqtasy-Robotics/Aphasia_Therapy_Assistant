@@ -48,6 +48,7 @@ def reasoning_node(state: SessionState) -> SessionState:
     result = run_reasoning(
         target_word=state["target_word"],
         error_report=state.get("error_report", {}),
+        semantic_report=state.get("semantic_report", {}),
         is_perfect_match=state.get("is_perfect_match", False),
     )
     new_state: SessionState = {**state, **result}
@@ -67,7 +68,7 @@ def execution_node(state: SessionState) -> SessionState:
 def logger_node(state: SessionState) -> SessionState:
     error_report = state.get("error_report", {})
     match_score = float(error_report.get("match_score", 0.0))
-    error_type = state.get("error_type", "Unknown")
+    error_type = error_report.get("primary_error_type", "Unknown")
 
     log_attempt(
         session_id=state["session_id"],
