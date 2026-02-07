@@ -6,7 +6,6 @@ from utils.semantic_utils import classify_semantic_error
 from utils.word_utils import is_neologism, is_real_word
 from config import config
 
-
 def _align_phonemes(
     target: List[str], attempt: List[str]
 ) -> Tuple[List[Dict[str, Any]], float, str]:
