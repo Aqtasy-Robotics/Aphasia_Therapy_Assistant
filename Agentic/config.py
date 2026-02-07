@@ -5,7 +5,8 @@ from dataclasses import dataclass
 @dataclass
 class Config:
     # LLM / API configuration
-    openai_api_key: str = os.getenv("OPENAI_API_KEY", "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")
+    openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
+    anthropic_api_key: str = os.getenv("ANTHROPIC_API_KEY", "")
     llm_provider: str = os.getenv("LLM_PROVIDER", "openai")  # "openai" or "anthropic"
     llm_model: str = os.getenv("LLM_MODEL", "gpt-4o")
 
