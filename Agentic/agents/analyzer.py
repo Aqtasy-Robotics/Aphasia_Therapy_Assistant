@@ -126,19 +126,18 @@ def run_analysis(
     return {
         "target_word": target_word,
         "transcribed_text": transcribed_text,
-
-        # Phonological
-        "phonemes_target": phonemes_target,
-        "phonological_errors": errors,
-        "phonological_match_score": match_score,
-        "phonological_error_type": (
-            "Success" if is_perfect_match else primary_error_type
-        ),
-
-        # Semantic
-        "semantic_similarity": semantic_report["semantic_similarity"],
-        "semantic_error_type": semantic_report["semantic_error_type"],
-
+        "error_report": {
+            # Phonological
+            "phonemes_target": phonemes_target,
+            "phonemes_transcribed": phonemes_transcribed,
+            "phonological_errors": errors,
+            "match_score": match_score,
+            "primary_error_type": "Success" if is_perfect_match else primary_error_type,
+            # Semantic
+            "semantic_similarity": semantic_report["semantic_similarity"],
+            "semantic_error_type": semantic_report["semantic_error_type"],
+        },
+        "semantic_report": semantic_report,
         # Meta
         "is_real_word": semantic_report["is_real_word"],
         "is_perfect_match": is_perfect_match,
