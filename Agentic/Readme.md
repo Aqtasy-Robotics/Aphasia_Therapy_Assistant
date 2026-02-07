@@ -26,4 +26,8 @@ Classify semantic errors in speech therapy
 **run this to download sentence transformers ---> pip install sentence_transformers**
 pip install wordfreq
 
- **You can sue the virtual environment to run the python script**
+ **You can sue the virtual environment to run the python script** run the below code to acitvate the virtual environemnt 
+.\.venv\Scripts\activate.bat
+
+Install all the dependenices 
+pip install  -r requirements.txt
