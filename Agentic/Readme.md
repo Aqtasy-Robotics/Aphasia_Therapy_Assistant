@@ -24,3 +24,6 @@ Compare semantic similarity between target words and transcribed words
 Classify semantic errors in speech therapy
 
 **run this to download sentence transformers ---> pip install sentence_transformers**
+pip install wordfreq
+
+ **You can sue the virtual environment to run the python script**
