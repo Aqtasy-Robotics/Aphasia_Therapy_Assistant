@@ -121,5 +121,74 @@
       "match_score": 0.0,
       "primary_error_type": "Success"
     }
+  },
+  {
+    "session_id": "6ca424ca-4b00-4a1d-b203-be8eb8b85fe0",
+    "timestamp": "2026-02-07T08:01:55.351713Z",
+    "target_word": "rabbit",
+    "user_attempt_text": "",
+    "error_type": "Success",
+    "match_score": 0.0,
+    "raw_error_report": {
+      "phonemes_target": [
+        "r",
+        "a",
+        "b",
+        "b",
+        "i",
+        "t"
+      ],
+      "phonemes_transcribed": [],
+      "phonological_errors": [],
+      "match_score": 0.0,
+      "primary_error_type": "Success",
+      "semantic_similarity": 0.27791592478752136,
+      "semantic_error_type": "Neologism"
+    }
+  },
+  {
+    "session_id": "6ca424ca-4b00-4a1d-b203-be8eb8b85fe0",
+    "timestamp": "2026-02-07T08:02:06.517323Z",
+    "target_word": "red",
+    "user_attempt_text": "",
+    "error_type": "Success",
+    "match_score": 0.0,
+    "raw_error_report": {
+      "phonemes_target": [
+        "r",
+        "e",
+        "d"
+      ],
+      "phonemes_transcribed": [],
+      "phonological_errors": [],
+      "match_score": 0.0,
+      "primary_error_type": "Success",
+      "semantic_similarity": 0.36202868819236755,
+      "semantic_error_type": "Neologism"
+    }
+  },
+  {
+    "session_id": "6ca424ca-4b00-4a1d-b203-be8eb8b85fe0",
+    "timestamp": "2026-02-07T08:02:17.544434Z",
+    "target_word": "flower",
+    "user_attempt_text": "",
+    "error_type": "Success",
+    "match_score": 0.0,
+    "raw_error_report": {
+      "phonemes_target": [
+        "f",
+        "l",
+        "o",
+        "w",
+        "e",
+        "r"
+      ],
+      "phonemes_transcribed": [],
+      "phonological_errors": [],
+      "match_score": 0.0,
+      "primary_error_type": "Success",
+      "semantic_similarity": 0.2230633795261383,
+      "semantic_error_type": "Neologism"
+    }
   }
 ]
