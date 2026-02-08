@@ -8,8 +8,31 @@ import librosa
 import numpy as np
 import sounddevice as sd
 import soundfile as sf
+import torch
+import torchaudio
 
 from config import config
+
+
+def play_beep():
+    """
+    Play a beep sound to signal the user to start speaking.
+    Uses winsound on Windows, otherwise prints a message.
+    """
+    try:
+        if sys.platform == "win32":
+            import winsound
+            # Play a beep: frequency 800Hz, duration 200ms
+            winsound.Beep(800, 200)
+        else:
+            # On non-Windows systems, print a visual cue
+            print("\a", end="", flush=True)  # ASCII bell character
+            time.sleep(0.1)
+    except Exception:
+        # Fallback: just print
+        print("*** BEEP ***")
+        time.sleep(0.2)
+
 
 def signal_recording_started():
     print("\n"+"="*50)
@@ -26,8 +49,9 @@ def record_audio_once() -> Tuple[str, Dict[str, Any]]:
     duration = config.record_seconds
     sample_rate = config.sample_rate
 
-    # Play beep to signal user to start speaking
+    # Play beep and signal to user
     play_beep()
+    signal_recording_started()
     time.sleep(0.1)  # Small delay after beep
 
     recording = sd.rec(
@@ -89,4 +113,33 @@ def record_with_retries(max_retries: int | None = None) -> Tuple[str | None, Dic
     # If we exhausted retries, return last metadata with a flag
     last_metadata["error"] = "too_noisy_after_retries"
     return last_metadata.get("path"), last_metadata
+
+
+# Load SileroVAD model once
+_vad_model = None
+
+def get_vad_model():
+    """Load and cache Silero VAD model"""
+    global _vad_model
+    if _vad_model is None:
+        print("Loading Silero VAD model...")
+        _vad_model, utils = torch.hub.load(
+            repo_or_dir='snakers4/silero-vad',
+            model='silero_vad',
+            force_reload=False
+        )
+    return _vad_model
+
+def detect_voice_activity_realtime(audio_chunk: np.ndarray, sample_rate: int = 16000) -> float:
+    """
+    Detect voice activity in audio chunk (returns confidence 0.0-1.0)
+    """
+    model = get_vad_model()
+    
+    # Convert to tensor
+    audio_tensor = torch.from_numpy(audio_chunk).float()
+    
+    # Get confidence
+    confidence = model(audio_tensor, sample_rate).item()
+    return confidence
 
