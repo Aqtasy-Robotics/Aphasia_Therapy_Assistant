@@ -1,18 +1,19 @@
 import React from "react";
 import { useOutletContext } from "react-router-dom";
+import { UserPlus, Calendar, BarChart2, PlusCircle } from "lucide-react";
 
 const TherapistDashboard = () => {
-  const { userData } = useOutletContext(); // Receives data from the shared layout
+  const { userData } = useOutletContext();
 
   return (
     <>
       <header className="mb-8 flex justify-between items-start">
         <div>
           <h1 className="text-3xl font-bold text-gray-800">
-            Welcome back, {userData.title} {userData.fullName}! 👋
+            Welcome, {userData.title} {userData.fullName}! 👋
           </h1>
           <p className="text-[#5cb338] font-bold text-sm mt-1">
-            {userData.clinicName}
+            {userData.clinicName} — Setup in progress
           </p>
         </div>
         <div className="bg-green-50 text-[#5cb338] text-[10px] font-bold px-4 py-2 rounded-full uppercase">
@@ -20,26 +21,44 @@ const TherapistDashboard = () => {
         </div>
       </header>
 
+      {/* STATS GRID - INITIAL STATE */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
-        <StatCard title="Patients" value="24" sub="+2 this month" color="border-green-500" />
-        <StatCard title="Sessions" value="18" sub="This week" color="border-blue-500" />
-        <StatCard title="Avg Progress" value="81%" sub="+5% increase" color="border-purple-500" />
-        <StatCard title="Clinics" value="1" sub="Primary Clinic" color="border-orange-500" />
+        <StatCard title="Patients" value="0" sub="Add your first patient" color="border-gray-200" />
+        <StatCard title="Sessions" value="0" sub="Schedule a session" color="border-gray-200" />
+        <StatCard title="Avg Progress" value="--" sub="No data yet" color="border-gray-200" />
+        <StatCard title="Clinics" value="1" sub="Primary Clinic active" color="border-green-500" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="bg-white p-8 rounded-[2rem] border border-gray-50 shadow-sm">
+        {/* RECENT ACTIVITY - EMPTY STATE */}
+        <div className="bg-white p-8 rounded-[2rem] border border-gray-50 shadow-sm flex flex-col min-h-[300px]">
           <h2 className="text-xl font-bold text-gray-800 mb-6">Recent Activity</h2>
-          <div className="space-y-6">
-            <ActivityItem name="Sarah Johnson" action="Session Complete" time="2h ago" color="bg-green-500" />
-            <ActivityItem name="Michael Brown" action="Sent Message" time="4h ago" color="bg-blue-500" />
+          <div className="flex-1 flex flex-col items-center justify-center text-center space-y-4">
+            <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center">
+              <Calendar className="text-gray-300 w-8 h-8" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-gray-800">No activity yet</p>
+              <p className="text-xs text-gray-400 mt-1">Activities from your sessions will appear here.</p>
+            </div>
           </div>
         </div>
-        <div className="bg-white p-8 rounded-[2rem] border border-gray-50 shadow-sm">
+
+        {/* PATIENT FOCUS - EMPTY STATE */}
+        <div className="bg-white p-8 rounded-[2rem] border border-gray-50 shadow-sm flex flex-col min-h-[300px]">
           <h2 className="text-xl font-bold text-gray-800 mb-6">Patient Focus</h2>
-          <div className="space-y-4">
-            <PatientRow name="Sarah Johnson" progress={88} />
-            <PatientRow name="Emma Wilson" progress={92} />
+          <div className="flex-1 flex flex-col items-center justify-center text-center space-y-4">
+            <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center">
+              <UserPlus className="text-gray-300 w-8 h-8" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-gray-800">Your roster is empty</p>
+              <p className="text-xs text-gray-400 mt-1 max-w-[200px]">Add patients to begin tracking their therapy progress.</p>
+            </div>
+            <button className="text-[#5cb338] text-xs font-bold flex items-center gap-1 hover:underline mt-2">
+              <PlusCircle className="w-4 h-4" />
+              Add Patient
+            </button>
           </div>
         </div>
       </div>
@@ -47,37 +66,13 @@ const TherapistDashboard = () => {
   );
 };
 
-// Sub-components (StatCard, ActivityItem, PatientRow) remain the same as your original snippet
+/* COMPONENT HELPERS */
+
 const StatCard = ({ title, value, sub, color }) => (
-  <div className={`bg-white p-6 rounded-[2rem] border-l-4 ${color} shadow-sm`}>
+  <div className={`bg-white p-6 rounded-[2rem] border-l-4 ${color} shadow-sm transition-all`}>
     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{title}</p>
     <h3 className="text-3xl font-bold text-gray-800">{value}</h3>
-    <p className="text-xs text-gray-400 mt-2">{sub}</p>
-  </div>
-);
-
-const ActivityItem = ({ name, action, time, color }) => (
-  <div className="flex justify-between items-center">
-    <div className="flex items-center gap-3">
-      <div className={`w-2 h-2 rounded-full ${color}`} />
-      <div>
-        <p className="text-sm font-bold text-gray-800">{name}</p>
-        <p className="text-[10px] text-gray-500">{action}</p>
-      </div>
-    </div>
-    <span className="text-[10px] text-gray-300">{time}</span>
-  </div>
-);
-
-const PatientRow = ({ name, progress }) => (
-  <div className="p-4 border border-gray-100 rounded-2xl">
-    <div className="flex justify-between items-center mb-2">
-      <p className="text-sm font-bold text-gray-800">{name}</p>
-      <p className="text-xs font-bold text-[#5cb338]">{progress}%</p>
-    </div>
-    <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-      <div className="h-full bg-[#5cb338]" style={{ width: `${progress}%` }} />
-    </div>
+    <p className="text-xs text-gray-400 mt-2 italic">{sub}</p>
   </div>
 );
 
