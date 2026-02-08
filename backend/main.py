@@ -18,7 +18,7 @@ app = FastAPI(
 
 # Initialize Supabase Client
 url: str = os.getenv("SUPABASE_URL")
-key: str = os.getenv("SUPABASE_KEY")
+key: str = os.getenv("SUPABASE_SERVICE_KEY")
 
 if not url or not key:
     raise RuntimeError("Missing Supabase credentials in environment variables.")
