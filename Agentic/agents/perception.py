@@ -1,35 +1,41 @@
 from typing import Any, Dict
 
-from openai import OpenAI
+import whisper
 
 from config import config
 from utils.audio_utils import record_with_retries
 from utils.phoneme_utils import text_to_phonemes
 
 
-client = OpenAI(api_key=config.openai_api_key) if config.openai_api_key else None
+# Load Whisper model once (at startup, not per request)
+_whisper_model = None
+
+def get_whisper_model():
+    """Load and cache the Whisper model"""
+    global _whisper_model
+    if _whisper_model is None:
+        model_name = config.whisper_model or "base"  # "tiny", "base", "small", "medium", "large"
+        print(f"Loading Whisper {model_name} model...")
+        _whisper_model = whisper.load_model(model_name)
+    return _whisper_model
 
 
 def transcribe_audio(audio_path: str, language: str | None = None) -> str:
     """
-    Use OpenAI Whisper API to transcribe the given audio file.
+    Use local Whisper to transcribe the given audio file.
     """
-    if client is None:
-        raise RuntimeError("OPENAI_API_KEY is not set; cannot call Whisper.")
-
     if language is None:
         language = config.language
 
-    with open(audio_path, "rb") as f:
-        # Using whisper-1 transcription model
-        transcript = client.audio.transcriptions.create(
-            model="whisper-1",
-            file=f,
-            language=language,
-        )
+    model = get_whisper_model()
+    
+    result = model.transcribe(
+        audio_path,
+        language=language,
+        fp16=False  # Set to True if you have GPU (faster)
+    )
 
-    # The client returns an object with a 'text' field
-    return transcript.text  # type: ignore[attr-defined]
+    return result["text"]
 
 
 def run_perception(target_word: str, session_id: str) -> Dict[str, Any]:
@@ -72,4 +78,3 @@ def run_perception(target_word: str, session_id: str) -> Dict[str, Any]:
         "phonemes_transcribed": phonemes_transcribed,
         "audio_metadata": audio_metadata,
     }
-
