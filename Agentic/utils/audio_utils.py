@@ -11,25 +11,10 @@ import soundfile as sf
 
 from config import config
 
-
-def play_beep():
-    """
-    Play a beep sound to signal the user to start speaking.
-    Uses winsound on Windows, otherwise prints a message.
-    """
-    try:
-        if sys.platform == "win32":
-            import winsound
-            # Play a beep: frequency 800Hz, duration 200ms
-            winsound.Beep(800, 200)
-        else:
-            # On non-Windows systems, print a visual cue
-            print("\a", end="", flush=True)  # ASCII bell character
-            time.sleep(0.1)
-    except Exception:
-        # Fallback: just print
-        print("*** BEEP ***")
-        time.sleep(0.2)
+def signal_recording_started():
+    print("\n"+"="*50)
+    print("🔴 RECORDING STARTED - Please speak now!")
+    print("="*50 + "\n")
 
 
 def record_audio_once() -> Tuple[str, Dict[str, Any]]:
