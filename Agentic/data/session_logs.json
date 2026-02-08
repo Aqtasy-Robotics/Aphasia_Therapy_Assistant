@@ -190,5 +190,29 @@
       "semantic_similarity": 0.2230633795261383,
       "semantic_error_type": "Neologism"
     }
+  },
+  {
+    "session_id": "1161b321-3245-410f-b2e2-c4d15d008d55",
+    "timestamp": "2026-02-07T14:34:21.829041Z",
+    "target_word": "rabbit",
+    "user_attempt_text": "",
+    "error_type": "Success",
+    "match_score": 0.0,
+    "raw_error_report": {
+      "phonemes_target": [
+        "r",
+        "a",
+        "b",
+        "b",
+        "i",
+        "t"
+      ],
+      "phonemes_transcribed": [],
+      "phonological_errors": [],
+      "match_score": 0.0,
+      "primary_error_type": "Success",
+      "semantic_similarity": 0.27791592478752136,
+      "semantic_error_type": "Neologism"
+    }
   }
 ]
