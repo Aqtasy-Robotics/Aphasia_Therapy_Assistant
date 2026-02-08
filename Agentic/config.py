@@ -15,7 +15,7 @@ class Config:
     llm_model: str = os.getenv("LLM_MODEL", "gpt-4o")
 
     # Whisper / speech settings
-    whisper_model: str = os.getenv("WHISPER_MODEL", "gpt-4o-mini-tts")  # placeholder; updated when using API
+    whisper_model: str = os.getenv("WHISPER_MODEL", "base")  # placeholder; updated when using API
     language: str = os.getenv("LANGUAGE", "en")
 
     # Audio capture
