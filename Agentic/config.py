@@ -16,7 +16,7 @@ class Config:
 
     # Audio capture
     sample_rate: int = int(os.getenv("SAMPLE_RATE", "16000"))
-    record_seconds: float = float(os.getenv("RECORD_SECONDS", "3.0"))
+    record_seconds: float = float(os.getenv("RECORD_SECONDS", "7.0"))
     max_record_retries: int = int(os.getenv("MAX_RECORD_RETRIES", "3"))
 
     # Noise / quality thresholds
