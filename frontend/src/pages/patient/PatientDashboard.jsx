@@ -9,7 +9,7 @@ const PatientDashboard = () => {
       <header className="mb-8 flex justify-between items-end">
         <div>
           <h1 className="text-3xl font-bold text-gray-800 tracking-tight">
-            Welcome back! 👋
+            Welcome! 👋
           </h1>
           <p className="text-gray-500 mt-1 font-medium">
             Here's how you're doing this week
@@ -20,9 +20,9 @@ const PatientDashboard = () => {
         </div>
       </header>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-        <StatCard title="Words Mastered" value="24" color="border-blue-500" />
-        <StatCard title="Session Time" value="1.5h" color="border-green-500" />
-        <StatCard title="Daily Streak" value="12" color="border-orange-500" />
+        <StatCard title="Words Mastered" value="0" color="border-gray-200" />
+        <StatCard title="Session Time" value="0h" color="border-gray-200" />
+        <StatCard title="Daily Streak" value="0" color="border-gray-200" />
       </div>
 
       {/* Main Chart Section */}
