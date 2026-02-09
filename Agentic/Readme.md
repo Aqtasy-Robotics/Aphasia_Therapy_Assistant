@@ -39,7 +39,7 @@ How to run in Colab ?\
    !apt-get update\
 !apt-get install -y espeak-ng ffmpeg\
 
-2. Download the relevant packages \ (in a new cell)
+2. Download the relevant packages \ (in a new cell)\
    !pip install -q \ \
   openai-whisper \ \
   phonemizer \ \
@@ -49,6 +49,10 @@ How to run in Colab ?\
   soundfile \ \
   numpy \
 
-3. 
+3. Run this code in a new Cell and upload the .WAV file \
+Expected output \
+<img width="387" height="137" alt="image" src="https://github.com/user-attachments/assets/7fccb522-4723-4db4-8779-1841a492fb2f" />
+
+
 
 
