@@ -6,10 +6,7 @@ import {
 
 //sample data until we link to supabase
 const data = [
-  { name: 'Week 1', accuracy: 75, words: 12 },
-  { name: 'Week 2', accuracy: 85, words: 18 },
-  { name: 'Week 3', accuracy: 80, words: 15 },
-  { name: 'Week 4', accuracy: 92, words: 24 },
+  { name: 'Week 1', accuracy: 0, words: 0 }
 ];
 
 const MyProgress = () => {
@@ -27,9 +24,9 @@ const MyProgress = () => {
 
       {/* STATS CARDS */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <StatCard title="Overall Accuracy" value="82%" sub="+17% improvement" color="text-blue-500" />
-        <StatCard title="Total Words Learned" value="84" sub="This month" color="text-green-500" />
-        <StatCard title="Avg Session Time" value="51 min" sub="Per session" color="text-orange-500" />
+        <StatCard title="Overall Accuracy" value="0%" sub="0% improvement" color="text-blue-500" />
+        <StatCard title="Total Words Learned" value="0" sub="This month" color="text-green-500" />
+        <StatCard title="Avg Session Time" value="0 mins" sub="Per session" color="text-orange-500" />
       </div>
 
       {/* CHART AREA */}
