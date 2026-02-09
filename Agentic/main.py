@@ -134,6 +134,7 @@ def run_session(target_words: list[str]) -> None:
     print(f"Success rate: {stats['success_percentage']:.1f}%")
 
 
+
 if __name__ == "__main__":
     # Example list of practice words; adjust as needed.
     practice_words = ["rabbit", "red", "flower"]
