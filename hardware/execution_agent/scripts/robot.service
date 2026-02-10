@@ -1,0 +1,20 @@
+[Unit]
+Description=Aphasia Therapy Robot - Execution Agent
+After=network-online.target sound.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/execution_agent
+EnvironmentFile=/home/pi/execution_agent/.env
+ExecStart=/usr/bin/python3 /home/pi/execution_agent/main.py
+Restart=on-failure
+RestartSec=5
+
+# Give the agent access to audio, GPIO, and I2C
+AmbientCapabilities=CAP_SYS_NICE
+
+[Install]
+WantedBy=multi-user.target
+
