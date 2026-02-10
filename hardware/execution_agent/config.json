@@ -1,0 +1,32 @@
+{
+    "polling": {
+        "interval_seconds": 2.0,
+        "timeout_seconds": 5.0,
+        "max_retries": 3
+    },
+    "audio": {
+        "sample_rate": 22050,
+        "channels": 1,
+        "volume": 0.8,
+        "input_device": null,
+        "output_device": null
+    },
+    "gpio": {
+        "servo_pan_pin": 17,
+        "servo_tilt_pin": 27,
+        "servo_min_pulse_width": 0.0005,
+        "servo_max_pulse_width": 0.0025
+    },
+    "oled": {
+        "i2c_port": 1,
+        "i2c_address": "0x3C",
+        "width": 128,
+        "height": 128,
+        "rotate": 0
+    },
+    "display": {
+        "width": 800,
+        "height": 480,
+        "fullscreen": true
+    }
+}

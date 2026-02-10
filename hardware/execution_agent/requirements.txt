@@ -1,0 +1,28 @@
+# ── Execution Agent Dependencies ──
+# Core
+httpx>=0.27.0              # Async HTTP client for FastAPI polling
+python-dotenv>=1.0.0       # .env file loading
+pydantic>=2.5.0            # Data validation & settings
+
+# Audio
+sounddevice>=0.4.6         # Mic input & speaker output
+numpy>=1.26.0              # Audio buffer handling
+scipy>=1.12.0              # WAV file I/O
+
+# TTS (Local)
+piper-tts>=1.2.0           # Piper TTS engine (ONNX)
+
+# Hardware – GPIO & Servos
+gpiozero>=2.0              # Servo control
+# RPi.GPIO                 # Auto-installed on Pi, fallback mocked
+
+# Hardware – OLED Display
+luma.oled>=3.13.0          # SSD1351 / SH1106 OLED driver
+luma.core>=2.4.0           # Core rendering for luma
+Pillow>=10.2.0             # Image rendering for OLED faces
+
+# UI – Kivy (7" Touchscreen)
+kivy>=2.3.0                # Touch UI framework
+
+# Utilities
+loguru>=0.7.0              # Better logging
