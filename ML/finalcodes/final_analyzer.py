@@ -7,6 +7,7 @@ from ML.finalcodes.final_perception import run
 def target_phoneme():
     target=input("Enter the target word:")
     phn = phonemize(target, language='en-us')
+    return phn 
 
 
 # using espeak to convert the TRANSCRPIT TEXT to phoenem 
@@ -30,6 +31,8 @@ def text_to_phonemes(transcript):
         print("An error occured :",str(e))
 
 def run():
+    print("Enter the Target word ")
+    target_phoneme()
     print("The transcrpit is beign converted to phoneme level")
     text_to_phonemes(input_text)
     

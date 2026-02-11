@@ -54,6 +54,7 @@ def run():
         print("transcription is :::",text)
     except Exception as e:
         print("An error occurred:", str(e))
+    return text
 
 if __name__ == "__main__":
     run()
