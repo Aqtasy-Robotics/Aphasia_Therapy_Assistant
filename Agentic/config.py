@@ -39,7 +39,7 @@ class Config:
     data_dir: str = os.getenv("DATA_DIR", "data")
     session_log_filename: str = os.getenv("SESSION_LOG_FILENAME", "session_logs.json")
     #  creating a list of target words for the session
-    target_words: list = os.getenv("TARGET_WORDS", "boring,interesting,exciting, running , walking , sleeping ,writing ,studying,wating").split(",")
+    target_words: str= os.getenv("TARGET_WORDS", "apple,banana,orange")
 
 config = Config()
 
