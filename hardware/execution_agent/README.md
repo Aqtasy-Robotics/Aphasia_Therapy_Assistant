@@ -16,7 +16,7 @@ A Python-based execution agent that runs on a **Raspberry Pi 4**, communicates w
 ## Project Structure
 
 ```
-execution_agent_v1/
+execution_agent/
 ├── .env                       # Server URL, Device ID, model paths
 ├── config.json                # Polling rates, GPIO pins, volume, OLED addr
 ├── requirements.txt           # Python dependencies
@@ -41,7 +41,8 @@ execution_agent_v1/
 │   ├── images/                # Face PNGs, therapy images
 │   └── audio/                 # Sound effects
 └── scripts/
-    ├── install_dependencies.sh  # One-shot Pi setup
+    ├── install_dependencies.sh  # One-shot Pi setup (apt + venv)
+    ├── setup.sh                 # Python virtualenv + pip requirements
     └── robot.service            # systemd service unit
 ```
 
@@ -64,8 +65,8 @@ execution_agent_v1/
 
 ```bash
 cd ~
-git clone <your-repo-url> execution_agent_v1
-cd execution_agent_v1
+git clone <your-repo-url> execution_agent
+cd execution_agent
 ```
 
 ### 2. Run the System Dependencies Script
@@ -91,20 +92,13 @@ This installs the following apt packages (among others):
 ### 3. Create a Virtual Environment
 
 ```bash
-python3 -m venv .venv
+bash scripts/setup.sh
 source .venv/bin/activate
-```
-
-### 4. Install Python Dependencies
-
-```bash
-pip install --upgrade pip
-pip install -r requirements.txt
 ```
 
 > **Note:** On the Pi, `numpy` and `scipy` will build from wheels — this can take a few minutes on first install.
 
-### 5. Download the Piper TTS Model
+### 4. Download the Piper TTS Model
 
 ```bash
 mkdir -p models
@@ -116,35 +110,174 @@ wget -O models/en_US-lessac-medium.onnx.json \
   https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json
 ```
 
-### 6. Configure Environment Variables
+### 5. Configure Environment Variables
+
+Create a `.env` file at the project root:
 
 ```bash
-cp .env.example .env   # or edit .env directly
 nano .env
 ```
 
-Update these values:
+Minimum variables:
 
 ```dotenv
 SERVER_URL=http://<your-server-ip>:8000
 DEVICE_ID=robot-pi-001
+PIPER_MODEL_PATH=/home/pi/execution_agent/models/en_US-lessac-medium.onnx
+LOG_LEVEL=INFO
 ```
 
-### 7. Test the Agent (Mock Mode)
+### 6. Test the Agent (Phase-by-Phase)
+
+The project is designed to be tested incrementally on the Pi, following the phases outlined in `implementation_plan.md`. This allows you to verify each component before moving to the next.
+
+#### Phase 1: Mock Drivers (No Hardware Required)
+
+Test that the agent boots and all drivers initialize in mock mode:
 
 ```bash
 python main.py
 ```
 
-On a laptop (no hardware), all drivers fall back to mock mode automatically. You should see log output like:
-
+**Expected output:**
 ```
-INFO  | Execution Agent v1 starting...
+INFO  | Execution Agent starting…
 INFO  | Device: robot-pi-001
 INFO  | Server: http://192.168.1.100:8000
 INFO  | Drivers loaded (mock mode): ear, mouth, face, head, body
-INFO  | Entering polling loop...
+INFO  | Entering idle loop with interval=2.0 s…
 ```
+
+**Verification checklist:**
+- [ ] Agent starts without errors
+- [ ] All drivers report "mock mode" in logs
+- [ ] Settings load correctly from `.env` and `config.json`
+- [ ] Graceful shutdown works (Ctrl+C)
+
+#### Phase 2: API Client & Polling (Requires FastAPI Backend)
+
+**Prerequisites:** A FastAPI backend server running and accessible at `SERVER_URL`.
+
+Test that the agent can poll for commands and send acknowledgements:
+
+```bash
+python main.py
+```
+
+**Expected behavior:**
+- Agent polls `GET /commands/{device_id}` every 2 seconds
+- Logs show connection status to the backend
+- Commands are received and dispatched (still using mock drivers)
+- Acknowledgements are sent back to the server
+
+**Verification checklist:**
+- [ ] Agent successfully connects to backend (check `/health` endpoint)
+- [ ] Polling loop runs without errors
+- [ ] Commands are received and logged
+- [ ] Mock drivers execute commands (logged, not hardware)
+- [ ] Acknowledgements are sent to `/status` endpoint
+
+**Test with a simple backend:**
+```python
+# On your laptop/server, run a test FastAPI server
+from fastapi import FastAPI
+app = FastAPI()
+
+@app.get("/commands/robot-pi-001")
+def get_command():
+    return {"command_id": "test-1", "action": "speak", "payload": {"text": "Hello"}}
+
+@app.post("/status")
+def post_status(ack: dict):
+    print(f"Received: {ack}")
+    return {"ok": True}
+```
+
+#### Phase 3: Audio Hardware (Requires USB Mic + Speaker)
+
+**Prerequisites:** USB microphone and speaker connected to the Pi.
+
+Test real audio input/output:
+
+```bash
+python main.py
+```
+
+**Verification checklist:**
+- [ ] `mouth.speak("Hello")` plays audio through speaker
+- [ ] `ear.listen(5)` records 5 seconds from microphone
+- [ ] Audio sample rate matches `config.json` (22050 Hz)
+- [ ] Piper TTS model loads successfully (< 5 seconds)
+- [ ] Recorded audio can be uploaded to backend
+
+**Test commands:**
+- Send a `speak` command from backend → verify audio plays
+- Send a `listen` command → verify recording works and uploads
+
+#### Phase 4: Kivy UI (Requires 7" Touchscreen)
+
+**Prerequisites:** Official 7" Raspberry Pi touchscreen connected via DSI.
+
+Test the touchscreen dashboard:
+
+```bash
+# Ensure display is configured for KMS/DRM
+export KIVY_WINDOW=sdl2
+export KIVY_GL_BACKEND=sdl2
+python main.py
+```
+
+**Verification checklist:**
+- [ ] Kivy app launches fullscreen on 7" display
+- [ ] `show_ui` command updates screen content
+- [ ] Touch input is responsive
+- [ ] App runs alongside polling loop without blocking
+
+#### Phase 5: GPIO & OLED (Requires Servos + OLED Display)
+
+**Prerequisites:**
+- Pan/tilt servos connected to GPIO 17 and 27
+- OLED display connected via I2C (address 0x3C)
+- I2C enabled: `sudo raspi-config` → Interface Options → I2C → Enable
+
+Test physical hardware:
+
+```bash
+# Verify I2C connection first
+sudo i2cdetect -y 1  # Should show OLED at 0x3C
+
+python main.py
+```
+
+**Verification checklist:**
+- [ ] `head.move(pan=45, tilt=0)` physically rotates pan servo
+- [ ] `face.show("happy")` displays expression on OLED
+- [ ] GPIO pins match `config.json` values
+- [ ] Servos respect safety limits (no jitter at rest)
+- [ ] OLED initializes cleanly and recovers from bus errors
+
+**Test commands:**
+- `move_head` with various pan/tilt values
+- `show_face` with different expressions (happy, sad, neutral, etc.)
+
+---
+
+## Testing on Laptop (Development Mode)
+
+You can develop and test on any Linux/macOS/Windows machine. Hardware-dependent libraries (`gpiozero`, `luma.oled`) are automatically mocked when imports fail.
+
+```bash
+# Clone & set up
+git clone <your-repo-url> execution_agent
+cd execution_agent
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+
+# Run with mock drivers (Phase 1 equivalent)
+python main.py
+```
+
+All drivers will automatically fall back to mock mode, allowing you to test the full command flow without hardware.
 
 ---
 
@@ -163,23 +296,6 @@ sudo systemctl start robot.service
 
 ```bash
 sudo journalctl -u robot.service -f
-```
-
----
-
-## Development (on Laptop)
-
-You can develop and test on any Linux/macOS/Windows machine. Hardware-dependent libraries (`gpiozero`, `luma.oled`) are automatically mocked when imports fail.
-
-```bash
-# Clone & set up
-git clone <your-repo-url> execution_agent_v1
-cd execution_agent_v1
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-
-# Run with mock drivers
-python main.py
 ```
 
 ---
@@ -232,7 +348,7 @@ USB Port          → USB Microphone
 DSI Port          → 7" Official Touchscreen
 ```
 
-**Important:** Power servos from an external 5V supply to avoid brownouts on the Pi. Share a common ground with the Pi.
+> ⚠️ **Important:** Power servos from an external 5V supply to avoid brownouts on the Pi. Share a common ground with the Pi.
 
 ---
 
