@@ -1,0 +1,178 @@
+"""
+settings.py — Central configuration for the execution agent (Raspberry Pi 4).
+
+This module loads:
+- Environment variables from `.env` (SERVER_URL, DEVICE_ID, PIPER_MODEL_PATH, LOG_LEVEL)
+- Runtime configuration from `config.json` (polling, audio, GPIO, OLED, display)
+
+It is designed to work both on the Raspberry Pi and on a dev machine.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Optional
+import json
+import os
+
+from pydantic import AnyHttpUrl, BaseModel, Field, ValidationError, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from dotenv import load_dotenv
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
+class PollingConfig(BaseModel):
+    """HTTP polling behaviour for the FastAPI backend."""
+
+    interval_seconds: float = Field(gt=0.0)
+    timeout_seconds: float = Field(gt=0.0)
+    max_retries: int = Field(ge=0)
+
+
+class AudioConfig(BaseModel):
+    """Microphone and speaker configuration."""
+
+    sample_rate: int = Field(gt=0)
+    channels: int = Field(ge=1)
+    volume: float = Field(ge=0.0, le=1.0)
+    input_device: Optional[str] = None
+    output_device: Optional[str] = None
+
+
+class GPIOConfig(BaseModel):
+    """GPIO pin assignments for servos."""
+
+    servo_pan_pin: int
+    servo_tilt_pin: int
+    servo_min_pulse_width: float = Field(gt=0.0)
+    servo_max_pulse_width: float = Field(gt=0.0)
+
+
+class OledConfig(BaseModel):
+    """I2C OLED display configuration."""
+
+    i2c_port: int = 1
+    i2c_address: str = "0x3C"
+    width: int = Field(gt=0)
+    height: int = Field(gt=0)
+    rotate: int = 0
+
+
+class DisplayConfig(BaseModel):
+    """7\" Kivy touch display configuration."""
+
+    width: int = Field(gt=0)
+    height: int = Field(gt=0)
+    fullscreen: bool = True
+
+
+class Settings(BaseSettings):
+    """
+    Top-level settings object combining environment + JSON configuration.
+
+    Environment (from `.env`):
+    - SERVER_URL
+    - DEVICE_ID
+    - PIPER_MODEL_PATH
+    - LOG_LEVEL
+
+    JSON config (from `config.json`):
+    - polling, audio, gpio, oled, display sections.
+    """
+
+    # Environment-driven fields
+    server_url: AnyHttpUrl
+    device_id: str
+    piper_model_path: Path
+    log_level: str = "INFO"
+
+    # File-driven sections
+    polling: PollingConfig
+    audio: AudioConfig
+    gpio: GPIOConfig
+    oled: OledConfig
+    display: DisplayConfig
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    @field_validator("log_level")
+    @classmethod
+    def _normalise_log_level(cls, value: str) -> str:
+        return value.upper()
+
+    @field_validator("piper_model_path")
+    @classmethod
+    def _expand_model_path(cls, value: Path) -> Path:
+        return value.expanduser()
+
+    @classmethod
+    def load(cls, project_root: Path | None = None) -> "Settings":
+        """
+        Convenience constructor that:
+        - loads `.env` from the project root (if present)
+        - loads `config.json` from the project root
+        - merges both into a single Settings instance
+        """
+
+        root = project_root or PROJECT_ROOT
+
+        # Load .env explicitly so other code using os.getenv sees values too.
+        env_path = root / ".env"
+        if env_path.exists():
+            load_dotenv(env_path, override=False)
+
+        config_path = root / "config.json"
+        if not config_path.exists():
+            raise FileNotFoundError(f"config.json not found at {config_path}")
+
+        with config_path.open("r", encoding="utf-8") as f:
+            config_data = json.load(f)
+
+        # Environment is read indirectly by BaseSettings through os.environ.
+        # Here we pass the JSON sections explicitly.
+        try:
+            return cls(
+                polling=config_data["polling"],
+                audio=config_data["audio"],
+                gpio=config_data["gpio"],
+                oled=config_data["oled"],
+                display=config_data["display"],
+            )
+        except KeyError as exc:
+            raise KeyError(f"Missing section in config.json: {exc}") from exc
+
+
+def load_settings_or_exit() -> Settings:
+    """
+    Helper used by `main.py` to load settings and exit with a clear message
+    if validation fails.
+    """
+
+    from loguru import logger
+    import sys
+
+    try:
+        settings = Settings.load()
+    except (ValidationError, FileNotFoundError, KeyError) as exc:
+        logger.error("Failed to load settings: {}", exc)
+        sys.exit(1)
+
+    return settings
+
+
+__all__ = [
+    "Settings",
+    "PollingConfig",
+    "AudioConfig",
+    "GPIOConfig",
+    "OledConfig",
+    "DisplayConfig",
+    "load_settings_or_exit",
+]
+
