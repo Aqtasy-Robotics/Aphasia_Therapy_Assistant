@@ -1,6 +1,6 @@
 # this code will contain the finalized analyzer code 
 from phonemizer import phonemize
-from final_perception import transcribe_audio
+from ML.finalcodes.final_perception import run
 
 
 #CONVERTING THE TARGET WORD TO PHONEMES
@@ -10,10 +10,13 @@ def target_phoneme():
 
 
 # using espeak to convert the TRANSCRPIT TEXT to phoenem 
+
+input_text=run()#assigning the trasncript into a variable "input_text"
+
 def text_to_phonemes(transcript):
     try:
         phoneme_str= phonemize(
-            transcript,
+            text=input_text,
             language="en-us",
             backend="espeak",
             strip=True,
@@ -26,3 +29,9 @@ def text_to_phonemes(transcript):
     except RuntimeError as e:
         print("An error occured :",str(e))
 
+def run():
+    print("The transcrpit is beign converted to phoneme level")
+    text_to_phonemes(input_text)
+    
+if __name__ == "__main__":
+    run()
