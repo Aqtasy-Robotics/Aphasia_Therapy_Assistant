@@ -1,17 +1,27 @@
+import pyaudio
+import wave
 import librosa
-import whisper
-import soundfile as sf
+from openai import OpenAI
 import numpy as np
+import threading
+import time
 
-y, sr = librosa.load("Audio sample/1738.wav", sr=None)
-print("Sample rate:", sr)
-print("Duration (sec):", librosa.get_duration(y=y, sr=sr))
 
-# Remove silence
-yt, _ = librosa.effects.trim(
-    y,
-    top_db=30   # higher = more aggressive silence removal
-)
+CHUNK = 1024
+FORMAT = pyaudio.paInt16
+CHANNEL = 1
+RATE = 16000
+RECORD_SECONDS = 5
+
+class RealtimeTranscriber:
+    def __ init__(self,api_key = None):
+    self.api_key = api_key or os.getenv("OPENAI_API_KEY")
+    self.client = OpenAI(api_key=self.api_key)
+    self.model = whisper.load_model("medium")
+    self.audio = pyaudio.PyAudio()
+    self.is_recording = False
+    
+    
 
 # Save cleaned audio
 sf.write("audio_no_silence.wav", yt, sr)
