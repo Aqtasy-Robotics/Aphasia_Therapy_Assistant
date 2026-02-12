@@ -21,15 +21,28 @@ class RealtimeTranscriber:
     self.audio = pyaudio.PyAudio()
     self.is_recording = False
     
-    
+def record_audio(self, duration=RECORED_SECONDS):
+    print("Recording...")
 
-# Save cleaned audio
-sf.write("audio_no_silence.wav", yt, sr)
+    stream = self.audio.open(
+        format=FORMAT,
+        channels=CHANNEL,
+        rate=RATE,
+        input=True, 
+        frames_per_buffer=CHUNK
+        )
 
-model = whisper.load_model("medium")  # or "small" for speed
-result = model.transcribe("audio_no_silence.wav")
+frames = []
+for i in range(0, int(RATE / CHUNK * duration)):
+    data = stream.read(CHUNK)
+    frames.append(data)
 
-text = result["text"]
+    steam.stop_stream()
+    stream.close()
+
+    print("Finished recording.")
+    return frames
+
 
 
 result = model.transcribe(
