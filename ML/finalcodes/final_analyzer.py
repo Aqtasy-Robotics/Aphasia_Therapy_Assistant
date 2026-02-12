@@ -7,12 +7,12 @@ def text_to_phonemes(text: str) -> list[str]:
     try:
         phoneme_str= phonemize(
             text=text,
-            language="en-us",
-            backend="espeak",# using espeak to convert the TRANSCRPIT TEXT to phoenem 
+            language="en-us", 
+            backend="espeak",  # using espeak to convert the TRANSCRPIT TEXT to phoeneme 
             strip=True,
             preserve_punctuation=False,
             with_stress=False,
-        ).split()
+        )
         # splitting the whitespaces in the symbols 
         phonemes = [p for p in phoneme_str.split() if p]
         return phonemes
@@ -21,12 +21,6 @@ def text_to_phonemes(text: str) -> list[str]:
         return []
 
 transcript=perception_run() 
-#CONVERTING THE TARGET WORD TO PHONEMES
-def analyzer():
-    target=input("Enter the target word:")
-   #coverting both target and tanscribed text to phonemes
-    target_phonemes=text_to_phonemes(target)
-    transcribed_phonemes=text_to_phonemes(transcript)
 
 
 
@@ -34,33 +28,91 @@ def analyzer():
 def fallback_phonemes(input_text):
       return input_text.lower()
 
-#creating a comparing algorith to find the error 
+def calculate_accuracy(target, attempt):
+    """Calculate phoneme-level accuracy percentage"""
+    if not target:
+        return 0.0
+    n, m = len(target), len(attempt)
+    dp = [[0] * (m + 1) for _ in range(n + 1)]
+    
+    for i in range(n + 1):
+        dp[i][0] = i
+    for j in range(m + 1):
+        dp[0][j] = j
+    
+    for i in range(1, n + 1):
+        for j in range(1, m + 1):
+            if target[i-1] == attempt[j-1]:
+                dp[i][j] = dp[i-1][j-1]
+            else:
+                dp[i][j] = 1 + min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1])
+    
+    distance = dp[n][m]
+    accuracy = ((max(n, m) - distance) / max(n, m)) * 100
+    return round(accuracy, 2)
+
+def run():
+    """Main execution function - returns error report"""
+    print("Enter the Target word: ")
+    target_word = input().strip()
+    
+    print("Converting target word to phonemes...")
+    target_phonemes = text_to_phonemes(target_word)
+    
+    print("Converting transcript to phonemes...")
+    transcribed_phonemes = text_to_phonemes(transcript)
+    
+    print(f"\nTarget phonemes: {target_phonemes}")
+    print(f"Transcribed phonemes: {transcribed_phonemes}\n")
+    
+    # Generate error report
+    error_report = phoneme_errors(target_phonemes, transcribed_phonemes)
+    
+    # Print report
+    print("=" * 50)
+    print("ERROR REPORT")
+    print("=" * 50)
+    print(f"Accuracy: {error_report['accuracy']}%")
+    print(f"Total Errors: {error_report['total_errors']}")
+    print(f"  - Substitutions: {error_report['error_summary']['substitutions']}")
+    print(f"  - Omissions: {error_report['error_summary']['omissions']}")
+    print(f"  - Insertions: {error_report['error_summary']['insertions']}")
+    print("\nDetailed Errors:")
+    for i, error in enumerate(error_report['errors'], 1):
+        print(f"  {i}. {error['type'].upper()}: {error['description']}")
+    print("=" * 50)
+    
+    return error_report  # Return for use by feedback agent
+
+
+#creating a comparing algorithm to find the error 
+
 def phoneme_errors(target_phonemes, attempt_phonemes):
     """
     Find phoneme errors using dynamic programming
-    Returns: list of (error_type, position, details)
+    Returns: structured error report dict
     """
     n, m = len(target_phonemes), len(attempt_phonemes)
     
-    # DP table: dp[i][j] = min operations to transform target[:i] to attempt[:j]
+    # DP table
     dp = [[0] * (m + 1) for _ in range(n + 1)]
     
     # Initialize base cases
     for i in range(n + 1):
-        dp[i][0] = i  # deletions
+        dp[i][0] = i
     for j in range(m + 1):
-        dp[0][j] = j  # insertions
+        dp[0][j] = j
     
     # Fill DP table
     for i in range(1, n + 1):
         for j in range(1, m + 1):
             if target_phonemes[i-1] == attempt_phonemes[j-1]:
-                dp[i][j] = dp[i-1][j-1]  # match, no cost
+                dp[i][j] = dp[i-1][j-1]
             else:
                 dp[i][j] = 1 + min(
-                    dp[i-1][j],      # deletion (omission)
-                    dp[i][j-1],      # insertion
-                    dp[i-1][j-1]     # substitution
+                    dp[i-1][j],
+                    dp[i][j-1],
+                    dp[i-1][j-1]
                 )
     
     # Backtrack to find actual errors
@@ -72,26 +124,51 @@ def phoneme_errors(target_phonemes, attempt_phonemes):
             i -= 1
             j -= 1
         elif i > 0 and j > 0 and dp[i][j] == dp[i-1][j-1] + 1:
-            errors.append(('substitution', i-1, f'{target_phonemes[i-1]} → {attempt_phonemes[j-1]}'))
+            errors.append({
+                'type': 'substitution',
+                'position': i-1,
+                'target_phoneme': target_phonemes[i-1],
+                'actual_phoneme': attempt_phonemes[j-1],
+                'description': f'{target_phonemes[i-1]} → {attempt_phonemes[j-1]}'
+            })
             i -= 1
             j -= 1
         elif i > 0 and dp[i][j] == dp[i-1][j] + 1:
-            errors.append(('omission', i-1, f'missing {target_phonemes[i-1]}'))
+            errors.append({
+                'type': 'omission',
+                'position': i-1,
+                'target_phoneme': target_phonemes[i-1],
+                'actual_phoneme': None,
+                'description': f'missing {target_phonemes[i-1]}'
+            })
             i -= 1
         else:
-            errors.append(('insertion', j-1, f'extra {attempt_phonemes[j-1]}'))
+            errors.append({
+                'type': 'insertion',
+                'position': j-1,
+                'target_phoneme': None,
+                'actual_phoneme': attempt_phonemes[j-1],
+                'description': f'extra {attempt_phonemes[j-1]}'
+            })
             j -= 1
     
-    return list(reversed(errors))
-
-
-
-
-def run():
-    print("Enter the Target word ")
-    target_phonemes = text_to_phonemes(input())
-    print("The transcrpit is beign converted to phoneme level")
-    transcribed_phonemes = text_to_phonemes(transcript)
+    errors = list(reversed(errors))
     
+    # CREATE ERROR REPORT HERE
+    error_report = {
+        'target_phonemes': target_phonemes,
+        'attempt_phonemes': attempt_phonemes,
+        'total_errors': len(errors),
+        'accuracy': calculate_accuracy(target_phonemes, attempt_phonemes),
+        'errors': errors,
+        'error_summary': {
+            'substitutions': sum(1 for e in errors if e['type'] == 'substitution'),
+            'omissions': sum(1 for e in errors if e['type'] == 'omission'),
+            'insertions': sum(1 for e in errors if e['type'] == 'insertion')
+        }
+    }
+    
+    return error_report
+
 if __name__ == "__main__":
     run()
