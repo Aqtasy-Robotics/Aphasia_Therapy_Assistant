@@ -43,6 +43,25 @@ for i in range(0, int(RATE / CHUNK * duration)):
     print("Finished recording.")
     return frames
 
+def save_audio(self, frames, filename="temp_recording.wav"):
+        """Save recorded frames to WAV file"""
+        wf = wave.open(filename, 'wb')
+        wf.setnchannels(CHANNELS)
+        wf.setsampwidth(self.audio.get_sample_size(FORMAT))
+        wf.setframerate(RATE)
+        wf.writeframes(b''.join(frames))
+        wf.close()
+        return filename
+
+
+def remove_silence(self, audio_file):
+        """Remove silence from audio"""
+        y, sr = librosa.load(audio_file, sr=None)
+        yt, _ = librosa.effects.trim(y, top_db=30)
+        
+        cleaned_file = "audio_no_silence.wav"
+        sf.write(cleaned_file, yt, sr)
+        return cleaned_file
 
 
 result = model.transcribe(
@@ -52,17 +71,7 @@ result = model.transcribe(
     condition_on_previous_text=False
 )
 
-def remove_repetitions(text):
-    words = text.split()
-    cleaned = []
-
-    for word in words:
-        if len(cleaned) == 0 or word.lower() != cleaned[-1].lower():
-            cleaned.append(word)
-
-    return " ".join(cleaned)
-
-clean_text = remove_repetitions(text)
+)
 
 
 def remove_sentence_repetition(text):
