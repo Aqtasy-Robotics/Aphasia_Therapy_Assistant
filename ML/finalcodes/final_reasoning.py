@@ -88,3 +88,31 @@ RESPONSE STRUCTURE:
 4. Encourage practice (1 sentence)
 
 Keep total response under 5 sentences."""
+
+def build_user_prompt(error_report: Dict[str, Any], 
+                      target_word: str, 
+                      patient_name: str) -> str:
+    """Build the user prompt from error report"""
+    
+    prompt = f"""Patient tried to say: "{target_word}"
+
+PERFORMANCE:
+- Accuracy: {error_report.get('accuracy', 0)}%
+- Total Errors: {error_report.get('total_errors', 0)}
+- Substitutions: {error_report['error_summary']['substitutions']}
+- Omissions: {error_report['error_summary']['omissions']}
+- Insertions: {error_report['error_summary']['insertions']}
+
+TARGET PHONEMES: {' '.join(error_report.get('target_phonemes', []))}
+PATIENT SAID: {' '.join(error_report.get('attempt_phonemes', []))}
+
+SPECIFIC ERRORS:
+"""
+    for i, error in enumerate(error_report.get('errors',[])[:3], 1):
+        prompt += f"{i}. {error['type'].upper()}: {error['description']}\n"
+        prompt += f"""
+Generate simple , encouraging feedback for {patient_name} ,
+Remember: Very short sentences. Simple words. Be positive and specific.
+Focus on the MOST IMPORTANT error to fix first."""
+    
+    return prompt
