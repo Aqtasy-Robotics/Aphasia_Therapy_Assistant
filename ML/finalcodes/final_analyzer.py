@@ -51,6 +51,7 @@ def calculate_accuracy(target, attempt):
     accuracy = ((max(n, m) - distance) / max(n, m)) * 100
     return round(accuracy, 2)
 
+
 def run():
     """Main execution function - returns error report"""
     print("Enter the Target word: ")
@@ -82,11 +83,35 @@ def run():
         print(f"  {i}. {error['type'].upper()}: {error['description']}")
     print("=" * 50)
     
-    return error_report  # Return for use by feedback agent
-
-
-#creating a comparing algorithm to find the error 
-
+    # Generate feedback
+    try:
+        from final_reasoning import generate_feedback, print_feedback, generate_practice_exercise
+        
+        print("\nGenerating personalized feedback...")
+        patient_name = input("Enter patient name (or press Enter for 'friend'): ").strip() or "friend"
+        
+        # Generate feedback
+        feedback = generate_feedback(
+            error_report=error_report,
+            target_word=target_word,
+            patient_name=patient_name
+        )
+        
+        # Display feedback
+        print_feedback(feedback)
+        
+        # Generate practice exercise
+        exercise = generate_practice_exercise(error_report, target_word)
+        print("PRACTICE EXERCISE:")
+        print(exercise)
+        print()
+        
+    except ImportError:
+        print("\n✗ Feedback module not available. Install with: pip install openai")
+    except Exception as e:
+        print(f"\n✗ Error generating feedback: {str(e)}")
+    
+    return error_report
 def phoneme_errors(target_phonemes, attempt_phonemes):
     """
     Find phoneme errors using dynamic programming

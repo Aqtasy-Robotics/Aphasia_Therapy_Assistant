@@ -45,7 +45,7 @@ def run_perception(target_word: str, session_id: str) -> Dict[str, Any]:
     """
     audio_path, audio_metadata = record_with_retries()
 
-    if audio_path is None:
+    if audio_path is None: 
         # Completely failed to record
         return {
             "target_word": target_word,
