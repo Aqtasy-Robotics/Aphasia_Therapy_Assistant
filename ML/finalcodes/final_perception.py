@@ -16,7 +16,7 @@ if not API_KEY:
 client= Groq(api_key=API_KEY) # setting up the openai key 
 
 SAMPLE_RATE = int(os.getenv("SAMPLE_RATE", 16000))
-RECORD_SECONDS  = int(os.getenv("RECORD_SECONDS", 15))
+RECORD_SECONDS  = int(os.getenv("RECORD_SECONDS", 8))
 
 # creating a function for recording the auido using the Mic
 
