@@ -1,6 +1,10 @@
 # this code will contain the finalized analyzer code 
+import os
+os.environ["PHONEMIZER_ESPEAK_PATH"] = r"C:\Program Files\eSpeak NG\espeak-ng.exe"
+
 from phonemizer import phonemize
-from ML.finalcodes.final_perception import run as perception_run
+from final_perception import run as perception_run
+
 
 
 def text_to_phonemes(text: str) -> list[str]:
