@@ -28,7 +28,7 @@ def generate_feedback(error_report: Dict[str, Any],
     """
 
     # Getting the api key
-    api_key = api_key or os.getenv("GROQ_API_KEY")
+    api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
         print("Warning: No API key found. Using fallback feedback.")
         return _fallback_feedback(error_report, target_word, patient_name)
@@ -39,7 +39,7 @@ def generate_feedback(error_report: Dict[str, Any],
 
     try:
         # Call Groq LLM
-        client = Groq(api_key=api_key)
+        client = Groq(API_KEYS=api_key)
         response = client.chat.completions.create(
             model=model,
             messages=[
