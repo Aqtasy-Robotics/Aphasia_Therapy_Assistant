@@ -36,7 +36,7 @@ def generate_feedback(error_report: Dict[str, Any],
     # Building prompts - LLM will generate everything
     system_prompt = _get_system_prompt()
     user_prompt = _build_user_prompt(error_report, target_word, patient_name)
-
+ 
     try:
         # Call Groq LLM
         client = Groq(API_KEYS=api_key)
