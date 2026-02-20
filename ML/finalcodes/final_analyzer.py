@@ -4,7 +4,8 @@ os.environ["PHONEMIZER_ESPEAK_PATH"] = r"C:\Program Files\eSpeak NG\espeak-ng.ex
 
 from phonemizer import phonemize
 from final_perception import run as perception_run
-
+from sentence_transformers import SentenceTransformers, util 
+from wordfreq import zipf_frequency
 
 
 def text_to_phonemes(text: str) -> list[str]:
@@ -27,6 +28,30 @@ def text_to_phonemes(text: str) -> list[str]:
 transcript=perception_run() 
 
 
+print("Loading Semantic Model.")
+semantic_model = SentenceTransformers("all-MiniLM-L6-v2")
+SEMANTIC_THRESHOLD=0.65
+
+def detect_semantic(target_word, attempt):
+    """
+classifeis lexical-level erors:1) neologistic 2) semantic 3) correct
+    """
+    if not attempt:
+        return "No speech"
+    #neologism 
+    if zipf_frequency(attempt,"en")==0:
+        return"Neologistic"
+    #semantic similarity check 
+    emb_t= semantic_model.encode(target_word,convert_to_tensor=True)
+    emb_s= semantic_model.encode(attempt, convert_to_tensor=True)
+
+    similarity=float(util.cos_sim(emb_t,emb_s))
+
+    if similarity > SEMANTIC_THRESHOLD and attempt.lower() != target_word.lower():
+        return "Semantic Paraphasia"
+    if attempt.lower() == target_word.lower():
+        return "Correct"    
+    return "Phonological"
 
 #creating a fallback function incase espeak is not installed
 def fallback_phonemes(input_text):
@@ -65,14 +90,17 @@ def run():
     target_phonemes = text_to_phonemes(target_word)
     
     print("Converting transcript to phonemes...")
-    transcribed_phonemes = text_to_phonemes(transcript)
+    attempt = text_to_phonemes(transcript)
     
     print(f"\nTarget phonemes: {target_phonemes}")
-    print(f"Transcribed phonemes: {transcribed_phonemes}\n")
+    print(f"Transcribed phonemes: {attempt}\n")
     
     # Generate error report
-    error_report = phoneme_errors(target_phonemes, transcribed_phonemes)
+    error_report = phoneme_errors(target_phonemes, attempt)
     
+    # Semantic analysis
+    semantic_error_type= detect_semantic(target_word, attempt)
+    print (f"Semantic Classfification:{semantic_error_type}")
     # Print report
     print("=" * 50)
     print("ERROR REPORT")
