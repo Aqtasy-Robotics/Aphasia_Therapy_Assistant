@@ -4,7 +4,7 @@ os.environ["PHONEMIZER_ESPEAK_PATH"] = r"C:\Program Files\eSpeak NG\espeak-ng.ex
 
 from phonemizer import phonemize
 from final_perception import run as perception_run
-from sentence_transformers import SentenceTransformers, util 
+from sentence_transformers import SentenceTransformer, util 
 from wordfreq import zipf_frequency
 
 
@@ -29,7 +29,7 @@ transcript=perception_run()
 
 
 print("Loading Semantic Model.")
-semantic_model = SentenceTransformers("all-MiniLM-L6-v2")
+semantic_model = SentenceTransformer("all-MiniLM-L6-v2")
 SEMANTIC_THRESHOLD=0.65
 
 def detect_semantic(target_word, attempt):
@@ -100,7 +100,7 @@ def run():
     
     # Semantic analysis
     semantic_error_type= detect_semantic(target_word, attempt)
-    print (f"Semantic Classfification:{semantic_error_type}")
+    print (f"Semantic Classification:{semantic_error_type}")
     # Print report
     print("=" * 50)
     print("ERROR REPORT")
