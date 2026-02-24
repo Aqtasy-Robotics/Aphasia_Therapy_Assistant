@@ -1,55 +1,65 @@
 # this code will contain the finalized analyzer code 
-import os
-os.environ["PHONEMIZER_ESPEAK_PATH"] = r"C:\Program Files\eSpeak NG\espeak-ng.exe"
+import nltk
 
-from phonemizer import phonemize
+try:
+    nltk.download('averaged_perceptron_tagger_eng', quiet=True)
+except Exception:
+    pass
+from g2p_en import G2p
 from final_perception import run as perception_run
 from sentence_transformers import SentenceTransformer, util 
 from wordfreq import zipf_frequency
 
+g2p = G2p()
 
 def text_to_phonemes(text: str) -> list[str]:
     try:
-        phoneme_str= phonemize(
-            text=text,
-            language="en-us", 
-            backend="espeak",  # using espeak to convert the TRANSCRPIT TEXT to phoeneme 
-            strip=True,
-            preserve_punctuation=False,
-            with_stress=False,
-        )
-        # splitting the whitespaces in the symbols 
-        phonemes = [p for p in phoneme_str.split() if p]
+        phonemes = g2p(text)
+
+        # Remove spaces and punctuation tokens
+        phonemes = [
+        ''.join([c for c in p if not c.isdigit()])
+        for p in phonemes
+        if p.isalpha() or any(char.isdigit() for char in p)
+    ]
+
         return phonemes
-    except RuntimeError as e:
-        print("An error occured :",str(e))
+
+    except Exception as e:
+        print("An error occurred:", str(e))
         return []
-
-transcript=perception_run() 
-
 
 print("Loading Semantic Model.")
 semantic_model = SentenceTransformer("all-MiniLM-L6-v2")
 SEMANTIC_THRESHOLD=0.65
 
+def _normalize_attempt_text(attempt):
+    if isinstance(attempt, list):
+        return " ".join(str(item) for item in attempt).strip()
+    return str(attempt).strip() if attempt is not None else ""
+
+
 def detect_semantic(target_word, attempt):
     """
 classifeis lexical-level erors:1) neologistic 2) semantic 3) correct
     """
-    if not attempt:
+    attempt_text = _normalize_attempt_text(attempt)
+    target_text = str(target_word).strip()
+
+    if not attempt_text:
         return "No speech"
     #neologism 
-    if zipf_frequency(attempt,"en")==0:
+    if zipf_frequency(attempt_text,"en")==0:
         return"Neologistic"
     #semantic similarity check 
-    emb_t= semantic_model.encode(target_word,convert_to_tensor=True)
-    emb_s= semantic_model.encode(attempt, convert_to_tensor=True)
+    emb_t= semantic_model.encode(target_text,convert_to_tensor=True)
+    emb_s= semantic_model.encode(attempt_text, convert_to_tensor=True)
 
     similarity=float(util.cos_sim(emb_t,emb_s))
 
-    if similarity > SEMANTIC_THRESHOLD and attempt.lower() != target_word.lower():
+    if similarity > SEMANTIC_THRESHOLD and attempt_text.lower() != target_text.lower():
         return "Semantic Paraphasia"
-    if attempt.lower() == target_word.lower():
+    if attempt_text.lower() == target_text.lower():
         return "Correct"    
     return "Phonological"
 
@@ -85,12 +95,15 @@ def run():
     """Main execution function - returns error report"""
     print("Enter the Target word: ")
     target_word = input().strip()
+
+    transcript = perception_run()
+    transcript_text = str(transcript).strip() if transcript is not None else ""
     
     print("Converting target word to phonemes...")
     target_phonemes = text_to_phonemes(target_word)
     
     print("Converting transcript to phonemes...")
-    attempt = text_to_phonemes(transcript)
+    attempt = text_to_phonemes(transcript_text)
     
     print(f"\nTarget phonemes: {target_phonemes}")
     print(f"Transcribed phonemes: {attempt}\n")
@@ -99,7 +112,7 @@ def run():
     error_report = phoneme_errors(target_phonemes, attempt)
     
     # Semantic analysis
-    semantic_error_type= detect_semantic(target_word, attempt)
+    semantic_error_type= detect_semantic(target_word, transcript_text)
     print (f"Semantic Classification:{semantic_error_type}")
     # Print report
     print("=" * 50)
