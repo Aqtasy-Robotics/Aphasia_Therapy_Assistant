@@ -1,6 +1,6 @@
 import os 
 from dotenv import load_dotenv
-load_dotenv
+load_dotenv()  # must call it
 import json
 from groq import Groq
 from typing import Dict, Any, Optional
@@ -28,7 +28,7 @@ def generate_feedback(error_report: Dict[str, Any],
     """
 
     # Getting the api key
-    api_key = os.getenv("GROQ_API_KEY")
+    api_key = api_key or os.getenv("GROQ_API_KEY")
     if not api_key:
         print("Warning: No API key found. Using fallback feedback.")
         return _fallback_feedback(error_report, target_word, patient_name)
@@ -39,7 +39,7 @@ def generate_feedback(error_report: Dict[str, Any],
  
     try:
         # Call Groq LLM
-        client = Groq(API_KEYS=api_key)
+        client = Groq(api_key=api_key)
         response = client.chat.completions.create(
             model=model,
             messages=[
@@ -222,7 +222,7 @@ def generate_practice_exercise(error_report: Dict[str, Any],
         Practice exercise string
     """
     
-    api_key = api_key or os.getenv("GROQ_API_KEY")
+    api_key =  os.getenv("GROQ_API_KEY")
     if not api_key:
         # Fallback to simple template
         errors = error_report.get('errors', [])
@@ -410,3 +410,5 @@ if __name__ == "__main__":
     
     # Save to log (optional)
     # save_feedback_log(feedback, patient_id="patient_001")
+
+   
