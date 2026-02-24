@@ -47,6 +47,8 @@ def transcribe_audio(file_path):
 
 # main menu 
 def run():
+    text = ""
+    audio_path = None
     try:
         audio_path = record_audio()
         print("The Audio is beign transcribed.....")
@@ -54,6 +56,12 @@ def run():
         print("transcription is :::",text)
     except Exception as e:
         print("An error occurred:", str(e))
+    finally:
+        if audio_path and os.path.exists(audio_path):
+            try:
+                os.remove(audio_path)
+            except OSError:
+                pass
     return text
 
 if __name__ == "__main__":
