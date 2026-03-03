@@ -189,7 +189,7 @@ class FeedbackWidget(QWidget):
         layout = QVBoxLayout()
 
         title = QLabel("Pronunciation Feedback")
-        title.setStyleSheet("font-size: 16px; color: #7f8c8d;")
+        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #2c3e50;")
         layout.addWidget(title)
 
         # Score
@@ -260,7 +260,7 @@ class FeedbackWidget(QWidget):
         # Feedback text
         self.feedback_text = QTextEdit()
         self.feedback_text.setReadOnly(True)
-        self.feedback_text.setMaximumHeight(260)
+        self.feedback_text.setMaximumHeight(220)
         self.feedback_text.setStyleSheet("""
             QTextEdit {
                 background-color: white; border: 2px solid #bdc3c7;
@@ -268,6 +268,21 @@ class FeedbackWidget(QWidget):
             }
         """)
         layout.addWidget(self.feedback_text)
+
+        # Transcript (what was actually heard)
+        transcript_title = QLabel("Last recording (transcript)")
+        transcript_title.setStyleSheet("font-size: 14px; color: #7f8c8d;")
+        layout.addWidget(transcript_title)
+
+        self.transcript_label = QLabel("—")
+        self.transcript_label.setWordWrap(True)
+        self.transcript_label.setStyleSheet("""
+            font-size: 13px;
+            background-color: #ecf0f1;
+            border-radius: 8px;
+            padding: 8px;
+        """)
+        layout.addWidget(self.transcript_label)
 
         layout.addStretch()
         self.setLayout(layout)
@@ -311,6 +326,10 @@ class FeedbackWidget(QWidget):
         self.target_phonemes_label.setText(target_ph)
         self.detected_phonemes_label.setText(attempt_ph)
 
+        # Show raw transcript from perception step (if available)
+        transcript_text = str(result.get("transcript") or "").strip()
+        self.transcript_label.setText(transcript_text or "No speech detected or transcription failed.")
+
         html = (
             f"<p><b>Feedback:</b><br>{feedback['feedback_text']}</p>"
             f"<p><b>Practice exercise:</b><br>{exercise}</p>"
@@ -324,6 +343,7 @@ class FeedbackWidget(QWidget):
         self.target_phonemes_label.setText("---")
         self.detected_phonemes_label.setText("---")
         self.feedback_text.clear()
+        self.transcript_label.setText("—")
 
 
 # =================== PROGRESS WIDGET ===================
@@ -435,30 +455,37 @@ class AnalysisWorker(QThread):
         self.patient_name = patient_name
 
     def run(self):
-        # 1) Record + transcribe
-        transcript = perception_run()
+        try:
+            # 1) Record + transcribe
+            transcript = perception_run()
 
-        # 2) Phoneme analysis
-        target_phonemes = text_to_phonemes(self.word)
-        attempt_phonemes = text_to_phonemes(str(transcript))
+            # 2) Phoneme analysis
+            target_phonemes = text_to_phonemes(self.word)
+            attempt_phonemes = text_to_phonemes(str(transcript))
 
-        error_report = phoneme_errors(target_phonemes, attempt_phonemes)
+            error_report = phoneme_errors(target_phonemes, attempt_phonemes)
 
-        # 3) LLM feedback + exercise
-        feedback = generate_feedback(
-            error_report=error_report,
-            target_word=self.word,
-            patient_name=self.patient_name
-        )
-        exercise = generate_practice_exercise(error_report, self.word)
+            # 3) LLM feedback + exercise
+            feedback = generate_feedback(
+                error_report=error_report,
+                target_word=self.word,
+                patient_name=self.patient_name
+            )
+            exercise = generate_practice_exercise(error_report, self.word)
 
-        self.analysis_complete.emit({
-            "word": self.word,
-            "transcript": transcript,
-            "error_report": error_report,
-            "feedback": feedback,
-            "exercise": exercise,
-        })
+            self.analysis_complete.emit({
+                "word": self.word,
+                "transcript": transcript,
+                "error_report": error_report,
+                "feedback": feedback,
+                "exercise": exercise,
+            })
+        except Exception as e:
+            # Bubble a user-friendly error back to the GUI thread
+            self.analysis_complete.emit({
+                "word": self.word,
+                "error": str(e),
+            })
 
 
 # =================== MAIN WINDOW ===================
@@ -490,8 +517,8 @@ class DemoMainWindow(QMainWindow):
         title.setAlignment(Qt.AlignCenter)
         header.addWidget(title)
 
-        info_label = QLabel("Real mode - uses microphone, analyzer, and LLM feedback")
-        info_label.setStyleSheet("font-size: 14px; color: #16a085; font-weight: bold;")
+        info_label = QLabel("Step 1: Check the word on the left.\nStep 2: Press “Start Recording” and say the word clearly.\nStep 3: Read your feedback and suggested exercise.")
+        info_label.setStyleSheet("font-size: 14px; color: #16a085;")
         info_label.setAlignment(Qt.AlignCenter)
         header.addWidget(info_label)
 
@@ -574,6 +601,19 @@ class DemoMainWindow(QMainWindow):
         self.worker.start()
 
     def on_analysis_complete(self, result: Dict[str, Any]):
+        # Handle errors from the worker in a user-friendly way
+        if "error" in result:
+            error_msg = result.get("error") or "Unknown error."
+            QMessageBox.critical(
+                self,
+                "Analysis error",
+                f"Something went wrong while analyzing this attempt.\n\nDetails:\n{error_msg}\n\n"
+                "Please check your microphone and internet connection, then try again."
+            )
+            self.recording_widget.record_button.setEnabled(True)
+            self.next_button.setEnabled(False)
+            return
+
         word = result["word"]
         error_report = result["error_report"]
         score = float(error_report.get("accuracy", 0.0))
