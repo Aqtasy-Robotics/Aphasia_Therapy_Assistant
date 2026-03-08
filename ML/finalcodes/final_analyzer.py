@@ -7,6 +7,7 @@ except Exception:
     pass
 from g2p_en import G2p
 from final_perception import run as perception_run
+import os
 from sentence_transformers import SentenceTransformer, util 
 from wordfreq import zipf_frequency
 

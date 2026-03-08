@@ -6,6 +6,7 @@ from groq import Groq
 from typing import Dict, Any, Optional
 from datetime import datetime
 
+
 def generate_feedback(error_report: Dict[str, Any], 
                       target_word: str,
                       patient_name: str = "friend",
