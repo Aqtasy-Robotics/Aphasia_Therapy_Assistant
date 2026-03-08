@@ -29,6 +29,15 @@ class SpeechTherapyState(TypedDict):
     practice_exercise:  Optional[str]
     feedback_attempts:  int
 
+    # ── Session identity ─────────────────────────────────────────
+    patient_id:             Optional[str]    # Supabase patients.id
+    assignment_id:          Optional[str]    # Supabase therapist_assignments.id
+    word_source:            Optional[str]    # 'therapist' | 'patient_category'
+    session_start:          Optional[float]  # time.time() at session start
+    session_duration_secs:  Optional[int]
+
+# ── Report ───────────────────────────────────────────────────
+    report_id:              Optional[str]    # Supabase session_reports.id
     # ── Execution ───────────────────────────────────────────────
     audio_output_path:  Optional[str]
     session_complete:   bool
