@@ -13,7 +13,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 import json
-import os
 
 from pydantic import AnyHttpUrl, BaseModel, Field, ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -35,7 +34,7 @@ class AudioConfig(BaseModel):
     """Microphone and speaker configuration."""
 
     sample_rate: int = Field(gt=0)
-    channels: int = Field(ge=1)
+    channels: int = Field(ge=1, le=2, description="Number of audio channels (1=mono, 2=stereo)")
     volume: float = Field(ge=0.0, le=1.0)
     input_device: Optional[str] = None
     output_device: Optional[str] = None
@@ -44,8 +43,8 @@ class AudioConfig(BaseModel):
 class GPIOConfig(BaseModel):
     """GPIO pin assignments for servos."""
 
-    servo_pan_pin: int
-    servo_tilt_pin: int
+    servo_pan_pin: int = Field(ge=0, le=27, description="BCM pin number for pan servo")
+    servo_tilt_pin: int = Field(ge=0, le=27, description="BCM pin number for tilt servo")
     servo_min_pulse_width: float = Field(gt=0.0)
     servo_max_pulse_width: float = Field(gt=0.0)
 
@@ -53,11 +52,23 @@ class GPIOConfig(BaseModel):
 class OledConfig(BaseModel):
     """I2C OLED display configuration."""
 
-    i2c_port: int = 1
-    i2c_address: str = "0x3C"
+    i2c_port: int = Field(default=1, ge=0, description="I2C port number (typically 1 on Raspberry Pi)")
+    i2c_address: str = Field(default="0x3C", description="I2C address of OLED display")
     width: int = Field(gt=0)
     height: int = Field(gt=0)
-    rotate: int = 0
+    rotate: int = Field(default=0, ge=0, le=3, description="Display rotation (0, 90, 180, 270 degrees)")
+
+    @field_validator("i2c_address")
+    @classmethod
+    def validate_i2c_address(cls, v: str) -> str:
+        """Validate I2C address format."""
+        if not v.startswith("0x"):
+            raise ValueError("I2C address must be in hexadecimal format (e.g., 0x3C)")
+        try:
+            int(v, 16)
+        except ValueError as exc:
+            raise ValueError(f"Invalid I2C address format: {v}") from exc
+        return v
 
 
 class DisplayConfig(BaseModel):
@@ -84,7 +95,7 @@ class Settings(BaseSettings):
 
     # Environment-driven fields
     server_url: AnyHttpUrl
-    device_id: str
+    device_id: str = Field(min_length=1, description="Unique device identifier")
     piper_model_path: Path
     log_level: str = "INFO"
 
@@ -175,4 +186,3 @@ __all__ = [
     "DisplayConfig",
     "load_settings_or_exit",
 ]
-
