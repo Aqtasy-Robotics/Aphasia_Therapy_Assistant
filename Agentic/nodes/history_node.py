@@ -12,3 +12,8 @@ def history_node(state: SpeechTherapyState) -> dict:
         "sessions_done": len(history),
     }
 
+def _is_improving(sessions):
+    if len(sessions) < 2:
+        return True
+    accuracies = [s.get("accuracy", 0) for s in sessions]
+    return accuracies[-1] > accuracies[0]
