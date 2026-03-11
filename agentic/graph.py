@@ -33,6 +33,7 @@ def build_graph() -> "CompiledGraph":
 
     graph = StateGraph(SpeechTherapyState)
 
+
     # ── Register nodes ───────────────────────────────────────────
     graph.add_node("perception",          perception_node)
     graph.add_node("phoneme_analysis",    phoneme_analysis_node)
