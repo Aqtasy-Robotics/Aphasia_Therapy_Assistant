@@ -11,6 +11,7 @@ Pipeline flow:
 """
 
 from __future__ import annotations
+from asyncio import graph
 
 from langgraph.graph import StateGraph, END
 
@@ -19,6 +20,7 @@ from nodes.perception_node import perception_node
 from nodes.phoneme_node     import phoneme_analysis_node
 from nodes.feedback_node    import feedback_generation_node
 from nodes.execution_node   import execution_node
+from nodes.history_node import history_node
 from edges import (
     check_transcription_quality,
     route_by_error_type,
@@ -36,6 +38,9 @@ def build_graph() -> "CompiledGraph":
     graph.add_node("phoneme_analysis",    phoneme_analysis_node)
     graph.add_node("feedback_generation", feedback_generation_node)
     graph.add_node("execution",           execution_node)
+    graph.add_node("history_analysis", history_node)
+    graph.add_edge("phoneme_analysis", "history_analysis")
+    graph.add_edge("history_analysis", "feedback_generation")
 
     # ── Entry point ──────────────────────────────────────────────
     graph.set_entry_point("perception")

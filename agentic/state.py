@@ -6,7 +6,6 @@ All nodes read from and write back to this single TypedDict.
 from __future__ import annotations
 from typing import TypedDict, Optional, List, Dict, Any
 
-
 class SpeechTherapyState(TypedDict):
     # ── Perception ──────────────────────────────────────────────
     audio_path:         Optional[str]        # temp .wav file path
@@ -35,8 +34,8 @@ class SpeechTherapyState(TypedDict):
     word_source:            Optional[str]    # 'therapist' | 'patient_category'
     session_start:          Optional[float]  # time.time() at session start
     session_duration_secs:  Optional[int]
-
-# ── Report ───────────────────────────────────────────────────
+   
+    # ── Report ───────────────────────────────────────────────────
     report_id:              Optional[str]    # Supabase session_reports.id
     # ── Execution ───────────────────────────────────────────────
     audio_output_path:  Optional[str]
@@ -44,3 +43,8 @@ class SpeechTherapyState(TypedDict):
 
     # ── Control / error propagation ─────────────────────────────
     current_error:      Optional[str]
+
+        # ── History / progress ───────────────────────────────────────
+    session_history:        Optional[List[Dict[str, Any]]]
+    patient_trend:          Optional[str]    # 'improving' | 'needs work'
+    sessions_done:          int
