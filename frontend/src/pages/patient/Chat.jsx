@@ -42,11 +42,11 @@ const PatientChat = () => {
         {/* INITIAL WELCOME VIEW */}
         <div className="flex-1 flex flex-col items-center justify-center p-12 text-center">
           <div className="relative mb-8">
-            <div className="w-24 h-24 bg-[#f0fff4] rounded-[2.5rem] flex items-center justify-center shadow-inner">
-              <Bot className="w-12 h-12 text-[#5cb338]" />
+            <div className="w-24 h-24 bg-[white] rounded-[2.5rem] flex items-center justify-center shadow-inner">
+              <Bot className="w-12 h-12 text-[blue]" />
             </div>
             <div className="absolute -bottom-2 -right-2 bg-white p-2 rounded-xl shadow-md border border-gray-50">
-              <Smile className="w-5 h-5 text-orange-400" />
+              <Smile className="w-5 h-5 text-blue-400" />
             </div>
           </div>
 
@@ -56,7 +56,7 @@ const PatientChat = () => {
             Waabi robot. Your first message is just a click away!
           </p>
 
-          <button className="mt-10 bg-[#5cb338] text-white px-10 py-5 rounded-[2rem] font-black shadow-xl shadow-green-100 hover:bg-green-600 active:scale-95 transition-all flex items-center gap-3 uppercase tracking-widest text-xs">
+          <button className="mt-10 bg-[#4f6ef7] text-white px-10 py-5 rounded-[2rem] font-black shadow-xl shadow-blue-100 hover:bg-blue-600 active:scale-95 transition-all flex items-center gap-3 uppercase tracking-widest text-xs">
             <PlusCircle className="w-5 h-5" />
             Start New Chat
           </button>
