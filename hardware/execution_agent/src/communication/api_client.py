@@ -186,7 +186,24 @@ class ApiClient:
         Returns:
             True if the server responded with a successful status, False otherwise.
         """
+        endpoint = "/health"
+        response = await self._request_with_retries("GET", endpoint)
 
+        if response is None:
+            logger.warning("Health check failed – backend not reachable")
+            return False
+
+        if response.is_success:
+            logger.info("Health check succeeded – backend is reachable")
+            return True
+
+        logger.warning(
+            "Health check returned non-success status code: {}", response.status_code
+        )
+        return False
+
+
+__all__ = ["ApiClient"]
 
 
 

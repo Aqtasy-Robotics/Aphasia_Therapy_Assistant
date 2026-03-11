@@ -8,6 +8,17 @@ from pathlib import Path
 
 from loguru import logger
 
+from src.communication.api_client import ApiClient
+from src.communication.models import ActionEnum
+from src.dispatcher import (
+    Dispatcher,
+    mock_listen,
+    mock_move_head,
+    mock_show_face,
+    mock_show_ui,
+    mock_speak,
+)
+
 from src.settings import load_settings_or_exit
 
 # Global state
@@ -92,13 +103,43 @@ Log Level: {settings.log_level}
     logger.debug(f"OLED: {settings.oled.width}x{settings.oled.height} "
                 f"at {settings.oled.i2c_address}")
 
-    # Enter dummy polling loop (placeholder for Phase 2)
-    logger.info("Entering idle loop (Phase 1 - no polling yet)...")
-    while running:
-        await asyncio.sleep(settings.polling.interval_seconds)
+# Initialise API client and dispatcher
+    api_client = ApiClient(settings)
+    dispatcher = Dispatcher(settings)
 
-    logger.info("Shutdown complete")
+    # Register mock drivers for all actions (real drivers arrive in Phases 3–5)
+    dispatcher.register_driver(ActionEnum.SPEAK, mock_speak)
+    dispatcher.register_driver(ActionEnum.LISTEN, mock_listen)
+    dispatcher.register_driver(ActionEnum.SHOW_FACE, mock_show_face)
+    dispatcher.register_driver(ActionEnum.MOVE_HEAD, mock_move_head)
+    dispatcher.register_driver(ActionEnum.SHOW_UI, mock_show_ui)
 
+    # Health check at startup
+    await api_client.health_check()
+
+    logger.info("Entering polling loop (Phase 2)...")
+
+    try:
+        while running:
+            try:
+                cmd = await api_client.poll_command()
+                if cmd:
+                    logger.info(
+                        "Received command: action={} id={}",
+                        cmd.action.value,
+                        cmd.command_id,
+                    )
+                    ack = await dispatcher.execute(cmd)
+                    await api_client.send_ack(ack)
+
+                await asyncio.sleep(settings.polling.interval_seconds)
+            except Exception as e:  # noqa: BLE001
+                logger.exception("Error in polling loop: {}", e)
+                await asyncio.sleep(settings.polling.interval_seconds)
+    finally:
+        # Ensure HTTP client is closed on shutdown
+        await api_client.aclose()
+        logger.info("Shutdown complete")
 
 if __name__ == "__main__":
     # Register signal handlers for graceful shutdown
