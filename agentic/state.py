@@ -39,7 +39,7 @@ class SpeechTherapyState(TypedDict):
     report_id:              Optional[str]    # Supabase session_reports.id
     # ── Execution ───────────────────────────────────────────────
     audio_output_path:  Optional[str]
-    session_complete:   bool
+    session_complete:   bool # true or not 
 
     # ── Control / error propagation ─────────────────────────────
     current_error:      Optional[str]
