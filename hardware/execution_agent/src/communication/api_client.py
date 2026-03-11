@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import asyncio
 from typing import Optional
+import logging
 
 import httpx
-from loguru import logger
+
 
 from src.communication.models import CommandAck, ExecutionCommand
 from src.settings import Settings
 
+logger = logging.getLogger(__name__)
 
 class ApiClient:
     """HTTP client responsible for polling commands and sending results/audio."""
@@ -68,14 +70,23 @@ class ApiClient:
             except (httpx.ConnectError, httpx.ReadTimeout, httpx.NetworkError, httpx.HTTPStatusError) as exc:
                 if attempt >= retries:
                     logger.error(
-                        f"HTTP {method} {url} failed after {attempt + 1} attempts: {exc}"
+                        "HTTP %s %s failed after %s attempts: %s",
+                        method,
+                        url,
+                        attempt + 1,
+                        exc,
                     )
                     return None
 
                 delay = base_delay * (2**attempt)
                 logger.warning(
-                    f"HTTP {method} {url} failed on attempt {attempt + 1}/{retries + 1}: {exc} "
-                    f"– retrying in {delay:.1f}s"
+                    "HTTP %s %s failed on attempt %s/%s: %s – retrying in %.1fs",
+                    method,
+                    url,
+                    attempt + 1,
+                    retries + 1,
+                    exc,
+                    delay,
                 )
                 await asyncio.sleep(delay)
 
@@ -96,23 +107,23 @@ class ApiClient:
 
         if response.status_code == 404:
             # No command available is treated as a normal condition
-            logger.debug("No command available (404) for device {}", self._device_id)
+            logger.debug("No command available (404) for device %s", self._device_id)
             return None
 
         if response.status_code == 204:
-            logger.debug("No command available (204) for device {}", self._device_id)
+            logger.debug("No command available (204) for device %s", self._device_id)
             return None
 
         try:
             data = response.json()
         except ValueError as exc:
-            logger.error("Failed to decode JSON from /commands response: {}", exc)
+            logger.error("Failed to decode JSON from /commands response: %s", exc)
             return None
 
         try:
             command = ExecutionCommand.model_validate(data)
         except Exception as exc:  # ValidationError in pydantic v2, keep generic to avoid import churn
-            logger.error("Invalid ExecutionCommand payload received: {}", exc)
+            logger.error("Invalid ExecutionCommand payload received: %s", exc)
             return None
 
         return command
@@ -132,20 +143,20 @@ class ApiClient:
 
         if response is None:
             logger.error(
-                "Failed to send CommandAck for command_id={} after retries",
+                "Failed to send CommandAck for command_id=%s after retries",
                 ack.command_id,
             )
             return
 
         if response.is_success:
             logger.debug(
-                "Sent CommandAck for command_id={} with status={}",
+                "Sent CommandAck for command_id=%s with status=%s",
                 ack.command_id,
                 ack.status.value,
             )
         else:
             logger.error(
-                "Non-success response when sending CommandAck for command_id={}: {}",
+                "Non-success response when sending CommandAck for command_id=%s: %s",
                 ack.command_id,
                 response.status_code,
             )
@@ -165,15 +176,21 @@ class ApiClient:
 
         response = await self._request_with_retries("POST", endpoint, files=files)
         if response is None:
-            logger.error("Failed to upload audio for device {} after retries", self._device_id)
+            logger.error(
+                "Failed to upload audio for device %s after retries",
+                self._device_id,
+            )
             return False
 
         if response.is_success:
-            logger.debug("Uploaded audio for device {} successfully", self._device_id)
+            logger.debug(
+                "Uploaded audio for device %s successfully",
+                self._device_id,
+            )
             return True
 
         logger.error(
-            "Non-success response when uploading audio for device {}: {}",
+            "Non-success response when uploading audio for device %s: %s",
             self._device_id,
             response.status_code,
         )
@@ -186,7 +203,25 @@ class ApiClient:
         Returns:
             True if the server responded with a successful status, False otherwise.
         """
+        endpoint = "/health"
+        response = await self._request_with_retries("GET", endpoint)
 
+        if response is None:
+            logger.warning("Health check failed – backend not reachable")
+            return False
+
+        if response.is_success:
+            logger.info("Health check succeeded – backend is reachable")
+            return True
+
+        logger.warning(
+            "Health check returned non-success status code: %s",
+            response.status_code,
+        )
+        return False
+
+
+__all__ = ["ApiClient"]
 
 
 
