@@ -10,15 +10,12 @@ from loguru import logger
 
 from src.communication.api_client import ApiClient
 from src.communication.models import ActionEnum
-from src.dispatcher import (
-    Dispatcher,
-    mock_listen,
-    mock_move_head,
-    mock_show_face,
-    mock_show_ui,
-    mock_speak,
-)
-
+from src.dispatcher import Dispatcher
+from src.services.ear import listen
+from src.services.face import show_face
+from src.services.head import move_head
+from src.services.mouth import speak
+from src.ui.body_app import show_ui
 from src.settings import load_settings_or_exit
 
 # Global state
@@ -103,16 +100,17 @@ Log Level: {settings.log_level}
     logger.debug(f"OLED: {settings.oled.width}x{settings.oled.height} "
                 f"at {settings.oled.i2c_address}")
 
-# Initialise API client and dispatcher
+    # Initialise API client and dispatcher
     api_client = ApiClient(settings)
     dispatcher = Dispatcher(settings)
 
-    # Register mock drivers for all actions (real drivers arrive in Phases 3–5)
-    dispatcher.register_driver(ActionEnum.SPEAK, mock_speak)
-    dispatcher.register_driver(ActionEnum.LISTEN, mock_listen)
-    dispatcher.register_driver(ActionEnum.SHOW_FACE, mock_show_face)
-    dispatcher.register_driver(ActionEnum.MOVE_HEAD, mock_move_head)
-    dispatcher.register_driver(ActionEnum.SHOW_UI, mock_show_ui)
+    # Register real driver entry-points (hardware-backed implementations will be
+    # added in Phases 3–5; current versions are safe stubs in their own modules).
+    dispatcher.register_driver(ActionEnum.SPEAK, speak)
+    dispatcher.register_driver(ActionEnum.LISTEN, listen)
+    dispatcher.register_driver(ActionEnum.SHOW_FACE, show_face)
+    dispatcher.register_driver(ActionEnum.MOVE_HEAD, move_head)
+    dispatcher.register_driver(ActionEnum.SHOW_UI, show_ui)
 
     # Health check at startup
     await api_client.health_check()
