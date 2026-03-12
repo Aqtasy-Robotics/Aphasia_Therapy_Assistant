@@ -88,7 +88,6 @@ def perception_node(state: SpeechTherapyState) -> dict:
         print(f"Transcription: {text!r}  (confidence proxy: {confidence:.2f})")
 
         return {
-            **state,
             "transcript":       text,
             "confidence_score": confidence,
             "retry_count":      state.get("retry_count", 0) + 1,
