@@ -98,12 +98,10 @@ def perception_node(state: SpeechTherapyState) -> dict:
     except Exception as exc:
         print(f"[perception_node] ERROR: {exc}")
         return {
-            **state,
             "transcript":       "",
             "confidence_score": -9.9,
             "retry_count":      state.get("retry_count", 0) + 1,
-            "current_error":    str(exc),
-        }
+            "current_error":
 
     finally:
         if audio_path and os.path.exists(audio_path):
