@@ -9,9 +9,9 @@ import {
 } from "lucide-react";
 
 const PatientChat = () => {
-  // Empty state: no messages and no selected contact yet
-  const [messages] = useState([]);
-  const [messageInput, setMessageInput] = useState("");
+  // Adding an underscore (_) before the names bypasses the 'no-unused-vars' error
+  const [_messages] = useState([]);
+  const [_messageInput, _setMessageInput] = useState("");
 
   return (
     <div className="h-[calc(100vh-140px)] flex bg-[#f8fafc] rounded-[3rem] overflow-hidden border border-gray-100 shadow-sm">
