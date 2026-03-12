@@ -125,7 +125,6 @@ def execution_node(state: SpeechTherapyState) -> dict:
         print("🔇 Text-only mode (TTS unavailable or not installed).")
 
     return {
-        **state,
         "audio_output_path": audio_path,
         "session_complete":  True,
         "current_error":     None,

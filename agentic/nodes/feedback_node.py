@@ -309,7 +309,6 @@ def feedback_generation_node(state: SpeechTherapyState) -> dict:
     print(exercise)
 
     return {
-        **state,
         "feedback":          feedback,
         "practice_exercise": exercise,
         "feedback_attempts": state.get("feedback_attempts", 0) + 1,

@@ -88,7 +88,6 @@ def perception_node(state: SpeechTherapyState) -> dict:
         print(f"Transcription: {text!r}  (confidence proxy: {confidence:.2f})")
 
         return {
-            **state,
             "transcript":       text,
             "confidence_score": confidence,
             "retry_count":      state.get("retry_count", 0) + 1,
@@ -101,7 +100,8 @@ def perception_node(state: SpeechTherapyState) -> dict:
             "transcript":       "",
             "confidence_score": -9.9,
             "retry_count":      state.get("retry_count", 0) + 1,
-            "current_error":
+            "current_error":    str(exc),
+        }
 
     finally:
         if audio_path and os.path.exists(audio_path):

@@ -198,7 +198,6 @@ def phoneme_analysis_node(state: SpeechTherapyState) -> dict:
     print("=" * 50)
 
     return {
-        **state,
         "target_phonemes":  target_ph,
         "attempt_phonemes": attempt_ph,
         "error_report":     report,

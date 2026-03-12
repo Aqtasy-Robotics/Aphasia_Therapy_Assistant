@@ -7,8 +7,7 @@ def history_node(state: SpeechTherapyState) -> dict:
     trend = "improving" if _is_improving(recent) else "needs work"
     
     return {
-        **state,
-        "patient_trend": trend,            
+        "patient_trend": trend,
         "sessions_done": len(history),
     }
 
