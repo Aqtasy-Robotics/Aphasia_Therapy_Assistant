@@ -68,12 +68,12 @@ const TherapistLayout = () => {
         </div>
 
         <nav className="flex-1 space-y-2">
-          <NavItem label="Dashboard" active={isActive('/dashboard')} onClick={() => navigate('/dashboard')} />
+          <NavItem label="Home" active={isActive('/dashboard')} onClick={() => navigate('/dashboard')} />
           <NavItem label="My Patients" active={isActive('/therapist-patients')} onClick={() => navigate('/therapist-patients')} />
           <NavItem label="Calendar" active={isActive('/therapist-calendar')} onClick={() => navigate('/therapist-calendar')} />
           <NavItem label="Reports" active={isActive('/therapist-reports')} onClick={() => navigate('/therapist-reports')} />
           <NavItem label="Messages" active={isActive('/therapist-messages')} onClick={() => navigate('/therapist-messages')} />
-          <NavItem label="Settings" active={isActive('/therapist-settings')} onClick={() => navigate('/therapist-settings')} />
+          <NavItem label="My Profile" active={isActive('/therapist-settings')} onClick={() => navigate('/therapist-settings')} />
         </nav>
 
         <button 
