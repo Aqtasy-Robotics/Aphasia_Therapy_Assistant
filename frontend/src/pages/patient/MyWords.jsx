@@ -3,7 +3,7 @@ import { BookOpen, Mic, Pizza, Box, Users } from "lucide-react";
 
 const MyWords = () => {
   // 1. Initial State (Empty for first-time login)
-  const [words] = useState([]);
+  const [_words] = useState([]);
   const [activeFilter, setActiveFilter] = useState("All");
 
   // 2. Dynamic Messages based on the selected category

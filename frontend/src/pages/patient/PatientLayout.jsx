@@ -11,7 +11,7 @@ const PatientLayout = () => {
 
   useEffect(() => {
     const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: {session } } = await supabase.auth.getSession();
       
       if (session) {
         setUserName(session.user.user_metadata.full_name || "User");
@@ -23,7 +23,7 @@ const PatientLayout = () => {
 
     checkSession();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, _session) => {
       if (event === "SIGNED_OUT") navigate("/login");
     });
 
