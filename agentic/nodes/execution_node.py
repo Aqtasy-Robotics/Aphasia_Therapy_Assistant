@@ -26,6 +26,7 @@ from typing import Optional
 from loguru import logger
 
 from state import SpeechTherapyState
+from db import persist_session_state
 
 # ── Optional TTS (pyttsx3 works offline on Raspberry Pi) ────────────────────
 try:
@@ -124,8 +125,20 @@ def execution_node(state: SpeechTherapyState) -> dict:
     else:
         print("🔇 Text-only mode (TTS unavailable or not installed).")
 
+    # ── Persist session report to Supabase, if configured ───────
+    # Merge current state with execution outputs so persistence sees
+    # the audio path and a best-effort duration.
+    try:
+        merged_state = dict(state)
+        merged_state["audio_output_path"] = audio_path
+    except Exception:
+        merged_state = state  # Fallback: use original mapping
+
+    report_id = persist_session_state(merged_state)  # May be None if disabled/failed.
+
     return {
         "audio_output_path": audio_path,
         "session_complete":  True,
+        "report_id":         report_id,
         "current_error":     None,
     }

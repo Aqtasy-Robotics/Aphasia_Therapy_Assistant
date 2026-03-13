@@ -12,6 +12,7 @@ Pipeline flow:
 
 from __future__ import annotations
 from asyncio import graph
+import time
 
 from langgraph.graph import StateGraph, END
 
@@ -93,6 +94,8 @@ def run_session() -> SpeechTherapyState:
 
     target_word  = input("Enter the target word for this session: ").strip()
     patient_name = input("Enter patient name (or press Enter for 'friend'): ").strip() or "friend"
+    patient_id   = input("Enter Supabase profiles.id UUID for the patient (required to save to DB): ").strip() or None
+    assignment_id = input("Enter therapist_assignments.id UUID (optional, press Enter to skip): ").strip() or None
 
     initial_state: SpeechTherapyState = {
         # Perception
@@ -104,6 +107,18 @@ def run_session() -> SpeechTherapyState:
         # Session meta
         "target_word":       target_word,
         "patient_name":      patient_name,
+
+        # Session identity (Supabase linkage)
+        # `patient_id` must correspond to an existing row in the
+        # `patients` table for persistence to succeed.
+        "patient_id":        patient_id,
+        "assignment_id":     assignment_id,
+        "word_source":       "therapist",
+        "session_start":     time.time(),
+        "session_duration_secs": None,
+
+        # Report
+        "report_id":         None,
 
         # Phoneme analysis
         "target_phonemes":   None,
@@ -122,12 +137,19 @@ def run_session() -> SpeechTherapyState:
 
         # Control
         "current_error":     None,
+
+        # History / progress
+        "session_history":   [],
+        "patient_trend":     None,
+        "sessions_done":     0,
     }
 
     app          = build_graph()
     final_state  = app.invoke(initial_state)
 
     print("\n✅ Session complete.")
+    if final_state.get("report_id"):
+        print(f"Supabase session report id: {final_state['report_id']}")
     return final_state
 
 

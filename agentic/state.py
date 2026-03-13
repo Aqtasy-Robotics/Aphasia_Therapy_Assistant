@@ -4,7 +4,13 @@ All nodes read from and write back to this single TypedDict.
 """
 
 from __future__ import annotations
-from typing import TypedDict, Optional, List, Dict, Any
+from typing import TypedDict, Optional, List, Dict, Any, Annotated
+
+
+def _merge_current_error(current: Optional[str], new: Optional[str]) -> Optional[str]:
+    """Prefer a new non-empty error message, otherwise keep the existing value."""
+    return new or current
+
 
 class SpeechTherapyState(TypedDict):
     # ── Perception ──────────────────────────────────────────────
@@ -39,12 +45,12 @@ class SpeechTherapyState(TypedDict):
     report_id:              Optional[str]    # Supabase session_reports.id
     # ── Execution ───────────────────────────────────────────────
     audio_output_path:  Optional[str]
-    session_complete:   bool # true or not 
+    session_complete:   bool  # true or not
 
     # ── Control / error propagation ─────────────────────────────
-    current_error:      Optional[str]
+    current_error:      Annotated[Optional[str], _merge_current_error]
 
-        # ── History / progress ───────────────────────────────────────
-    session_history:        Optional[List[Dict[str, Any]]]
-    patient_trend:          Optional[str]    # 'improving' | 'needs work'
-    sessions_done:          int
+    # ── History / progress ──────────────────────────────────────
+    session_history:    Optional[List[Dict[str, Any]]]
+    patient_trend:      Optional[str]    # 'improving' | 'needs work'
+    sessions_done:      int
