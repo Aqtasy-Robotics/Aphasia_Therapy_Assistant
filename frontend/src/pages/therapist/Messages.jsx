@@ -11,9 +11,9 @@ import {
 
 const TherapistMessages = () => {
   // Empty states for first-time login
-  const [contacts] = useState([]); 
-  const [activeChat, setActiveChat] = useState(null);
-  const [messageInput, setMessageInput] = useState("");
+  const [_contacts] = useState([]); 
+  const [activeChat, _setActiveChat] = useState(null);
+  const [_messageInput, _setMessageInput] = useState("");
 
   return (
     <div className="h-[calc(100vh-140px)] flex bg-white rounded-[2rem] border border-gray-100 shadow-sm overflow-hidden">
