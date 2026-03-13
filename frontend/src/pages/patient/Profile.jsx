@@ -8,7 +8,7 @@ import {
 const Profile = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [therapists, setTherapists] = useState([]);
+  const [_therapists, setTherapists] = useState([]);
   const [profile, setProfile] = useState({
     // Identity
     full_name: "",
