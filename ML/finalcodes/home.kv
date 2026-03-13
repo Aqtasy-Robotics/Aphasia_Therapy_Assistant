@@ -1,0 +1,186 @@
+#:kivy 2.3.0
+
+<ColoredCard@ButtonBehavior+BoxLayout>:
+    # Custom reusable card widget used on the home screen.
+    card_color: 0.2, 0.5, 1, 1
+    card_id: ""
+    corner_radius: 20
+    orientation: "vertical"
+    padding: dp(24), dp(24)
+    spacing: dp(8)
+    size_hint: None, None
+    size: dp(260), dp(260)
+    on_press: app.on_card_pressed(root)
+
+    canvas.before:
+        Color:
+            rgba: root.card_color
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [root.corner_radius,]
+
+    # Icon placeholder
+    Label:
+        text: "☁"
+        font_size: "64sp"
+        size_hint_y: None
+        height: self.texture_size[1]
+        color: 1, 1, 1, 1
+
+    # Title
+    Label:
+        id: title_label
+        text: "Title"
+        font_size: "24sp"
+        bold: True
+        color: 1, 1, 1, 1
+        size_hint_y: None
+        height: self.texture_size[1]
+
+    # Subtitle
+    Label:
+        id: subtitle_label
+        text: "Subtitle"
+        font_size: "14sp"
+        color: 1, 1, 1, 0.9
+        text_size: self.width, None
+        halign: "center"
+        valign: "middle"
+        size_hint_y: None
+        height: self.texture_size[1]
+
+
+<HeaderBar@BoxLayout>:
+    size_hint_y: None
+    height: dp(80)
+    padding: dp(24), dp(16)
+    spacing: dp(24)
+
+    canvas.before:
+        Color:
+            rgba: 1, 1, 1, 1
+        Rectangle:
+            pos: self.pos
+            size: self.size
+
+    # Left: app icon + text
+    BoxLayout:
+        orientation: "horizontal"
+        spacing: dp(12)
+        size_hint_x: 0.6
+
+        Label:
+            text: "💬"
+            font_size: "32sp"
+            size_hint_x: None
+            width: dp(40)
+
+        BoxLayout:
+            orientation: "vertical"
+            spacing: dp(2)
+            Label:
+                text: "Aphasia Therapy Assistant"
+                font_size: "20sp"
+                bold: True
+                color: 0.1, 0.1, 0.2, 1
+                halign: "left"
+                valign: "middle"
+                text_size: self.size
+            Label:
+                text: "Your daily communication companion"
+                font_size: "13sp"
+                color: 0.4, 0.4, 0.6, 1
+                halign: "left"
+                valign: "middle"
+                text_size: self.size
+
+    # Right: button + welcome text
+    BoxLayout:
+        orientation: "horizontal"
+        spacing: dp(16)
+        size_hint_x: 0.4
+
+        Button:
+            text: "▶  Patient Starts Session"
+            size_hint_y: None
+            height: dp(40)
+            background_normal: ""
+            background_color: 0, 0, 0, 1
+            color: 1, 1, 1, 1
+            on_release: app.on_start_session()
+
+        BoxLayout:
+            orientation: "vertical"
+            size_hint_x: None
+            width: self.minimum_width
+            Label:
+                text: "Welcome back,"
+                font_size: "12sp"
+                color: 0.4, 0.4, 0.6, 1
+            Label:
+                text: "John"
+                font_size: "16sp"
+                bold: True
+                color: 0.1, 0.1, 0.3, 1
+
+
+<RootWidget>:
+    HomeScreen:
+        name: "home"
+
+
+<HomeScreen>:
+    canvas.before:
+        Color:
+            rgba: 0.96, 0.97, 1, 1
+        Rectangle:
+            pos: self.pos
+            size: self.size
+
+    BoxLayout:
+        orientation: "vertical"
+
+        HeaderBar:
+
+        Widget:
+            size_hint_y: None
+            height: dp(20)
+
+        BoxLayout:
+            orientation: "horizontal"
+            spacing: dp(24)
+            padding: dp(48), 0, dp(48), 0
+            size_hint_y: None
+            height: dp(320)
+
+            Widget:
+                size_hint_x: 1
+
+            ColoredCard:
+                id: communicate_card
+                card_id: "communicate"
+                card_color: 0.16, 0.47, 1, 1
+                title_label.text: "Communicate"
+                subtitle_label.text: "Express your needs and feelings"
+
+            ColoredCard:
+                id: practice_card
+                card_id: "practice"
+                card_color: 0.18, 0.73, 0.32, 1
+                title_label.text: "Practice"
+                subtitle_label.text: "Start therapy exercises"
+
+            ColoredCard:
+                id: settings_card
+                card_id: "settings"
+                card_color: 0.66, 0.26, 0.96, 1
+                title_label.text: "Settings"
+                subtitle_label.text: "Adjust your preferences"
+
+            Widget:
+                size_hint_x: 1
+
+        Widget:
+            size_hint_y: 1
+
