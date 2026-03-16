@@ -39,6 +39,66 @@ def _get_client() -> Optional[Client]:
     return _supabase
 
 
+def fetch_target_word_for_patient(patient_id: str) -> Optional[str]:
+    """Fetch the target word for a given patient from ``public.sessions``.
+
+    The Supabase schema stores target words in the
+    ``public.sessions.target_words`` column as an array.
+
+    This helper:
+    - Queries the ``sessions`` table for rows matching ``patient_id``.
+    - Orders by ``session_date`` descending so the most recent
+      session is used.
+    - Returns the first non-empty string from the ``target_words``
+      array, or ``None`` if it cannot be found.
+    """
+
+    if not patient_id:
+        print("[agentic-db] Cannot fetch target word without a patient_id.")
+        return None
+
+    client = _get_client()
+    if client is None:
+        print("[agentic-db] Supabase client unavailable; cannot fetch target word.")
+        return None
+
+    try:
+        response = (
+            client
+            .table("sessions")  # "public.sessions" schema
+            .select("target_words, session_date")
+            .eq("patient_id", patient_id)
+            .order("session_date", desc=True)
+            .limit(1)
+            .execute()
+        )
+    except Exception as exc:
+        print(f"[agentic-db] Error querying public.sessions for target word: {exc}")
+        return None
+
+    data = getattr(response, "data", None) or []
+    if not data or not isinstance(data, list):
+        print(f"[agentic-db] No sessions found for patient_id={patient_id} in public.sessions.")
+        return None
+
+    row = data[0] or {}
+    values = row.get("target_words")
+
+    if not isinstance(values, list) or not values:
+        print(f"[agentic-db] target_words column empty or not an array for patient_id={patient_id}.")
+        return None
+
+    # Use the first non-empty string in the array.
+    for v in values:
+        target_str = str(v).strip()
+        if target_str:
+            print(f"[agentic-db] Using target word from public.sessions.target_words for patient {patient_id}: '{target_str}'")
+            return target_str
+
+    print(f"[agentic-db] No non-empty entries in target_words for patient_id={patient_id}.")
+    return None
+
+
 def persist_session_state(state: SpeechTherapyState) -> Optional[str]:
     """Persist the final session state into the `session_reports` table.
 
