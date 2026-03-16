@@ -63,6 +63,7 @@ def _transcribe_audio(file_path: str) -> tuple[str, float]:
     with open(file_path, "rb") as audio_file:
         result = _client.audio.transcriptions.create(
             model="whisper-large-v3",
+            language="en",
             file=audio_file,
         )
     text = result.text.strip().lower()

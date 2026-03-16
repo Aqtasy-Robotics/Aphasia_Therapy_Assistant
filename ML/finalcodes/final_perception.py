@@ -41,7 +41,8 @@ def transcribe_audio(file_path):
     with open(file_path,"rb") as audio_file:
         transcript = client.audio.transcriptions.create(
             model="whisper-large-v3",
-            file=audio_file
+            file=audio_file,
+            language="en",
         )
         return transcript.text.strip().lower()
 

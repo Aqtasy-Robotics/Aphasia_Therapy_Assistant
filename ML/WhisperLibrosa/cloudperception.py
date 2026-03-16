@@ -17,8 +17,9 @@ def transcribe_audio(audio_path: str, language: str | None = None) -> str:
     if client is None:
         raise RuntimeError("OPENAI_API_KEY is not set; cannot call Whisper.")
 
+    # Force English-only transcription if no language explicitly provided
     if language is None:
-        language = config.language
+        language = "en"
 
     with open(audio_path, "rb") as f:
         # Using whisper-1 transcription model
@@ -51,7 +52,8 @@ def run_perception(target_word: str, session_id: str) -> Dict[str, Any]:
         }
 
     try:
-        transcribed_text = transcribe_audio(audio_path, language=config.language)
+        # Force English-only transcription regardless of external config
+        transcribed_text = transcribe_audio(audio_path, language="en")
     except Exception as exc:
         return {
             "target_word": target_word,
