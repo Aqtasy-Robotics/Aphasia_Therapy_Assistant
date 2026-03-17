@@ -11,6 +11,7 @@ from loguru import logger
 from src.communication.api_client import ApiClient
 from src.communication.models import ActionEnum
 from src.dispatcher import Dispatcher
+from src.services.audio_utils import list_audio_devices
 from src.services.ear import listen
 from src.services.face import show_face
 from src.services.head import move_head
@@ -100,12 +101,22 @@ Log Level: {settings.log_level}
     logger.debug(f"OLED: {settings.oled.width}x{settings.oled.height} "
                 f"at {settings.oled.i2c_address}")
 
+    # List audio devices and log selected devices
+    logger.info("Audio configuration:")
+    logger.info(f"  Sample rate: {settings.audio.sample_rate} Hz")
+    logger.info(f"  Channels: {settings.audio.channels}")
+    logger.info(f"  Volume: {settings.audio.volume}")
+    logger.info(f"  Input device: {settings.audio.input_device or 'default'}")
+    logger.info(f"  Output device: {settings.audio.output_device or 'default'}")
+    list_audio_devices()
+
     # Initialise API client and dispatcher
     api_client = ApiClient(settings)
-    dispatcher = Dispatcher(settings)
+    dispatcher = Dispatcher(settings, api_client=api_client)
 
     # Register real driver entry-points (hardware-backed implementations will be
     # added in Phases 3–5; current versions are safe stubs in their own modules).
+    # Note: speak() and listen() will receive additional args (settings/api_client) from dispatcher
     dispatcher.register_driver(ActionEnum.SPEAK, speak)
     dispatcher.register_driver(ActionEnum.LISTEN, listen)
     dispatcher.register_driver(ActionEnum.SHOW_FACE, show_face)
