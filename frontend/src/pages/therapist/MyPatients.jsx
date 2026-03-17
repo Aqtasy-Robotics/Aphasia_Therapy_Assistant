@@ -14,7 +14,7 @@ import {
 
 const MyPatients = () => {
   const [patients, setPatients] = useState([]);
-  const [therapists, setTherapists] = useState([]); // <-- New state for therapists
+  const [therapists, setTherapists] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedId, setExpandedId] = useState(null);
@@ -26,44 +26,45 @@ const MyPatients = () => {
   const [activeSessionId, setActiveSessionId] = useState(null);
 
   useEffect(() => {
+    // FIX: Moved inside useEffect to satisfy react-hooks/exhaustive-deps linter
+    const fetchClinicalData = async () => {
+      try {
+        setLoading(true);
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) return;
+
+        // 1. Fetch ALL patients
+        const { data: patientData, error: patientError } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("role", "patient")
+          .order("full_name", { ascending: true });
+
+        if (patientError) throw patientError;
+        setPatients(patientData || []);
+
+        // 2. Fetch ALL therapists for the assignment dropdown
+        const { data: therapistData, error: therapistError } = await supabase
+          .from("profiles")
+          .select("id, full_name")
+          .eq("role", "therapist")
+          .order("full_name", { ascending: true });
+
+        if (therapistError) throw therapistError;
+        setTherapists(therapistData || []);
+      } catch (error) {
+        console.error("Error fetching clinical data:", error.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
     fetchClinicalData();
   }, []);
 
-  const fetchClinicalData = async () => {
-    try {
-      setLoading(true);
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
-
-      // 1. Fetch ALL patients
-      const { data: patientData, error: patientError } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("role", "patient")
-        .order("full_name", { ascending: true });
-
-      if (patientError) throw patientError;
-      setPatients(patientData || []);
-
-      // 2. Fetch ALL therapists for the assignment dropdown
-      const { data: therapistData, error: therapistError } = await supabase
-        .from("profiles")
-        .select("id, full_name")
-        .eq("role", "therapist")
-        .order("full_name", { ascending: true });
-
-      if (therapistError) throw therapistError;
-      setTherapists(therapistData || []);
-    } catch (error) {
-      console.error("Error fetching clinical data:", error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // --- NEW: Handle changing a patient's assigned therapist ---
+  // --- Handle changing a patient's assigned therapist ---
   const handleAssignTherapist = async (patientId, newTherapistId) => {
     try {
       setUpdatingId(patientId);
@@ -82,9 +83,6 @@ const MyPatients = () => {
           p.id === patientId ? { ...p, selected_therapist_id: valueToSet } : p,
         ),
       );
-
-      // Optional: Give a small non-intrusive feedback instead of a jarring alert
-      console.log("Therapist updated successfully.");
     } catch (error) {
       alert("Failed to update therapist: " + error.message);
     } finally {
@@ -115,16 +113,18 @@ const MyPatients = () => {
         .limit(1)
         .single();
 
+      // FIX: Check if there is an error and it's NOT the "No rows found" error
+      if (error && error.code !== "PGRST116") {
+        throw error;
+      }
+
       if (data) {
         setActiveSessionId(data.id);
         setWordTags(data.target_words || []);
         setCurrentSentence(data.target_sentence || "");
       }
     } catch (error) {
-      // It's normal to get PGRST116 (No rows found) if they don't have a session yet
-      if (error.code !== "PGRST116") {
-        console.error("Session fetch error:", error);
-      }
+      console.error("Session fetch error:", error);
     } finally {
       setUpdatingId(null);
     }
@@ -319,7 +319,7 @@ const MyPatients = () => {
                           onChange={(e) =>
                             handleAssignTherapist(patient.id, e.target.value)
                           }
-                          onClick={(e) => e.stopPropagation()} // Prevents dropdown click from expanding the row
+                          onClick={(e) => e.stopPropagation()}
                           disabled={updatingId === patient.id}
                         >
                           <option value="">-- Unassigned --</option>
