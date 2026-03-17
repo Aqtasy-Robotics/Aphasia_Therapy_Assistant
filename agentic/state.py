@@ -21,7 +21,13 @@ class SpeechTherapyState(TypedDict):
 
     # ── Session meta (collected once at start) ──────────────────
     target_word:        Optional[str]        # word patient should say
+    target_words:       Optional[List[str]]  # ordered target words loaded from sessions.target_words
+    current_target_index: int                # current index in target_words
+    has_more_target_words: bool              # True when there is another word after current one
     patient_name:       str                  # for personalised feedback
+    therapy_goals:      Optional[List[str]]  # therapist-defined goals from portal/session config
+    phonemes_to_focus_on: Optional[List[str]]  # prioritized phonemes to emphasize in guidance
+    difficulty_level:   Optional[str]        # expected difficulty: easy | medium | hard
 
     # ── Phoneme Analysis ────────────────────────────────────────
     target_phonemes:    Optional[List[str]]
@@ -37,20 +43,23 @@ class SpeechTherapyState(TypedDict):
     # ── Session identity ─────────────────────────────────────────
     patient_id:             Optional[str]    # Supabase patients.id
     assignment_id:          Optional[str]    # Supabase therapist_assignments.id
-    word_source:            Optional[str]    # 'therapist' | 'patient_category'
+    word_source:            Optional[str]    # 'therapist' | 'patient_category' | 'sessions_table'
     session_start:          Optional[float]  # time.time() at session start
     session_duration_secs:  Optional[int]
    
     # ── Report ───────────────────────────────────────────────────
     report_id:              Optional[str]    # Supabase session_reports.id
     # ── Execution ───────────────────────────────────────────────
-    audio_output_path:  Optional[str]
-    session_complete:   bool  # true or not
+    audio_output_path:  Optional[str]        # path to any generated TTS audio output file
+    session_complete:   bool                 # flag indicating whether the logical session has finished
+    session_outcome:    Optional[str]        # 'success' | 'hard_stop' | 'escalate_to_human' to classify how the session ended
+    fatigue_level:      Optional[int]        # simple 0–10 indicator of how fatigued the patient is
 
     # ── Control / error propagation ─────────────────────────────
-    current_error:      Annotated[Optional[str], _merge_current_error]
+    current_error:      Annotated[Optional[str], _merge_current_error]  # merge helper prefers newer non-empty error messages
 
     # ── History / progress ──────────────────────────────────────
-    session_history:    Optional[List[Dict[str, Any]]]
-    patient_trend:      Optional[str]    # 'improving' | 'needs work'
-    sessions_done:      int
+    session_history:    Optional[List[Dict[str, Any]]]            # list of past session summaries for this patient
+    memory_context:     Optional[List[Dict[str, Any]]]            # relevant prior session memories fetched from Mem0
+    patient_trend:      Optional[str]                             # 'improving' | 'needs work' trend derived from history
+    sessions_done:      int                                       # how many sessions have been completed so far
