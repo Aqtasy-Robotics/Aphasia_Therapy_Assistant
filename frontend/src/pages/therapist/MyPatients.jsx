@@ -2,15 +2,12 @@ import React, { useState, useEffect } from "react";
 import { supabase } from "../../supabaseClient";
 import {
   Search,
-  Calendar,
   Loader2,
-  User,
   Target,
   MessageSquare,
   Save,
   ChevronDown,
   ChevronUp,
-  Info,
   X,
   UserCog,
 } from "lucide-react";
