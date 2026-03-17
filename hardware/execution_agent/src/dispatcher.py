@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Any, Awaitable, Callable, Dict
 
 from loguru import logger
-
+from src.communication.api_client import ApiClient
 from src.communication.models import ActionEnum, CommandAck, ExecutionCommand, StatusEnum
 from src.settings import Settings
 
@@ -16,9 +16,10 @@ DriverFunc = Callable[[Dict[str, Any]], Awaitable[Dict[str, Any]]]
 class Dispatcher:
     """Route incoming commands to the appropriate driver implementation."""
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, api_client: ApiClient | None = None) -> None:
         self._settings = settings
         self._device_id = settings.device_id
+        self._api_client = api_client
         self._drivers: Dict[ActionEnum, DriverFunc] = {}
 
     def register_driver(self, action: ActionEnum, driver: DriverFunc) -> None:
@@ -58,7 +59,28 @@ class Dispatcher:
                 action.value,
                 payload,
             )
-            result = await driver(payload)
+            # Pass additional context to drivers that need it
+            if action == ActionEnum.LISTEN and self._api_client is not None:
+                # listen() needs api_client for audio upload and settings for device selection
+                result = await driver(payload, self._api_client, self._settings)
+            elif action == ActionEnum.SPEAK:
+                # speak() needs settings for model path and audio config
+                result = await driver(payload, self._settings)
+            else:
+                # Other drivers just get payload            
+                result = await driver(payload)
+
+            # Check if driver returned an error status
+            if result and result.get("status") == "error":
+                return CommandAck(
+                    command_id=command.command_id,
+                    device_id=self._device_id,
+                    status=StatusEnum.ERROR,
+                    timestamp=datetime.utcnow(),
+                    result=result,
+                    error_message=result.get("error_message"),
+                )
+
             return CommandAck(
                 command_id=command.command_id,
                 device_id=self._device_id,
