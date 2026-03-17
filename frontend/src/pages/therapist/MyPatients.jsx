@@ -26,7 +26,6 @@ const MyPatients = () => {
   const [activeSessionId, setActiveSessionId] = useState(null);
 
   useEffect(() => {
-    // FIX: Moved inside useEffect to satisfy react-hooks/exhaustive-deps linter
     const fetchClinicalData = async () => {
       try {
         setLoading(true);
@@ -64,18 +63,27 @@ const MyPatients = () => {
     fetchClinicalData();
   }, []);
 
-  // --- Handle changing a patient's assigned therapist ---
+  // --- FIX: Forced .select() to catch Supabase RLS Silent Failures ---
   const handleAssignTherapist = async (patientId, newTherapistId) => {
     try {
       setUpdatingId(patientId);
       const valueToSet = newTherapistId === "" ? null : newTherapistId;
 
-      const { error } = await supabase
+      // Adding .select() forces Supabase to return the updated row data
+      const { data, error } = await supabase
         .from("profiles")
         .update({ selected_therapist_id: valueToSet })
-        .eq("id", patientId);
+        .eq("id", patientId)
+        .select();
 
       if (error) throw error;
+
+      // If data is empty, it means RLS blocked the update silently!
+      if (!data || data.length === 0) {
+        throw new Error(
+          "Update blocked by Supabase Row Level Security (RLS). You don't have permission to modify this profile.",
+        );
+      }
 
       // Update the local state so the UI reflects the change immediately
       setPatients((prev) =>
@@ -83,7 +91,10 @@ const MyPatients = () => {
           p.id === patientId ? { ...p, selected_therapist_id: valueToSet } : p,
         ),
       );
+
+      alert("Therapist successfully assigned! ✅");
     } catch (error) {
+      console.error(error);
       alert("Failed to update therapist: " + error.message);
     } finally {
       setUpdatingId(null);
@@ -113,7 +124,6 @@ const MyPatients = () => {
         .limit(1)
         .single();
 
-      // FIX: Check if there is an error and it's NOT the "No rows found" error
       if (error && error.code !== "PGRST116") {
         throw error;
       }
