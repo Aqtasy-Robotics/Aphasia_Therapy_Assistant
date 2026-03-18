@@ -13,95 +13,108 @@ import {
   Award,
   BarChart3,
   FileQuestion,
+  PlusCircle,
+  ShieldCheck
 } from "lucide-react";
 
-// For the empty state, we provide a tiny bit of "ghost" data just to show the axes
+// Ghost data for axes rendering
 const emptyLineData = [
   { month: "N/A", sessions: 0, patients: 0, avgProgress: 0 },
 ];
 
 const TherapistReports = () => {
   return (
-    <div className="space-y-8 pb-10 animate-in fade-in duration-700">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+    <div className="animate-in fade-in duration-700 font-sans antialiased pb-20">
+      
+      {/* --- OPEN HEADER SECTION (Account Badge Removed) --- */}
+      <header className="mb-12 flex justify-between items-end">
         <div>
-          <h1 className="text-4xl font-black text-gray-800 tracking-tight">
+          <h1 className="text-4xl font-extrabold text-[#012b1d] tracking-tight">
             Reports & Analytics
           </h1>
-          <p className="text-gray-500 font-medium mt-1">
-            Start tracking your clinical performance with Waabi
-          </p>
+          <div className="flex items-center gap-3 mt-2">
+             <ShieldCheck size={16} className="text-[#064e3b]" />
+             <p className="text-gray-400 font-semibold text-sm italic">
+               Clinical performance tracking powered by Waabi
+             </p>
+          </div>
         </div>
-        <div className="flex gap-3">
-          <button className="bg-[#5cb338] hover:bg-[#4a912d] text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center border border-[#4a912d]/20 shadow-lg shadow-green-100 transition-all active:scale-95">
-            <Download className="w-4 h-4 mr-2" />
-            Export PDF
+        
+        <div className="flex items-center">
+          {/* Primary Action Button: 11px font */}
+          <button className="bg-[#012b1d] text-white px-10 py-4 rounded-2xl font-extrabold text-[11px] uppercase tracking-[0.2em] shadow-xl shadow-[#012b1d]/20 hover:brightness-125 transition-all active:scale-95 flex items-center gap-3">
+            <Download size={18} />
+            Export Monthly PDF
           </button>
         </div>
-      </div>
+      </header>
 
-      {/* Summary Cards - Updated with Green Titles */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      {/* --- SUMMARY STATS GRID: Vertical High-Shadow Cards --- */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-12">
         <EmptyStatCard
           title="Total Patients"
           value="0"
-          sub="Waiting for first entry"
-          icon={<Users className="w-5 h-5" />}
-          color="border-[#5cb338]"
+          subText="Waiting for intake"
+          icon={<Users size={20} />}
+          iconBg="bg-[#172554]"
+          textColor="text-[#172554]"
         />
         <EmptyStatCard
-          title="Sessions"
+          title="Total Sessions"
           value="0"
-          sub="No sessions logged"
-          icon={<Award className="w-5 h-5" />}
-          color="border-[#5cb338]"
+          subText="No sessions logged"
+          icon={<Award size={20} />}
+          iconBg="bg-[#012b1d]"
+          textColor="text-[#012b1d]"
         />
         <EmptyStatCard
           title="Avg Progress"
           value="0%"
-          sub="Needs session data"
-          icon={<TrendingUp className="w-5 h-5" />}
-          color="border-[#5cb338]"
+          subText="Awaiting data"
+          icon={<TrendingUp size={20} />}
+          iconBg="bg-[#064e3b]"
+          textColor="text-[#064e3b]"
         />
         <EmptyStatCard
           title="Success Rate"
           value="0%"
-          sub="Waiting for goals"
-          icon={<Award className="w-5 h-5" />}
-          color="border-[#5cb338]"
+          subText="Goal tracking inactive"
+          icon={<Award size={20} />}
+          iconBg="bg-orange-600"
+          textColor="text-orange-600"
+          highlightBg="bg-orange-50/20"
         />
       </div>
 
-      {/* Monthly Overview - Empty State */}
-      <div className="bg-white p-10 rounded-[3rem] border border-gray-50 shadow-2xl shadow-gray-200/40 relative overflow-hidden">
-        <div className="mb-8">
-          <h2 className="text-xl font-black text-gray-800 uppercase tracking-tight">
-            Monthly Overview
-          </h2>
-          <p className="text-xs font-bold text-gray-400 mt-1 uppercase tracking-widest">
-            Trends will appear after your first month of sessions.
-          </p>
+      {/* --- MONTHLY OVERVIEW CHART --- */}
+      <div className="bg-white p-12 rounded-[3.5rem] border border-gray-50 shadow-2xl shadow-gray-200/40 relative overflow-hidden mb-10">
+        <div className="mb-10 flex justify-between items-center">
+          <div>
+            <h2 className="text-xl font-extrabold text-gray-800 uppercase tracking-tight">
+              Monthly Trends
+            </h2>
+            <p className="text-[10px] font-extrabold text-gray-400 mt-2 uppercase tracking-[0.3em] italic">
+              Data visualization will activate after first 30 days.
+            </p>
+          </div>
+          <div className="bg-gray-50 px-5 py-2 rounded-xl border border-gray-100 text-[9px] font-extrabold text-gray-400 uppercase tracking-widest">
+            Diagnostic View
+          </div>
         </div>
 
-        <div className="h-[350px] w-full flex items-center justify-center relative">
-          {/* Overlay Message */}
-          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-white/60 backdrop-blur-[2px] rounded-2xl">
-            <div className="w-16 h-16 bg-gray-50 rounded-3xl flex items-center justify-center mb-4 shadow-inner">
-              <BarChart3 className="w-8 h-8 text-gray-200" />
+        <div className="h-[400px] w-full flex items-center justify-center relative">
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-white/40 backdrop-blur-[4px] rounded-[2.5rem]">
+            <div className="w-24 h-24 bg-white rounded-[2.5rem] flex items-center justify-center mb-6 shadow-inner border border-gray-50">
+              <BarChart3 className="w-10 h-10 text-gray-100" />
             </div>
-            <p className="text-gray-400 font-black text-[10px] uppercase tracking-[0.2em]">
-              Insufficient data for chart generation
+            <p className="text-gray-300 font-extrabold text-[10px] uppercase tracking-[0.3em]">
+              Insufficient data for analysis
             </p>
           </div>
 
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={emptyLineData}>
-              <CartesianGrid
-                strokeDasharray="3 3"
-                stroke="#f1f5f9"
-                vertical={false}
-              />
+              <CartesianGrid strokeDasharray="3 3" stroke="#f8fafc" vertical={false} />
               <XAxis dataKey="month" hide />
               <YAxis hide />
             </LineChart>
@@ -109,51 +122,51 @@ const TherapistReports = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
         {/* Progress Distribution - Empty */}
-        <div className="bg-white p-10 rounded-[3rem] border border-gray-50 shadow-2xl shadow-gray-200/40 flex flex-col items-center justify-center min-h-[400px]">
+        <div className="bg-white p-12 rounded-[3.5rem] border border-gray-50 shadow-2xl shadow-gray-200/40 flex flex-col items-center justify-center min-h-[450px]">
           <div className="text-center">
-            <div className="w-20 h-20 bg-gray-50 rounded-[2rem] flex items-center justify-center mx-auto mb-6 shadow-inner">
-              <FileQuestion className="text-gray-200 w-10 h-10" />
+            <div className="w-24 h-24 bg-gray-50 rounded-[3rem] flex items-center justify-center mx-auto mb-8 shadow-inner border border-gray-100">
+              <FileQuestion className="text-gray-100 w-12 h-12" />
             </div>
-            <h2 className="text-2xl font-black text-gray-800 tracking-tight">
+            <h2 className="text-2xl font-extrabold text-gray-800 tracking-tight">
               Patient Progress
             </h2>
-            <p className="text-sm font-bold text-gray-400 max-w-[250px] mx-auto mt-3 leading-relaxed">
-              Connect Waabi to start collecting speech accuracy data.
+            <p className="text-sm font-semibold text-gray-400 max-w-[280px] mx-auto mt-4 leading-relaxed italic">
+              Sync Waabi robot logs to generate speech accuracy metrics.
             </p>
           </div>
         </div>
 
         {/* Therapy Focus - Empty */}
-        <div className="bg-white p-10 rounded-[3rem] border border-gray-50 shadow-2xl shadow-gray-200/40 flex flex-col items-center justify-center min-h-[400px]">
-          <div className="w-48 h-48 rounded-full border-8 border-dashed border-gray-50 flex items-center justify-center relative">
-            <span className="text-gray-200 text-[10px] font-black uppercase tracking-[0.2em] text-center px-6">
-              Waiting for categories
+        <div className="bg-white p-12 rounded-[3.5rem] border border-gray-50 shadow-2xl shadow-gray-200/40 flex flex-col items-center justify-center min-h-[450px]">
+          <div className="w-56 h-56 rounded-full border-[10px] border-dashed border-gray-50 flex items-center justify-center relative bg-gray-50/20">
+            <span className="text-gray-200 text-[10px] font-extrabold uppercase tracking-[0.3em] text-center px-10">
+              Categorizing <br /> Clinical Focus
             </span>
           </div>
-          <div className="mt-8 text-center">
-            <h2 className="text-2xl font-black text-gray-800 tracking-tight">
-              Focus Areas
+          <div className="mt-10 text-center">
+            <h2 className="text-2xl font-extrabold text-gray-800 tracking-tight">
+              Therapy Domains
             </h2>
-            <p className="text-sm font-bold text-gray-400 mt-3">
-              Charts will populate as therapy types are assigned.
+            <p className="text-sm font-semibold text-gray-400 mt-4 italic">
+              Distribution maps will populate as therapy types are assigned.
             </p>
           </div>
         </div>
       </div>
 
-      {/* Top Performers Table - Empty State */}
-      <div className="bg-white p-10 rounded-[3rem] border border-gray-50 shadow-2xl shadow-gray-200/40">
-        <h2 className="text-xl font-black text-gray-800 mb-8 uppercase tracking-tight">
-          Patient Leaderboard
+      {/* Leaderboard - Empty State */}
+      <div className="bg-white p-12 rounded-[3.5rem] border border-gray-50 shadow-2xl shadow-gray-200/40 mt-10">
+        <h2 className="text-xl font-extrabold text-gray-800 mb-10 uppercase tracking-tight">
+          Clinical Leaderboard
         </h2>
-        <div className="flex flex-col items-center justify-center py-16 border-4 border-dashed border-gray-50 rounded-[2.5rem] bg-gray-50/30">
-          <p className="text-gray-400 font-black text-xs uppercase tracking-[0.2em]">
-            Patient rankings will appear here.
+        <div className="flex flex-col items-center justify-center py-24 border border-dashed border-gray-200 rounded-[2.5rem] bg-gray-50/20">
+          <p className="text-gray-400 font-extrabold text-[10px] uppercase tracking-[0.3em]">
+            Patient rankings will activate post-session
           </p>
-          <button className="mt-6 bg-[#5cb338] text-white px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-green-100 hover:scale-105 transition-all">
-            + Add your first patient
+          <button className="mt-8 bg-[#012b1d] text-white px-10 py-5 rounded-2xl text-[11px] font-extrabold uppercase tracking-[0.2em] shadow-xl shadow-[#012b1d]/20 hover:brightness-125 transition-all flex items-center gap-3">
+            <PlusCircle size={18} /> Add Your First Case
           </button>
         </div>
       </div>
@@ -161,27 +174,23 @@ const TherapistReports = () => {
   );
 };
 
-// Internal Empty Stat Card Helper - UPDATED WITH GREEN TITLE
-const EmptyStatCard = ({ title, value, sub, icon, color }) => (
-  <div
-    className={`bg-white p-8 rounded-[2.5rem] border-l-4 ${color} shadow-2xl shadow-gray-200/40 border-r border-t border-b border-gray-50 transition-all duration-300 hover:scale-[1.03]`}
-  >
-    <div className="flex justify-between items-start mb-6">
-      {/* Title fixed to Aqtasy Green */}
-      <p className="text-[11px] font-black text-[#5cb338] uppercase tracking-[0.2em] leading-tight">
-        {title}
-      </p>
-      <div className="p-3 bg-green-50 rounded-2xl text-[#5cb338] shadow-inner">
+/* --- REUSABLE STAT CARD COMPONENT --- */
+const EmptyStatCard = ({ title, value, subText, icon, iconBg, textColor, highlightBg = "bg-white" }) => (
+  <div className={`${highlightBg} p-8 rounded-[2.5rem] shadow-2xl shadow-gray-200/40 flex flex-col items-start relative overflow-hidden transition-all duration-300 hover:scale-[1.03] border border-white group`}>
+    <div className="flex items-center gap-4 mb-10">
+      <div className={`${iconBg} p-3.5 rounded-[1.25rem] text-white shadow-lg transition-transform duration-500 group-hover:rotate-6`}>
         {icon}
       </div>
+      <p className="text-[11px] font-extrabold text-gray-400 uppercase tracking-[0.2em] leading-tight w-20">
+        {title}
+      </p>
     </div>
     <div className="space-y-1">
-      {/* Value set to Deep Black */}
-      <h3 className="text-4xl font-black text-gray-900 tracking-tighter">
+      <h3 className={`text-5xl font-extrabold ${textColor} tracking-tighter`}>
         {value}
       </h3>
-      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">
-        {sub}
+      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em]">
+        {subText}
       </p>
     </div>
   </div>

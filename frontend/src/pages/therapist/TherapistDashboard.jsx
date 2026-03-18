@@ -1,96 +1,124 @@
 import React from "react";
 import { useOutletContext, Link } from "react-router-dom";
-import { UserPlus, Calendar, BarChart2, PlusCircle, Activity } from "lucide-react";
+import { 
+  UserPlus, 
+  Calendar, 
+  BarChart2, 
+  PlusCircle, 
+  Activity, 
+  ShieldCheck,
+  Search
+} from "lucide-react";
 
 const TherapistDashboard = () => {
   const { userData } = useOutletContext();
 
   return (
-    <div className="space-y-10 animate-in fade-in duration-700 pb-20">
+    <div className="animate-in fade-in duration-700 font-sans antialiased pb-20">
       
-      {/* HEADER AREA */}
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white p-10 rounded-[3rem] shadow-xl shadow-gray-200/40 border border-gray-50">
+      {/* --- HEADER SECTION: Mirrored from Patient Portal --- */}
+      <header className="mb-12 flex justify-between items-end">
         <div>
-          <h1 className="text-4xl font-black text-gray-800 tracking-tight">
-            Welcome, {userData.title} {userData.fullName}! 👋
+          <h1 className="text-4xl font-extrabold text-[#012b1d] tracking-tight">
+            Welcome Back, {userData.title} {userData.fullName}! 👋
           </h1>
-          <p className="text-[#5cb338] font-bold text-sm mt-1">
-            {userData.clinicName} — Clinical Portal Active
-          </p>
+          <div className="flex items-center gap-3 mt-2">
+             <ShieldCheck size={16} className="text-[#064e3b]" />
+             <p className="text-gray-400 font-semibold text-sm italic">
+               {userData.clinicName} • Clinical Oversight Active
+             </p>
+          </div>
         </div>
-        <div className="bg-green-50 text-[#5cb338] text-[10px] font-black px-6 py-3 rounded-full uppercase tracking-widest border border-green-100 shadow-sm">
+        
+        {/* Floating Glassmorphism Badge: 10px font */}
+        <div className="text-[10px] font-extrabold uppercase tracking-[0.3em] text-[#012b1d] bg-white/60 backdrop-blur-md px-6 py-3 rounded-2xl border border-white shadow-sm transition-all hover:bg-white/80">
           Therapist Account
         </div>
       </header>
 
-      {/* STATS GRID */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      {/* --- STATS GRID: Vertical High-Shadow Cards --- */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-12">
         <StatCard 
           title="Active Patients" 
           value="0" 
-          sub="Add your first case" 
-          color="border-blue-400" 
-          icon={<UserPlus className="w-4 h-4 text-blue-400" />}
+          subText="In-take required" 
+          icon={<UserPlus size={20} />} 
+          iconBg="bg-[#172554]" // Deep Navy
+          textColor="text-[#172554]"
         />
         <StatCard 
           title="Planned Sessions" 
           value="0" 
-          sub="Check your calendar" 
-          color="border-[#5cb338]" 
-          icon={<Calendar className="w-4 h-4 text-[#5cb338]" />}
+          subText="Check agenda" 
+          icon={<Calendar size={20} />} 
+          iconBg="bg-[#012b1d]" // Midnight Emerald
+          textColor="text-[#012b1d]"
         />
         <StatCard 
-          title="Avg. Recovery" 
+          title="Avg. Progress" 
           value="--" 
-          sub="Awaiting session data" 
-          color="border-orange-400" 
-          icon={<Activity className="w-4 h-4 text-orange-400" />}
+          subText="Awaiting data" 
+          icon={<Activity size={20} />} 
+          iconBg="bg-orange-600"
+          textColor="text-orange-600"
+          highlightBg="bg-orange-50/20"
         />
         <StatCard 
-          title="Clinical Portals" 
+          title="Clinical Sites" 
           value="1" 
-          sub="Primary Site Active" 
-          color="border-purple-400" 
-          icon={<BarChart2 className="w-4 h-4 text-purple-400" />}
+          subText="Primary Site Active" 
+          icon={<BarChart2 size={20} />} 
+          iconBg="bg-[#064e3b]" // Forest Green
+          textColor="text-[#064e3b]"
         />
       </div>
 
+      {/* --- MAIN DASHBOARD CONTENT --- */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
         
-        {/* RECENT ACTIVITY - EMPTY STATE */}
-        <div className="bg-white p-10 rounded-[3rem] border border-gray-50 shadow-2xl shadow-gray-200/30 flex flex-col min-h-[400px]">
-          <h2 className="text-2xl font-black text-gray-800 mb-8 tracking-tight">Recent Activity</h2>
-          <div className="flex-1 flex flex-col items-center justify-center text-center space-y-5">
-            <div className="w-20 h-20 bg-gray-50 rounded-[2rem] flex items-center justify-center border border-gray-100">
-              <Calendar className="text-gray-200 w-10 h-10" />
+        {/* RECENT ACTIVITY CARD */}
+        <div className="bg-white p-12 rounded-[3.5rem] border border-gray-50 shadow-2xl shadow-gray-200/40 flex flex-col min-h-[450px] relative overflow-hidden group">
+          {/* Subtle Corner Glow */}
+          <div className="absolute top-0 right-0 w-32 h-32 bg-gray-50 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none group-hover:bg-[#012b1d]/5 transition-colors duration-700"></div>
+          
+          <h2 className="text-2xl font-extrabold text-gray-800 mb-10 tracking-tight">Recent Activity</h2>
+          
+          <div className="flex-1 flex flex-col items-center justify-center text-center space-y-6">
+            <div className="w-24 h-24 bg-gray-50 rounded-[2.5rem] flex items-center justify-center border border-gray-100 shadow-inner">
+              <Activity className="text-gray-200 w-12 h-12" />
             </div>
             <div>
-              <p className="text-sm font-black text-gray-800 uppercase tracking-widest">No activity yet</p>
-              <p className="text-xs text-gray-400 mt-2 font-medium max-w-[250px] mx-auto leading-relaxed">
-                Logs from your interactions with Waabi and patients will appear here.
+              <p className="text-[11px] font-extrabold text-gray-800 uppercase tracking-[0.2em]">No Recent Logs</p>
+              <p className="text-sm text-gray-400 mt-3 font-semibold max-w-[280px] mx-auto leading-relaxed italic">
+                Clinical updates from Waabi and your patient roster will be synced here.
               </p>
             </div>
           </div>
         </div>
 
-        {/* PATIENT FOCUS - EMPTY STATE */}
-        <div className="bg-white p-10 rounded-[3rem] border border-gray-50 shadow-2xl shadow-gray-200/30 flex flex-col min-h-[400px]">
-          <h2 className="text-2xl font-black text-gray-800 mb-8 tracking-tight">Patient Focus</h2>
-          <div className="flex-1 flex flex-col items-center justify-center text-center space-y-5">
-            <div className="w-20 h-20 bg-gray-50 rounded-[2rem] flex items-center justify-center border border-gray-100">
-              <UserPlus className="text-gray-200 w-10 h-10" />
+        {/* PATIENT FOCUS CARD */}
+        <div className="bg-white p-12 rounded-[3.5rem] border border-gray-50 shadow-2xl shadow-gray-200/40 flex flex-col min-h-[450px] relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-gray-50 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none group-hover:bg-[#064e3b]/5 transition-colors duration-700"></div>
+          
+          <h2 className="text-2xl font-extrabold text-gray-800 mb-10 tracking-tight">Patient Focus</h2>
+          
+          <div className="flex-1 flex flex-col items-center justify-center text-center space-y-6">
+            <div className="w-24 h-24 bg-gray-50 rounded-[2.5rem] flex items-center justify-center border border-gray-100 shadow-inner">
+              <Search className="text-gray-200 w-12 h-12" />
             </div>
             <div>
-              <p className="text-sm font-black text-gray-800 uppercase tracking-widest">Your roster is empty</p>
-              <p className="text-xs text-gray-400 mt-2 font-medium max-w-[250px] mx-auto leading-relaxed">
-                Connect with patients to begin tracking their specialized therapy progress.
+              <p className="text-[11px] font-extrabold text-gray-800 uppercase tracking-[0.2em]">Roster is Empty</p>
+              <p className="text-sm text-gray-400 mt-3 font-semibold max-w-[280px] mx-auto leading-relaxed italic">
+                Connect with patients to begin tracking their specialized therapy targets.
               </p>
             </div>
+            
+            {/* Primary Action Button: 11px font */}
             <Link 
-              to="/my-patients" 
-              className="text-[#5cb338] text-xs font-black uppercase tracking-widest flex items-center gap-2 bg-green-50 px-6 py-3 rounded-xl hover:bg-green-100 transition-all mt-4"
+              to="/therapist-patients" 
+              className="mt-6 bg-[#012b1d] text-white text-[11px] font-extrabold uppercase tracking-[0.2em] flex items-center gap-3 px-10 py-5 rounded-2xl hover:brightness-125 hover:-translate-y-1 transition-all shadow-xl shadow-[#012b1d]/20 active:scale-95"
             >
-              <PlusCircle className="w-4 h-4" />
+              <PlusCircle size={18} />
               Manage Patients
             </Link>
           </div>
@@ -101,16 +129,27 @@ const TherapistDashboard = () => {
   );
 };
 
-/* --- COMPONENT HELPERS --- */
-
-const StatCard = ({ title, value, sub, color, icon }) => (
-  <div className={`bg-white p-8 rounded-[2.5rem] border-t-8 ${color} shadow-2xl shadow-gray-200/20 transition-all hover:scale-[1.02]`}>
-    <div className="flex items-center justify-between mb-4">
-      <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{title}</p>
-      {icon}
+/* --- REUSABLE STAT CARD COMPONENT --- */
+const StatCard = ({ title, value, subText, icon, iconBg, textColor, highlightBg = "bg-white" }) => (
+  <div className={`${highlightBg} p-8 rounded-[2.5rem] shadow-2xl shadow-gray-200/40 flex flex-col items-start relative overflow-hidden transition-all duration-300 hover:scale-[1.03] border border-white group`}>
+    {/* Subtle icon hover effect */}
+    <div className="flex items-center gap-4 mb-10">
+      <div className={`${iconBg} p-3.5 rounded-[1.25rem] text-white shadow-lg transition-transform duration-500 group-hover:rotate-6`}>
+        {icon}
+      </div>
+      <p className="text-[11px] font-extrabold text-gray-400 uppercase tracking-[0.2em] leading-tight w-20">
+        {title}
+      </p>
     </div>
-    <h3 className="text-4xl font-black text-gray-800 tracking-tighter">{value}</h3>
-    <p className="text-[10px] font-bold text-gray-400 mt-3 uppercase tracking-widest opacity-60">{sub}</p>
+    <div className="space-y-1">
+      {/* 5xl Value for high visual impact */}
+      <h3 className={`text-5xl font-extrabold ${textColor} tracking-tighter`}>
+        {value}
+      </h3>
+      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em]">
+        {subText}
+      </p>
+    </div>
   </div>
 );
 
