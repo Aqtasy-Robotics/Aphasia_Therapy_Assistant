@@ -9,13 +9,13 @@ const Profile = () => {
   const [profile, setProfile] = useState({
     // Identity
     full_name: "",
-    introduction: "", // <-- Maps to the new Supabase column
+    introduction: "",
     email: "",
-    date_of_birth: "",
+    date_of_birth: "", // Included for DB
     selected_therapist_id: "",
-    aphasia_type: "Broca's Aphasia", // View-only default
+    aphasia_type: "Broca's Aphasia",
 
-    // Caretaker Link (UI Only - unless added to DB)
+    // Caretaker Link (UI Only)
     caretaker_name: "",
     caretaker_phone: "",
 
@@ -30,6 +30,7 @@ const Profile = () => {
     getProfileAndTherapists();
   }, []);
 
+  // THIS IS THE FUNCTION THAT FETCHES AND DISPLAYS YOUR DATA
   const getProfileAndTherapists = async () => {
     try {
       setLoading(true);
@@ -44,6 +45,7 @@ const Profile = () => {
         .eq("id", user.id)
         .single();
 
+      // This maps the database data directly into your UI inputs
       if (profileData) {
         setProfile((prev) => ({ ...prev, ...profileData, email: user.email }));
       }
@@ -69,20 +71,26 @@ const Profile = () => {
         data: { user },
       } = await supabase.auth.getUser();
 
-      // Clean payload: Only send fields that exist in the Supabase 'profiles' table
       const updatePayload = {
         id: user.id,
         full_name: profile.full_name,
         introduction: profile.introduction,
+        date_of_birth: profile.date_of_birth || null,
         updated_at: new Date().toISOString(),
       };
 
-      const { error: dbError } = await supabase
+      const { data, error: dbError } = await supabase
         .from("profiles")
-        .upsert(updatePayload);
+        .upsert(updatePayload)
+        .select();
 
       if (dbError) throw dbError;
-      alert("Settings Synced!");
+
+      if (!data || data.length === 0) {
+        throw new Error("Update blocked by Supabase RLS.");
+      }
+
+      alert("Settings Synced! 🚀");
     } catch (error) {
       alert("Update failed: " + error.message);
     } finally {
@@ -123,7 +131,7 @@ const Profile = () => {
         <section className="bg-white rounded-[3rem] p-10 border border-gray-100 shadow-2xl shadow-gray-200/40">
           <SectionHeader icon={<User />} title="Personal Identity" />
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-10">
-            <div className="md:col-span-2">
+            <div className="md:col-span-1">
               <InputField
                 label="Full Name"
                 value={profile.full_name}
@@ -131,7 +139,15 @@ const Profile = () => {
               />
             </div>
 
-            {/* NEW: Patient Introduction Bio */}
+            <div className="md:col-span-1">
+              <InputField
+                type="date"
+                label="Date of Birth"
+                value={profile.date_of_birth}
+                onChange={(v) => setProfile({ ...profile, date_of_birth: v })}
+              />
+            </div>
+
             <div className="md:col-span-2">
               <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-4">
                 Introduction Bio
@@ -255,12 +271,19 @@ const SectionHeader = ({ icon, title }) => (
   </div>
 );
 
-const InputField = ({ label, value, onChange, placeholder = "" }) => (
+const InputField = ({
+  label,
+  value,
+  onChange,
+  placeholder = "",
+  type = "text",
+}) => (
   <div className="space-y-2">
     <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-4">
       {label}
     </label>
     <input
+      type={type}
       className="w-full bg-gray-50 rounded-2xl px-6 py-4 font-bold text-gray-700 outline-none focus:ring-2 focus:ring-blue-50 transition-all text-sm"
       value={value || ""}
       onChange={(e) => onChange(e.target.value)}
