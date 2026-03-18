@@ -1,261 +1,117 @@
-import React, { useState, useEffect } from "react";
-import { supabase } from "../../supabaseClient";
-import { 
-  ChevronLeft, ChevronRight, Plus, Clock, Video, X, Loader2, Trash2, Calendar as CalIcon 
-} from "lucide-react";
+import React from "react";
+import { useOutletContext, Link } from "react-router-dom";
+import { UserPlus, Calendar, BarChart2, PlusCircle, Activity } from "lucide-react";
 
-const TherapistCalendar = () => {
-  const [currentDate, setCurrentDate] = useState(new Date());
-  const [sessions, setSessions] = useState([]);
-  const [patients, setPatients] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-
-  const [formData, setFormData] = useState({
-    patient_id: "",
-    session_date: "",
-    session_time: "10:00 AM",
-    bot_name: "Waabi"
-  });
-
-  // --- CALENDAR LOGIC HELPERS ---
-  const daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  
-  const getDaysInMonth = (date) => {
-    const year = date.getFullYear();
-    const month = date.getMonth();
-    const firstDay = new Date(year, month, 1).getDay();
-    const days = new Date(year, month + 1, 0).getDate();
-    return { firstDay, days };
-  };
-
-  const { firstDay, days } = getDaysInMonth(currentDate);
-
-  const changeMonth = (offset) => {
-    setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() + offset)));
-  };
-
-  // --- DATA FETCHING (Now also used for Real-time refreshes) ---
-  const fetchSessions = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const { data: sessionData } = await supabase
-      .from("sessions")
-      .select(`*, profiles:patient_id ( full_name )`)
-      .eq("therapist_id", user.id);
-    
-    setSessions(sessionData || []);
-  };
-
-  const fetchInitialData = async () => {
-    try {
-      setLoading(true);
-      await fetchSessions();
-
-      const { data: patientData } = await supabase
-        .from("profiles")
-        .select("id, full_name")
-        .eq("role", "patient");
-      
-      setPatients(patientData || []);
-    } catch (err) {
-      console.error("Fetch error:", err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchInitialData();
-
-    // --- REAL-TIME SYNC: Listens for any session added in MyPatients.jsx ---
-    const channel = supabase
-      .channel('schema-db-changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'sessions' },
-        () => {
-          console.log("Change detected! Re-syncing calendar...");
-          fetchSessions();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, []);
-
-  const handleDayClick = (day) => {
-    const selectedDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
-    // Setting to midnight local time to avoid timezone drift
-    selectedDate.setHours(0, 0, 0, 0);
-    setFormData({ ...formData, session_date: selectedDate.toISOString().split('T')[0] });
-    setIsModalOpen(true);
-  };
-
-  const handleBookSession = async () => {
-    if (!formData.patient_id || !formData.session_date) {
-      alert("Please select a patient and date");
-      return;
-    }
-
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      const { error } = await supabase
-        .from("sessions")
-        .insert([{
-          therapist_id: user.id,
-          patient_id: formData.patient_id,
-          session_date: formData.session_date,
-          session_time: formData.session_time,
-          bot_name: "Waabi"
-        }]);
-
-      if (error) throw error;
-      
-      // Note: We don't need to manually update state here because the 
-      // Real-time listener above will trigger fetchSessions() automatically.
-      setIsModalOpen(false);
-      setFormData({ ...formData, patient_id: "" });
-    } catch (err) {
-      alert("Booking Error: " + err.message);
-    }
-  };
-
-  if (loading) return (
-    <div className="flex h-screen items-center justify-center flex-col gap-4">
-      <Loader2 className="animate-spin text-[#5cb338] w-12 h-12" />
-      <p className="font-black text-gray-400 uppercase tracking-widest text-[10px]">Syncing Clinical Schedule...</p>
-    </div>
-  );
+const TherapistDashboard = () => {
+  const { userData } = useOutletContext();
 
   return (
-    <div className="max-w-6xl mx-auto p-4 space-y-8 animate-in fade-in duration-700 pb-20">
+    <div className="space-y-10 animate-in fade-in duration-700 pb-20">
       
-      {/* HEADER & MONTH NAVIGATOR */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white p-8 rounded-[3rem] shadow-xl shadow-gray-200/40 border border-gray-50">
+      {/* HEADER AREA */}
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white p-10 rounded-[3rem] shadow-xl shadow-gray-200/40 border border-gray-50">
         <div>
-          <h1 className="text-3xl font-black text-gray-800 tracking-tight">
-            {currentDate.toLocaleString('default', { month: 'long' })} {currentDate.getFullYear()}
+          <h1 className="text-4xl font-black text-gray-800 tracking-tight">
+            Welcome, {userData.title} {userData.fullName}! 👋
           </h1>
-          <p className="text-gray-400 font-bold text-xs uppercase tracking-widest mt-1">Clinical Agenda</p>
+          <p className="text-[#5cb338] font-bold text-sm mt-1">
+            {userData.clinicName} — Clinical Portal Active
+          </p>
         </div>
+        <div className="bg-green-50 text-[#5cb338] text-[10px] font-black px-6 py-3 rounded-full uppercase tracking-widest border border-green-100 shadow-sm">
+          Therapist Account
+        </div>
+      </header>
+
+      {/* STATS GRID */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <StatCard 
+          title="Active Patients" 
+          value="0" 
+          sub="Add your first case" 
+          color="border-blue-400" 
+          icon={<UserPlus className="w-4 h-4 text-blue-400" />}
+        />
+        <StatCard 
+          title="Planned Sessions" 
+          value="0" 
+          sub="Check your calendar" 
+          color="border-[#5cb338]" 
+          icon={<Calendar className="w-4 h-4 text-[#5cb338]" />}
+        />
+        <StatCard 
+          title="Avg. Recovery" 
+          value="--" 
+          sub="Awaiting session data" 
+          color="border-orange-400" 
+          icon={<Activity className="w-4 h-4 text-orange-400" />}
+        />
+        <StatCard 
+          title="Clinical Portals" 
+          value="1" 
+          sub="Primary Site Active" 
+          color="border-purple-400" 
+          icon={<BarChart2 className="w-4 h-4 text-purple-400" />}
+        />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
         
-        <div className="flex items-center gap-4">
-          <div className="flex bg-gray-50 p-1.5 rounded-2xl border border-gray-100">
-            <button onClick={() => changeMonth(-1)} className="p-3 hover:bg-white hover:shadow-sm rounded-xl transition-all text-gray-500">
-              <ChevronLeft size={20} />
-            </button>
-            <button onClick={() => changeMonth(1)} className="p-3 hover:bg-white hover:shadow-sm rounded-xl transition-all text-gray-500">
-              <ChevronRight size={20} />
-            </button>
-          </div>
-          <button 
-            onClick={() => {
-              setFormData({...formData, session_date: new Date().toISOString().split('T')[0]});
-              setIsModalOpen(true);
-            }}
-            className="bg-[#5cb338] text-white px-8 py-4 rounded-2xl font-black flex items-center shadow-lg shadow-green-100 hover:scale-105 transition-all text-xs uppercase tracking-widest"
-          >
-            <Plus className="w-4 h-4 mr-2" /> Book New Session
-          </button>
-        </div>
-      </div>
-
-      {/* CALENDAR GRID */}
-      <div className="bg-white rounded-[3.5rem] shadow-2xl shadow-gray-200/50 border border-gray-50 overflow-hidden">
-        <div className="grid grid-cols-7 border-b border-gray-100">
-          {daysOfWeek.map(day => (
-            <div key={day} className="py-6 text-center text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] bg-gray-50/50">
-              {day}
+        {/* RECENT ACTIVITY - EMPTY STATE */}
+        <div className="bg-white p-10 rounded-[3rem] border border-gray-50 shadow-2xl shadow-gray-200/30 flex flex-col min-h-[400px]">
+          <h2 className="text-2xl font-black text-gray-800 mb-8 tracking-tight">Recent Activity</h2>
+          <div className="flex-1 flex flex-col items-center justify-center text-center space-y-5">
+            <div className="w-20 h-20 bg-gray-50 rounded-[2rem] flex items-center justify-center border border-gray-100">
+              <Calendar className="text-gray-200 w-10 h-10" />
             </div>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-7">
-          {[...Array(firstDay)].map((_, i) => (
-            <div key={`empty-${i}`} className="h-32 md:h-40 border-b border-r border-gray-50 bg-gray-50/20" />
-          ))}
-
-          {[...Array(days)].map((_, i) => {
-            const dayNum = i + 1;
-            const dayString = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
-            const daySessions = sessions.filter(s => s.session_date === dayString);
-
-            return (
-              <div 
-                key={dayNum} 
-                onClick={() => handleDayClick(dayNum)}
-                className="h-32 md:h-40 border-b border-r border-gray-50 p-4 hover:bg-[#f0fff4]/30 transition-all cursor-pointer group relative overflow-hidden"
-              >
-                <span className="text-sm font-black text-gray-300 group-hover:text-[#5cb338]">{dayNum}</span>
-                
-                <div className="mt-2 space-y-1.5 overflow-y-auto max-h-[75%] scrollbar-hide">
-                  {daySessions.map(s => (
-                    <div key={s.id} className="bg-[#f0fff4] text-[#5cb338] p-2 rounded-xl text-[9px] font-black uppercase tracking-tighter truncate border border-green-100 flex items-center gap-1.5 shadow-sm">
-                      <div className="w-1.5 h-1.5 rounded-full bg-[#5cb338] animate-pulse" />
-                      {s.profiles?.full_name?.split(' ')[0]}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Booking Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-md flex items-center justify-center z-[100] p-4">
-          <div className="bg-white p-12 rounded-[3.5rem] w-full max-w-md relative animate-in zoom-in-95 duration-300 shadow-2xl border border-white">
-            <button onClick={() => setIsModalOpen(false)} className="absolute right-10 top-10 text-gray-300 hover:text-gray-900 transition-colors">
-              <X size={28} />
-            </button>
-            <h2 className="text-3xl font-black text-gray-800 tracking-tight mb-2">Assign Waabi</h2>
-            <p className="text-gray-400 text-[10px] font-black uppercase tracking-widest mb-10">Target Date: {formData.session_date}</p>
-            
-            <div className="space-y-8">
-              <div className="space-y-3">
-                <label className="text-[10px] font-black uppercase text-gray-400 ml-4 tracking-widest">Select Patient</label>
-                <select 
-                  className="w-full p-5 bg-gray-50 rounded-2xl outline-none font-black text-gray-700 border-none focus:ring-4 focus:ring-green-50 transition-all text-sm"
-                  value={formData.patient_id}
-                  onChange={(e) => setFormData({...formData, patient_id: e.target.value})}
-                >
-                  <option value="">Choose a clinical case...</option>
-                  {patients.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-1 gap-4">
-                <div className="flex flex-col gap-2">
-                  <label className="text-[10px] font-black uppercase text-gray-400 ml-4 tracking-widest">Time Slot</label>
-                  <input 
-                    type="time" 
-                    className="w-full p-5 bg-gray-50 rounded-2xl font-black outline-none focus:ring-4 focus:ring-green-50 transition-all text-sm"
-                    onChange={(e) => {
-                      const [h, m] = e.target.value.split(':');
-                      const suffix = h >= 12 ? 'PM' : 'AM';
-                      setFormData({...formData, session_time: `${((h % 12) || 12)}:${m} ${suffix}`});
-                    }}
-                  />
-                </div>
-              </div>
-
-              <button 
-                onClick={handleBookSession}
-                className="w-full bg-[#5cb338] text-white py-6 rounded-[2rem] font-black shadow-xl shadow-green-100 hover:scale-[1.02] active:scale-95 transition-all text-xs uppercase tracking-[0.2em]"
-              >
-                Confirm Appointment
-              </button>
+            <div>
+              <p className="text-sm font-black text-gray-800 uppercase tracking-widest">No activity yet</p>
+              <p className="text-xs text-gray-400 mt-2 font-medium max-w-[250px] mx-auto leading-relaxed">
+                Logs from your interactions with Waabi and patients will appear here.
+              </p>
             </div>
           </div>
         </div>
-      )}
+
+        {/* PATIENT FOCUS - EMPTY STATE */}
+        <div className="bg-white p-10 rounded-[3rem] border border-gray-50 shadow-2xl shadow-gray-200/30 flex flex-col min-h-[400px]">
+          <h2 className="text-2xl font-black text-gray-800 mb-8 tracking-tight">Patient Focus</h2>
+          <div className="flex-1 flex flex-col items-center justify-center text-center space-y-5">
+            <div className="w-20 h-20 bg-gray-50 rounded-[2rem] flex items-center justify-center border border-gray-100">
+              <UserPlus className="text-gray-200 w-10 h-10" />
+            </div>
+            <div>
+              <p className="text-sm font-black text-gray-800 uppercase tracking-widest">Your roster is empty</p>
+              <p className="text-xs text-gray-400 mt-2 font-medium max-w-[250px] mx-auto leading-relaxed">
+                Connect with patients to begin tracking their specialized therapy progress.
+              </p>
+            </div>
+            <Link 
+              to="/my-patients" 
+              className="text-[#5cb338] text-xs font-black uppercase tracking-widest flex items-center gap-2 bg-green-50 px-6 py-3 rounded-xl hover:bg-green-100 transition-all mt-4"
+            >
+              <PlusCircle className="w-4 h-4" />
+              Manage Patients
+            </Link>
+          </div>
+        </div>
+
+      </div>
     </div>
   );
 };
 
-export default TherapistCalendar;
+/* --- COMPONENT HELPERS --- */
+
+const StatCard = ({ title, value, sub, color, icon }) => (
+  <div className={`bg-white p-8 rounded-[2.5rem] border-t-8 ${color} shadow-2xl shadow-gray-200/20 transition-all hover:scale-[1.02]`}>
+    <div className="flex items-center justify-between mb-4">
+      <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{title}</p>
+      {icon}
+    </div>
+    <h3 className="text-4xl font-black text-gray-800 tracking-tighter">{value}</h3>
+    <p className="text-[10px] font-bold text-gray-400 mt-3 uppercase tracking-widest opacity-60">{sub}</p>
+  </div>
+);
+
+export default TherapistDashboard;
