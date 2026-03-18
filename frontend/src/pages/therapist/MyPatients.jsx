@@ -10,6 +10,12 @@ import {
   ChevronUp,
   X,
   UserCog,
+  BrainCircuit,
+  Settings2,
+  CheckCircle,
+  Calendar,
+  Clock,
+  Download,
 } from "lucide-react";
 
 const MyPatients = () => {
@@ -20,10 +26,23 @@ const MyPatients = () => {
   const [expandedId, setExpandedId] = useState(null);
   const [updatingId, setUpdatingId] = useState(null);
 
-  // Local state for managing individual word tags and session data
+  // Local state for managing session data
   const [wordTags, setWordTags] = useState([]);
   const [currentSentence, setCurrentSentence] = useState("");
+  const [difficultyLevel, setDifficultyLevel] = useState("Medium");
+  const [therapyGoal, setTherapyGoal] = useState("");
+  const [phonemes, setPhonemes] = useState("");
+  const [sessionDate, setSessionDate] = useState("");
+  const [sessionTime, setSessionTime] = useState("");
   const [activeSessionId, setActiveSessionId] = useState(null);
+
+  // Holds 'session_reports' data for the CSV Export
+  const [sessionReports, setSessionReports] = useState([]);
+
+  // Custom Picker States
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [pickerMonth, setPickerMonth] = useState(new Date());
 
   useEffect(() => {
     const fetchClinicalData = async () => {
@@ -34,7 +53,6 @@ const MyPatients = () => {
         } = await supabase.auth.getUser();
         if (!user) return;
 
-        // 1. Fetch ALL patients
         const { data: patientData, error: patientError } = await supabase
           .from("profiles")
           .select("*")
@@ -44,7 +62,6 @@ const MyPatients = () => {
         if (patientError) throw patientError;
         setPatients(patientData || []);
 
-        // 2. Fetch ALL therapists for the assignment dropdown
         const { data: therapistData, error: therapistError } = await supabase
           .from("profiles")
           .select("id, full_name")
@@ -59,17 +76,14 @@ const MyPatients = () => {
         setLoading(false);
       }
     };
-
     fetchClinicalData();
   }, []);
 
-  // --- FIX: Forced .select() to catch Supabase RLS Silent Failures ---
   const handleAssignTherapist = async (patientId, newTherapistId) => {
     try {
       setUpdatingId(patientId);
       const valueToSet = newTherapistId === "" ? null : newTherapistId;
 
-      // Adding .select() forces Supabase to return the updated row data
       const { data, error } = await supabase
         .from("profiles")
         .update({ selected_therapist_id: valueToSet })
@@ -77,21 +91,14 @@ const MyPatients = () => {
         .select();
 
       if (error) throw error;
+      if (!data || data.length === 0)
+        throw new Error("Update blocked by Supabase RLS.");
 
-      // If data is empty, it means RLS blocked the update silently!
-      if (!data || data.length === 0) {
-        throw new Error(
-          "Update blocked by Supabase Row Level Security (RLS). You don't have permission to modify this profile.",
-        );
-      }
-
-      // Update the local state so the UI reflects the change immediately
       setPatients((prev) =>
         prev.map((p) =>
           p.id === patientId ? { ...p, selected_therapist_id: valueToSet } : p,
         ),
       );
-
       alert("Therapist successfully assigned! ✅");
     } catch (error) {
       console.error(error);
@@ -101,21 +108,33 @@ const MyPatients = () => {
     }
   };
 
-  // Fetches the upcoming session when a patient is expanded
   const handleExpandPatient = async (patientId) => {
     if (expandedId === patientId) {
       setExpandedId(null);
+      setShowDatePicker(false);
+      setShowTimePicker(false);
       return;
     }
 
     setExpandedId(patientId);
     setWordTags([]);
     setCurrentSentence("");
+    setDifficultyLevel("Medium");
+    setTherapyGoal("");
+    setPhonemes("");
     setActiveSessionId(null);
+    setSessionReports([]);
     setUpdatingId(patientId);
+    setShowDatePicker(false);
+    setShowTimePicker(false);
+
+    const today = new Date();
+    setSessionDate(today.toISOString().split("T")[0]);
+    setSessionTime("10:00 AM");
 
     try {
-      const { data, error } = await supabase
+      // 1. Fetch active session
+      const { data: activeData, error: activeError } = await supabase
         .from("sessions")
         .select("*")
         .eq("patient_id", patientId)
@@ -124,15 +143,30 @@ const MyPatients = () => {
         .limit(1)
         .single();
 
-      if (error && error.code !== "PGRST116") {
-        throw error;
+      if (activeError && activeError.code !== "PGRST116") throw activeError;
+
+      if (activeData) {
+        setActiveSessionId(activeData.id);
+        setWordTags(activeData.target_words || []);
+        setCurrentSentence(activeData.target_sentence || "");
+        setDifficultyLevel(activeData.difficulty_level?.[0] || "Medium");
+        setTherapyGoal(activeData.therapy_goal || "");
+        setPhonemes(activeData.phonemes_to_focus_on?.join(", ") || "");
+        setSessionDate(
+          activeData.session_date || today.toISOString().split("T")[0],
+        );
+        setSessionTime(activeData.session_time || "10:00 AM");
       }
 
-      if (data) {
-        setActiveSessionId(data.id);
-        setWordTags(data.target_words || []);
-        setCurrentSentence(data.target_sentence || "");
-      }
+      // 2. Fetch completed session history strictly for THIS patient
+      const { data: reportData, error: reportError } = await supabase
+        .from("session_reports")
+        .select("*, profiles:patient_id(full_name)")
+        .eq("patient_id", patientId)
+        .order("created_at", { ascending: false });
+
+      if (reportError) throw reportError;
+      if (reportData) setSessionReports(reportData);
     } catch (error) {
       console.error("Session fetch error:", error);
     } finally {
@@ -140,90 +174,364 @@ const MyPatients = () => {
     }
   };
 
-  // The core sync function that safely updates or creates a session
-  const autoSyncSession = async (patientId, newTagsArray, newSentence) => {
+  const autoSyncSession = async (
+    patientId,
+    newTagsArray,
+    newSentence,
+    diff,
+    goal,
+    phonesStr,
+    dateVal,
+    timeVal,
+  ) => {
     try {
       setUpdatingId(patientId);
       const {
         data: { user },
       } = await supabase.auth.getUser();
+      const phonemesArray = phonesStr
+        .split(",")
+        .map((p) => p.trim())
+        .filter((p) => p !== "");
 
       const sessionPayload = {
         patient_id: patientId,
-        therapist_id: user.id, // Records the user creating/updating the session
+        therapist_id: user.id,
         target_words: newTagsArray,
         target_sentence: newSentence,
+        difficulty_level: [diff],
+        therapy_goal: goal,
+        phonemes_to_focus_on: phonemesArray,
+        session_date: dateVal,
+        session_time: timeVal,
         status: "upcoming",
       };
 
       if (activeSessionId) {
-        // Update existing session
-        const { error } = await supabase
+        await supabase
           .from("sessions")
           .update(sessionPayload)
           .eq("id", activeSessionId);
-
-        if (error) throw error;
       } else {
-        // Create new session
-        const today = new Date();
-        sessionPayload.session_date = today.toISOString().split("T")[0];
-        sessionPayload.session_time = today.toTimeString().split(" ")[0];
-
-        const { data, error } = await supabase
+        const { data } = await supabase
           .from("sessions")
           .insert(sessionPayload)
           .select()
           .single();
-
-        if (error) throw error;
-        setActiveSessionId(data.id); // Save the new ID so future words update this row
+        setActiveSessionId(data.id);
       }
     } catch (error) {
       console.error("Supabase Error:", error);
-      alert(
-        `Database Error: ${error.message}\n\nCheck your Supabase RLS policies or Foreign Key constraints.`,
-      );
     } finally {
       setUpdatingId(null);
     }
   };
 
-  // Word addition logic with auto-save
-  const addTag = async (e, patientId) => {
-    if (e.key === "Enter" || e.key === ",") {
-      e.preventDefault();
-      const value = e.target.value.trim().replace(",", "");
+  const markSessionComplete = async (patientId) => {
+    if (!activeSessionId) {
+      alert("No active session to complete! Please add some targets first.");
+      return;
+    }
 
-      if (value && !wordTags.includes(value)) {
-        const newTags = [...wordTags, value];
-        setWordTags(newTags);
-        e.target.value = "";
+    if (
+      window.confirm(
+        "Are you sure you want to mark this session as complete? It will be archived into the reports table.",
+      )
+    ) {
+      try {
+        setUpdatingId(patientId);
 
-        await autoSyncSession(patientId, newTags, currentSentence);
+        // Fetch active session data
+        const { data: activeSession, error: fetchError } = await supabase
+          .from("sessions")
+          .select("*")
+          .eq("id", activeSessionId)
+          .single();
+
+        if (fetchError) throw fetchError;
+
+        // Archive into session_reports
+        const archivePayload = {
+          patient_id: activeSession.patient_id,
+          therapist_id: activeSession.therapist_id,
+          session_date: activeSession.session_date,
+          session_time: activeSession.session_time,
+          target_word: activeSession.target_words,
+          target_sentence: activeSession.target_sentence,
+          difficulty_level: activeSession.difficulty_level,
+          therapy_goals:
+            activeSession.therapy_goal || activeSession.therapy_goals,
+          phonemes_to_focus_on: activeSession.phonemes_to_focus_on,
+          created_at: new Date().toISOString(),
+        };
+
+        const { data: newReport, error: insertError } = await supabase
+          .from("session_reports")
+          .insert(archivePayload)
+          .select()
+          .single();
+
+        if (insertError) throw insertError;
+
+        // Delete from active sessions table
+        const { error: deleteError } = await supabase
+          .from("sessions")
+          .delete()
+          .eq("id", activeSessionId);
+
+        if (deleteError) throw deleteError;
+
+        // Update UI
+        setSessionReports([newReport, ...sessionReports]);
+        setActiveSessionId(null);
+        setWordTags([]);
+        setCurrentSentence("");
+        setDifficultyLevel("Medium");
+        setTherapyGoal("");
+        setPhonemes("");
+
+        const today = new Date();
+        setSessionDate(today.toISOString().split("T")[0]);
+        setSessionTime("10:00 AM");
+
+        alert("Session successfully archived into reports! 📁");
+      } catch (error) {
+        console.error("Error archiving session:", error);
+        alert("Failed to archive session: " + error.message);
+      } finally {
+        setUpdatingId(null);
       }
     }
   };
 
-  // Word removal logic with auto-save
+  // --- CSV DOWNLOAD GENERATOR ---
+  const downloadCSV = (patient) => {
+    if (sessionReports.length === 0) {
+      alert("No reports available to download for this patient.");
+      return;
+    }
+
+    const headers = [
+      "Patient Name",
+      "Scheduled Date",
+      "Scheduled Time",
+      "Target Word(s)",
+      "Target Sentence",
+      "Difficulty Level",
+      "Phonemes",
+      "Therapy Goal",
+      "Transcript",
+      "Accuracy (%)",
+      "Total Errors",
+      "Substitutions",
+      "Omissions",
+      "Insertions",
+      "Feedback Given",
+      "Practice Exercise",
+      "Session Duration (s)",
+      "Date Completed",
+    ];
+
+    const csvRows = sessionReports.map((report) => {
+      return [
+        patient.full_name || "Unknown Patient",
+        report.session_date || "N/A",
+        report.session_time || "N/A",
+        report.target_word?.join(", ") || "",
+        report.target_sentence || "",
+        report.difficulty_level?.join(", ") || "",
+        report.phonemes_to_focus_on?.join(", ") || "",
+        report.therapy_goals || report.therapy_goal || "",
+        report.transcript || "Manual Archive",
+        report.accuracy !== null ? report.accuracy : "",
+        report.total_errors !== null ? report.total_errors : "",
+        report.substitutions !== null ? report.substitutions : "",
+        report.omissions !== null ? report.omissions : "",
+        report.insertions !== null ? report.insertions : "",
+        report.feedback_given || "",
+        report.practice_exercise || "",
+        report.session_duration_secs !== null
+          ? report.session_duration_secs
+          : "",
+        new Date(report.created_at).toLocaleString(),
+      ]
+        .map((value) => `"${String(value).replace(/"/g, '""')}"`) // Escape quotes & handle commas
+        .join(",");
+    });
+
+    const csvString = [headers.join(","), ...csvRows].join("\n");
+    const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" });
+    const url = window.URL.createObjectURL(blob);
+
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute(
+      "download",
+      `${patient.full_name.replace(/\s+/g, "_")}_Clinical_Reports.csv`,
+    );
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // --- Date Picker Logic ---
+  const daysInMonth = new Date(
+    pickerMonth.getFullYear(),
+    pickerMonth.getMonth() + 1,
+    0,
+  ).getDate();
+  const firstDayOfMonth = new Date(
+    pickerMonth.getFullYear(),
+    pickerMonth.getMonth(),
+    1,
+  ).getDay();
+  const monthNames = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+  ];
+
+  const handleCustomDateSelect = async (day, patientId) => {
+    const newDate = new Date(
+      pickerMonth.getFullYear(),
+      pickerMonth.getMonth(),
+      day,
+    );
+    const offset = newDate.getTimezoneOffset();
+    const formattedDate = new Date(newDate.getTime() - offset * 60 * 1000)
+      .toISOString()
+      .split("T")[0];
+
+    setSessionDate(formattedDate);
+    setShowDatePicker(false);
+    await autoSyncSession(
+      patientId,
+      wordTags,
+      currentSentence,
+      difficultyLevel,
+      therapyGoal,
+      phonemes,
+      formattedDate,
+      sessionTime,
+    );
+  };
+
+  // --- Time Picker Logic ---
+  const generateTimeSlots = () => {
+    const slots = [];
+    for (let i = 8; i <= 18; i++) {
+      const ampm = i >= 12 ? "PM" : "AM";
+      const hour = i > 12 ? i - 12 : i;
+      slots.push(`${hour}:00 ${ampm}`);
+      if (i !== 18) slots.push(`${hour}:30 ${ampm}`);
+    }
+    return slots;
+  };
+
+  const handleCustomTimeSelect = async (time, patientId) => {
+    setSessionTime(time);
+    setShowTimePicker(false);
+    await autoSyncSession(
+      patientId,
+      wordTags,
+      currentSentence,
+      difficultyLevel,
+      therapyGoal,
+      phonemes,
+      sessionDate,
+      time,
+    );
+  };
+
+  const addTag = async (e, patientId) => {
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      const value = e.target.value.trim().replace(",", "");
+      if (value && !wordTags.includes(value)) {
+        const newTags = [...wordTags, value];
+        setWordTags(newTags);
+        e.target.value = "";
+        await autoSyncSession(
+          patientId,
+          newTags,
+          currentSentence,
+          difficultyLevel,
+          therapyGoal,
+          phonemes,
+          sessionDate,
+          sessionTime,
+        );
+      }
+    }
+  };
+
   const removeTag = async (indexToRemove, patientId) => {
     const newTags = wordTags.filter((_, index) => index !== indexToRemove);
     setWordTags(newTags);
-    await autoSyncSession(patientId, newTags, currentSentence);
+    await autoSyncSession(
+      patientId,
+      newTags,
+      currentSentence,
+      difficultyLevel,
+      therapyGoal,
+      phonemes,
+      sessionDate,
+      sessionTime,
+    );
   };
 
-  // Sentence auto-save (Triggers when the user clicks out of the textarea)
-  const handleSentenceBlur = async (patientId) => {
-    await autoSyncSession(patientId, wordTags, currentSentence);
+  const handleBlur = async (patientId) => {
+    await autoSyncSession(
+      patientId,
+      wordTags,
+      currentSentence,
+      difficultyLevel,
+      therapyGoal,
+      phonemes,
+      sessionDate,
+      sessionTime,
+    );
   };
 
-  // Manual save button click
+  const handleDifficultyChange = async (e, patientId) => {
+    const newDiff = e.target.value;
+    setDifficultyLevel(newDiff);
+    await autoSyncSession(
+      patientId,
+      wordTags,
+      currentSentence,
+      newDiff,
+      therapyGoal,
+      phonemes,
+      sessionDate,
+      sessionTime,
+    );
+  };
+
   const handleManualSync = async (patientId) => {
     if (wordTags.length < 3) {
       alert("Waabi requires at least 3 target words for an effective session.");
       return;
     }
-    await autoSyncSession(patientId, wordTags, currentSentence);
+    await autoSyncSession(
+      patientId,
+      wordTags,
+      currentSentence,
+      difficultyLevel,
+      therapyGoal,
+      phonemes,
+      sessionDate,
+      sessionTime,
+    );
     alert("Clinical plan synced! Waabi is now updated.");
   };
 
@@ -296,7 +604,6 @@ const MyPatients = () => {
                     }`}
                     onClick={() => handleExpandPatient(patient.id)}
                   >
-                    {/* Patient Name Column */}
                     <td className="px-8 py-6">
                       <div className="flex items-center gap-4">
                         <div className="w-10 h-10 bg-[#f0fff4] text-[#5cb338] rounded-xl flex items-center justify-center font-black text-sm border border-green-50 shadow-inner">
@@ -308,7 +615,6 @@ const MyPatients = () => {
                       </div>
                     </td>
 
-                    {/* Assigned Therapist Dropdown Column */}
                     <td className="px-8 py-6">
                       <div className="flex items-center gap-2">
                         <UserCog
@@ -342,16 +648,14 @@ const MyPatients = () => {
                       </div>
                     </td>
 
-                    {/* Status Column */}
                     <td className="px-8 py-6">
                       <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
                         {expandedId === patient.id && activeSessionId
-                          ? "Session Configured"
-                          : "Click to view targets"}
+                          ? "Active Session"
+                          : "Configure Next Session"}
                       </span>
                     </td>
 
-                    {/* Expand/Collapse Chevron Column */}
                     <td className="px-8 py-6 text-right">
                       <div className="p-2 rounded-lg bg-gray-50 text-gray-400 inline-block group-hover:bg-white group-hover:shadow-sm transition-all">
                         {expandedId === patient.id ? (
@@ -363,76 +667,348 @@ const MyPatients = () => {
                     </td>
                   </tr>
 
-                  {/* Expanded Session Config Area */}
                   {expandedId === patient.id && (
                     <tr className="bg-[#f0fff4]/10">
                       <td colSpan="4" className="px-12 py-10">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-10 animate-in slide-in-from-top duration-500">
-                          {/* Target Words Section */}
-                          <div className="space-y-4">
-                            <div className="flex items-center justify-between">
-                              <label className="flex items-center gap-2 text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                        <div className="mb-6 pb-6 border-b border-green-500/10 flex justify-between items-center">
+                          <h3 className="text-sm font-black text-gray-700 uppercase tracking-widest">
+                            {activeSessionId
+                              ? "Current Session Profile"
+                              : "Create New Session"}
+                          </h3>
+                          {activeSessionId && (
+                            <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-1">
+                              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>{" "}
+                              Active
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 animate-in slide-in-from-top duration-500">
+                          {/* LEFT COLUMN: Practice Setup */}
+                          <div className="space-y-8">
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-2 relative">
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">
+                                  Session Date
+                                </label>
+                                <div
+                                  onClick={() => {
+                                    setShowDatePicker(!showDatePicker);
+                                    setShowTimePicker(false);
+                                  }}
+                                  className="w-full bg-white hover:bg-gray-50 border border-gray-200 rounded-[1.25rem] pl-11 pr-4 py-4 text-xs font-black text-gray-700 shadow-sm transition-all cursor-pointer flex items-center relative"
+                                >
+                                  <Calendar className="w-4 h-4 text-blue-500 absolute left-4" />
+                                  {sessionDate || "Select Date"}
+                                </div>
+
+                                {showDatePicker && (
+                                  <div className="absolute top-[80px] left-0 w-72 bg-white border border-gray-100 shadow-2xl rounded-3xl p-5 z-50 animate-in zoom-in-95 fade-in duration-200">
+                                    <div className="flex justify-between items-center mb-4">
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setPickerMonth(
+                                            new Date(
+                                              pickerMonth.getFullYear(),
+                                              pickerMonth.getMonth() - 1,
+                                              1,
+                                            ),
+                                          );
+                                        }}
+                                        className="p-2 hover:bg-gray-100 rounded-xl transition-all"
+                                      >
+                                        <ChevronLeft size={16} />
+                                      </button>
+                                      <span className="text-xs font-black text-gray-800">
+                                        {monthNames[pickerMonth.getMonth()]}{" "}
+                                        {pickerMonth.getFullYear()}
+                                      </span>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setPickerMonth(
+                                            new Date(
+                                              pickerMonth.getFullYear(),
+                                              pickerMonth.getMonth() + 1,
+                                              1,
+                                            ),
+                                          );
+                                        }}
+                                        className="p-2 hover:bg-gray-100 rounded-xl transition-all"
+                                      >
+                                        <ChevronRight size={16} />
+                                      </button>
+                                    </div>
+                                    <div className="grid grid-cols-7 gap-1 text-center mb-2">
+                                      {[
+                                        "Su",
+                                        "Mo",
+                                        "Tu",
+                                        "We",
+                                        "Th",
+                                        "Fr",
+                                        "Sa",
+                                      ].map((d) => (
+                                        <span
+                                          key={d}
+                                          className="text-[9px] font-black text-gray-400"
+                                        >
+                                          {d}
+                                        </span>
+                                      ))}
+                                    </div>
+                                    <div className="grid grid-cols-7 gap-1">
+                                      {[...Array(firstDayOfMonth)].map(
+                                        (_, i) => (
+                                          <div key={`empty-${i}`} />
+                                        ),
+                                      )}
+                                      {[...Array(daysInMonth)].map((_, i) => {
+                                        const day = i + 1;
+                                        const isSelected =
+                                          sessionDate ===
+                                          new Date(
+                                            pickerMonth.getFullYear(),
+                                            pickerMonth.getMonth(),
+                                            day,
+                                          )
+                                            .toISOString()
+                                            .split("T")[0];
+                                        return (
+                                          <button
+                                            key={day}
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleCustomDateSelect(
+                                                day,
+                                                patient.id,
+                                              );
+                                            }}
+                                            className={`p-2 text-xs font-bold rounded-xl transition-all ${
+                                              isSelected
+                                                ? "bg-blue-500 text-white shadow-md"
+                                                : "text-gray-700 hover:bg-blue-50"
+                                            }`}
+                                          >
+                                            {day}
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="space-y-2 relative">
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">
+                                  Session Time
+                                </label>
+                                <div
+                                  onClick={() => {
+                                    setShowTimePicker(!showTimePicker);
+                                    setShowDatePicker(false);
+                                  }}
+                                  className="w-full bg-white hover:bg-gray-50 border border-gray-200 rounded-[1.25rem] pl-11 pr-4 py-4 text-xs font-black text-gray-700 shadow-sm transition-all cursor-pointer flex items-center relative"
+                                >
+                                  <Clock className="w-4 h-4 text-blue-500 absolute left-4" />
+                                  {sessionTime || "Select Time"}
+                                  <ChevronDown className="w-4 h-4 text-gray-400 absolute right-4" />
+                                </div>
+
+                                {showTimePicker && (
+                                  <div className="absolute top-[80px] left-0 w-full bg-white border border-gray-100 shadow-2xl rounded-3xl p-2 z-50 animate-in zoom-in-95 fade-in duration-200 max-h-60 overflow-y-auto custom-scrollbar">
+                                    {generateTimeSlots().map((time) => (
+                                      <button
+                                        key={time}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleCustomTimeSelect(
+                                            time,
+                                            patient.id,
+                                          );
+                                        }}
+                                        className={`w-full text-left px-4 py-3 rounded-2xl text-xs font-bold transition-all ${
+                                          sessionTime === time
+                                            ? "bg-blue-500 text-white"
+                                            : "hover:bg-blue-50 text-gray-700"
+                                        }`}
+                                      >
+                                        {time}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-2 relative">
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">
+                                  Difficulty Level
+                                </label>
+                                <div className="relative group">
+                                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                    <Settings2 className="w-4 h-4 text-orange-400" />
+                                  </div>
+                                  <select
+                                    className="w-full bg-white hover:bg-gray-50 border border-gray-200 rounded-[1.25rem] pl-11 pr-10 py-4 text-xs font-black text-gray-700 outline-none focus:ring-4 focus:ring-orange-100/50 shadow-sm transition-all cursor-pointer appearance-none"
+                                    value={difficultyLevel}
+                                    onChange={(e) =>
+                                      handleDifficultyChange(e, patient.id)
+                                    }
+                                  >
+                                    <option value="Easy">Easy</option>
+                                    <option value="Medium">Medium</option>
+                                    <option value="Hard">Hard</option>
+                                  </select>
+                                  <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
+                                    <ChevronDown className="w-4 h-4 text-gray-400" />
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="space-y-2">
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">
+                                  Phonemes to Focus
+                                </label>
+                                <div className="relative group">
+                                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                    <BrainCircuit className="w-4 h-4 text-purple-400" />
+                                  </div>
+                                  <input
+                                    className="w-full bg-white hover:bg-gray-50 border border-gray-200 rounded-[1.25rem] pl-11 pr-4 py-4 text-xs font-black text-gray-700 outline-none focus:ring-4 focus:ring-purple-100/50 shadow-sm transition-all placeholder:font-medium placeholder:text-gray-400"
+                                    placeholder="e.g. /p/, /b/, /m/"
+                                    value={phonemes}
+                                    onChange={(e) =>
+                                      setPhonemes(e.target.value)
+                                    }
+                                    onBlur={() => handleBlur(patient.id)}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="space-y-2">
+                              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">
+                                Therapy Goal
+                              </label>
+                              <textarea
+                                rows="2"
+                                className="w-full bg-white border border-gray-200 rounded-[1.5rem] px-6 py-5 text-xs font-black text-gray-700 outline-none focus:ring-4 focus:ring-gray-100/50 resize-none shadow-sm transition-all placeholder:font-medium placeholder:text-gray-400 hover:bg-gray-50 focus:bg-white"
+                                placeholder="Describe the primary clinical goal..."
+                                value={therapyGoal}
+                                onChange={(e) => setTherapyGoal(e.target.value)}
+                                onBlur={() => handleBlur(patient.id)}
+                              />
+                            </div>
+
+                            <div className="space-y-2">
+                              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 flex items-center gap-2">
                                 <Target className="w-3.5 h-3.5 text-[#5cb338]" />{" "}
                                 Target Vocabulary
                               </label>
+                              <div className="w-full bg-white border border-gray-200 rounded-[1.5rem] p-4 min-h-[100px] focus-within:ring-4 focus-within:ring-[#5cb338]/10 transition-all flex flex-wrap gap-2 content-start shadow-sm hover:bg-gray-50 focus-within:bg-white">
+                                {wordTags.map((tag, index) => (
+                                  <span
+                                    key={index}
+                                    className="bg-green-50 text-[#5cb338] px-3 py-1.5 rounded-full text-[10px] font-black flex items-center gap-2 border border-green-100"
+                                  >
+                                    {tag}
+                                    <X
+                                      size={12}
+                                      className="cursor-pointer hover:text-red-500 transition-colors"
+                                      onClick={() =>
+                                        removeTag(index, patient.id)
+                                      }
+                                    />
+                                  </span>
+                                ))}
+                                <input
+                                  className="flex-1 min-w-[120px] bg-transparent outline-none text-xs font-bold text-gray-700 py-1.5"
+                                  placeholder={
+                                    wordTags.length === 0
+                                      ? "Add words individually..."
+                                      : ""
+                                  }
+                                  onKeyDown={(e) => addTag(e, patient.id)}
+                                />
+                              </div>
                             </div>
-
-                            <div className="w-full bg-white border border-gray-100 rounded-3xl p-4 min-h-[140px] focus-within:ring-4 focus-within:ring-[#5cb338]/10 transition-all flex flex-wrap gap-2 content-start">
-                              {wordTags.map((tag, index) => (
-                                <span
-                                  key={index}
-                                  className="bg-green-50 text-[#5cb338] px-3 py-1.5 rounded-full text-[10px] font-black flex items-center gap-2 border border-green-100 animate-in zoom-in-75 duration-300"
-                                >
-                                  {tag}
-                                  <X
-                                    size={12}
-                                    className="cursor-pointer hover:text-red-500"
-                                    onClick={() => removeTag(index, patient.id)}
-                                  />
-                                </span>
-                              ))}
-                              <input
-                                className="flex-1 min-w-[120px] bg-transparent outline-none text-xs font-bold text-gray-700 py-1.5"
-                                placeholder={
-                                  wordTags.length === 0
-                                    ? "Add words individually..."
-                                    : ""
-                                }
-                                onKeyDown={(e) => addTag(e, patient.id)}
-                              />
-                            </div>
-                            <p className="text-[9px] font-bold text-gray-300 uppercase tracking-widest italic ml-2">
-                              {wordTags.length} words added (Minimum 3 required)
-                            </p>
                           </div>
 
-                          {/* Sentence / Sync Section */}
-                          <div className="space-y-4 flex flex-col">
-                            <label className="flex items-center gap-2 text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                          {/* RIGHT COLUMN: Sentences & Actions */}
+                          <div className="space-y-2 flex flex-col h-full">
+                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 flex items-center gap-2">
                               <MessageSquare className="w-3.5 h-3.5 text-blue-500" />{" "}
                               Practice Phrases
                             </label>
                             <textarea
-                              className="flex-1 bg-white border border-gray-100 rounded-3xl p-6 text-xs font-bold text-gray-700 outline-none focus:ring-4 focus:ring-blue-100/50 transition-all resize-none min-h-[140px]"
+                              className="flex-1 bg-white border border-gray-200 rounded-[1.5rem] p-6 text-xs font-bold text-gray-700 outline-none focus:ring-4 focus:ring-blue-100/50 transition-all resize-none min-h-[220px] shadow-sm placeholder:font-medium placeholder:text-gray-400 hover:bg-gray-50 focus:bg-white"
                               placeholder="e.g. Can you pass the water? I feel better today."
                               value={currentSentence}
                               onChange={(e) =>
                                 setCurrentSentence(e.target.value)
                               }
-                              onBlur={() => handleSentenceBlur(patient.id)}
+                              onBlur={() => handleBlur(patient.id)}
                             />
 
-                            <button
-                              onClick={() => handleManualSync(patient.id)}
-                              disabled={updatingId === patient.id}
-                              className="mt-4 bg-[#5cb338] text-white py-5 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-green-100 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
-                            >
-                              {updatingId === patient.id ? (
-                                <Loader2 className="animate-spin w-4 h-4" />
-                              ) : (
-                                <Save className="w-4 h-4" />
+                            <div className="flex gap-4 mt-6">
+                              <button
+                                onClick={() => handleManualSync(patient.id)}
+                                disabled={updatingId === patient.id}
+                                className="flex-1 bg-white border border-gray-200 text-gray-700 py-5 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:border-gray-300 hover:bg-gray-50 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+                              >
+                                {updatingId === patient.id ? (
+                                  <Loader2 className="animate-spin w-4 h-4" />
+                                ) : (
+                                  <Save className="w-4 h-4 text-gray-400" />
+                                )}
+                                Sync Edits
+                              </button>
+
+                              {activeSessionId && (
+                                <button
+                                  onClick={() =>
+                                    markSessionComplete(patient.id)
+                                  }
+                                  disabled={updatingId === patient.id}
+                                  className="flex-1 bg-[#5cb338] text-white py-5 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-green-100 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                                >
+                                  <CheckCircle className="w-4 h-4" /> Mark
+                                  Complete
+                                </button>
                               )}
-                              Sync Clinical Targets
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* --- EXPORT CSV ONLY --- */}
+                        <div className="mt-12 pt-8 border-t border-gray-200/50 animate-in slide-in-from-bottom duration-700">
+                          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-3xl border border-blue-100 flex flex-col md:flex-row justify-between items-center gap-6 shadow-sm">
+                            <div>
+                              <h3 className="text-sm font-black text-blue-900 uppercase tracking-widest flex items-center gap-2">
+                                <Download className="w-4 h-4 text-blue-500" />
+                                Clinical Data Export
+                              </h3>
+                              <p className="text-xs text-blue-600/70 font-bold mt-1">
+                                Download a formatted CSV report containing all
+                                completed sessions, targets, and performance
+                                metrics for {patient.full_name}.
+                              </p>
+                              <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest mt-2">
+                                {sessionReports.length} Session(s) on Record
+                              </p>
+                            </div>
+
+                            <button
+                              onClick={() => downloadCSV(patient)}
+                              disabled={sessionReports.length === 0}
+                              className="w-full md:w-auto bg-white text-blue-600 px-8 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-3 border border-blue-200 shadow-sm hover:shadow-md hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed"
+                            >
+                              <Download size={16} />
+                              Export CSV File
                             </button>
                           </div>
                         </div>
