@@ -15,6 +15,9 @@ import {
   CheckCircle,
   Calendar,
   Clock,
+  History,
+  ChevronLeft,
+  ChevronRight,
   Download,
 } from "lucide-react";
 
@@ -158,7 +161,7 @@ const MyPatients = () => {
         setSessionTime(activeData.session_time || "10:00 AM");
       }
 
-      // 2. Fetch completed session history strictly for THIS patient
+      // 2. Fetch completed session history
       const { data: reportData, error: reportError } = await supabase
         .from("session_reports")
         .select("*, profiles:patient_id(full_name)")
@@ -174,22 +177,20 @@ const MyPatients = () => {
     }
   };
 
-  const autoSyncSession = async (
-    patientId,
-    newTagsArray,
-    newSentence,
-    diff,
-    goal,
-    phonesStr,
-    dateVal,
-    timeVal,
-  ) => {
+  // ONLY CALL THIS WHEN "SYNC EDITS" IS CLICKED
+  const handleManualSync = async (patientId) => {
+    if (wordTags.length < 3) {
+      alert("Waabi requires at least 3 target words for an effective session.");
+      return;
+    }
+
     try {
       setUpdatingId(patientId);
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      const phonemesArray = phonesStr
+
+      const phonemesArray = phonemes
         .split(",")
         .map((p) => p.trim())
         .filter((p) => p !== "");
@@ -197,31 +198,36 @@ const MyPatients = () => {
       const sessionPayload = {
         patient_id: patientId,
         therapist_id: user.id,
-        target_words: newTagsArray,
-        target_sentence: newSentence,
-        difficulty_level: [diff],
-        therapy_goal: goal,
+        target_words: wordTags,
+        target_sentence: currentSentence,
+        difficulty_level: [difficultyLevel],
+        therapy_goal: therapyGoal,
         phonemes_to_focus_on: phonemesArray,
-        session_date: dateVal,
-        session_time: timeVal,
+        session_date: sessionDate,
+        session_time: sessionTime,
         status: "upcoming",
       };
 
       if (activeSessionId) {
-        await supabase
+        const { error } = await supabase
           .from("sessions")
           .update(sessionPayload)
           .eq("id", activeSessionId);
+        if (error) throw error;
       } else {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from("sessions")
           .insert(sessionPayload)
           .select()
           .single();
+        if (error) throw error;
         setActiveSessionId(data.id);
       }
+
+      alert("Clinical plan synced! Waabi is now updated.");
     } catch (error) {
       console.error("Supabase Error:", error);
+      alert("Failed to sync: " + error.message);
     } finally {
       setUpdatingId(null);
     }
@@ -240,28 +246,26 @@ const MyPatients = () => {
     ) {
       try {
         setUpdatingId(patientId);
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
 
-        // Fetch active session data
-        const { data: activeSession, error: fetchError } = await supabase
-          .from("sessions")
-          .select("*")
-          .eq("id", activeSessionId)
-          .single();
+        // Use local state directly for archiving so we don't miss unsynced edits!
+        const phonemesArray = phonemes
+          .split(",")
+          .map((p) => p.trim())
+          .filter((p) => p !== "");
 
-        if (fetchError) throw fetchError;
-
-        // Archive into session_reports
         const archivePayload = {
-          patient_id: activeSession.patient_id,
-          therapist_id: activeSession.therapist_id,
-          session_date: activeSession.session_date,
-          session_time: activeSession.session_time,
-          target_word: activeSession.target_words,
-          target_sentence: activeSession.target_sentence,
-          difficulty_level: activeSession.difficulty_level,
-          therapy_goals:
-            activeSession.therapy_goal || activeSession.therapy_goals,
-          phonemes_to_focus_on: activeSession.phonemes_to_focus_on,
+          patient_id: patientId,
+          therapist_id: user.id,
+          session_date: sessionDate,
+          session_time: sessionTime,
+          target_word: wordTags,
+          target_sentence: currentSentence,
+          difficulty_level: [difficultyLevel],
+          therapy_goals: therapyGoal,
+          phonemes_to_focus_on: phonemesArray,
           created_at: new Date().toISOString(),
         };
 
@@ -355,7 +359,7 @@ const MyPatients = () => {
           : "",
         new Date(report.created_at).toLocaleString(),
       ]
-        .map((value) => `"${String(value).replace(/"/g, '""')}"`) // Escape quotes & handle commas
+        .map((value) => `"${String(value).replace(/"/g, '""')}"`)
         .join(",");
     });
 
@@ -400,7 +404,7 @@ const MyPatients = () => {
     "December",
   ];
 
-  const handleCustomDateSelect = async (day, patientId) => {
+  const handleCustomDateSelect = (day) => {
     const newDate = new Date(
       pickerMonth.getFullYear(),
       pickerMonth.getMonth(),
@@ -411,18 +415,9 @@ const MyPatients = () => {
       .toISOString()
       .split("T")[0];
 
+    // Local state only
     setSessionDate(formattedDate);
     setShowDatePicker(false);
-    await autoSyncSession(
-      patientId,
-      wordTags,
-      currentSentence,
-      difficultyLevel,
-      therapyGoal,
-      phonemes,
-      formattedDate,
-      sessionTime,
-    );
   };
 
   // --- Time Picker Logic ---
@@ -437,102 +432,27 @@ const MyPatients = () => {
     return slots;
   };
 
-  const handleCustomTimeSelect = async (time, patientId) => {
+  const handleCustomTimeSelect = (time) => {
+    // Local state only
     setSessionTime(time);
     setShowTimePicker(false);
-    await autoSyncSession(
-      patientId,
-      wordTags,
-      currentSentence,
-      difficultyLevel,
-      therapyGoal,
-      phonemes,
-      sessionDate,
-      time,
-    );
   };
 
-  const addTag = async (e, patientId) => {
+  const addTag = (e) => {
     if (e.key === "Enter" || e.key === ",") {
       e.preventDefault();
       const value = e.target.value.trim().replace(",", "");
       if (value && !wordTags.includes(value)) {
-        const newTags = [...wordTags, value];
-        setWordTags(newTags);
+        // Local state only
+        setWordTags([...wordTags, value]);
         e.target.value = "";
-        await autoSyncSession(
-          patientId,
-          newTags,
-          currentSentence,
-          difficultyLevel,
-          therapyGoal,
-          phonemes,
-          sessionDate,
-          sessionTime,
-        );
       }
     }
   };
 
-  const removeTag = async (indexToRemove, patientId) => {
-    const newTags = wordTags.filter((_, index) => index !== indexToRemove);
-    setWordTags(newTags);
-    await autoSyncSession(
-      patientId,
-      newTags,
-      currentSentence,
-      difficultyLevel,
-      therapyGoal,
-      phonemes,
-      sessionDate,
-      sessionTime,
-    );
-  };
-
-  const handleBlur = async (patientId) => {
-    await autoSyncSession(
-      patientId,
-      wordTags,
-      currentSentence,
-      difficultyLevel,
-      therapyGoal,
-      phonemes,
-      sessionDate,
-      sessionTime,
-    );
-  };
-
-  const handleDifficultyChange = async (e, patientId) => {
-    const newDiff = e.target.value;
-    setDifficultyLevel(newDiff);
-    await autoSyncSession(
-      patientId,
-      wordTags,
-      currentSentence,
-      newDiff,
-      therapyGoal,
-      phonemes,
-      sessionDate,
-      sessionTime,
-    );
-  };
-
-  const handleManualSync = async (patientId) => {
-    if (wordTags.length < 3) {
-      alert("Waabi requires at least 3 target words for an effective session.");
-      return;
-    }
-    await autoSyncSession(
-      patientId,
-      wordTags,
-      currentSentence,
-      difficultyLevel,
-      therapyGoal,
-      phonemes,
-      sessionDate,
-      sessionTime,
-    );
-    alert("Clinical plan synced! Waabi is now updated.");
+  const removeTag = (indexToRemove) => {
+    // Local state only
+    setWordTags(wordTags.filter((_, index) => index !== indexToRemove));
   };
 
   const filteredPatients = patients.filter((patient) =>
@@ -667,6 +587,7 @@ const MyPatients = () => {
                     </td>
                   </tr>
 
+                  {/* Expanded Area: Builder + History */}
                   {expandedId === patient.id && (
                     <tr className="bg-[#f0fff4]/10">
                       <td colSpan="4" className="px-12 py-10">
@@ -684,6 +605,7 @@ const MyPatients = () => {
                           )}
                         </div>
 
+                        {/* ACTIVE SESSION BUILDER */}
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 animate-in slide-in-from-top duration-500">
                           {/* LEFT COLUMN: Practice Setup */}
                           <div className="space-y-8">
@@ -781,10 +703,7 @@ const MyPatients = () => {
                                             key={day}
                                             onClick={(e) => {
                                               e.stopPropagation();
-                                              handleCustomDateSelect(
-                                                day,
-                                                patient.id,
-                                              );
+                                              handleCustomDateSelect(day);
                                             }}
                                             className={`p-2 text-xs font-bold rounded-xl transition-all ${
                                               isSelected
@@ -824,10 +743,7 @@ const MyPatients = () => {
                                         key={time}
                                         onClick={(e) => {
                                           e.stopPropagation();
-                                          handleCustomTimeSelect(
-                                            time,
-                                            patient.id,
-                                          );
+                                          handleCustomTimeSelect(time);
                                         }}
                                         className={`w-full text-left px-4 py-3 rounded-2xl text-xs font-bold transition-all ${
                                           sessionTime === time
@@ -856,7 +772,7 @@ const MyPatients = () => {
                                     className="w-full bg-white hover:bg-gray-50 border border-gray-200 rounded-[1.25rem] pl-11 pr-10 py-4 text-xs font-black text-gray-700 outline-none focus:ring-4 focus:ring-orange-100/50 shadow-sm transition-all cursor-pointer appearance-none"
                                     value={difficultyLevel}
                                     onChange={(e) =>
-                                      handleDifficultyChange(e, patient.id)
+                                      setDifficultyLevel(e.target.value)
                                     }
                                   >
                                     <option value="Easy">Easy</option>
@@ -884,7 +800,6 @@ const MyPatients = () => {
                                     onChange={(e) =>
                                       setPhonemes(e.target.value)
                                     }
-                                    onBlur={() => handleBlur(patient.id)}
                                   />
                                 </div>
                               </div>
@@ -900,7 +815,6 @@ const MyPatients = () => {
                                 placeholder="Describe the primary clinical goal..."
                                 value={therapyGoal}
                                 onChange={(e) => setTherapyGoal(e.target.value)}
-                                onBlur={() => handleBlur(patient.id)}
                               />
                             </div>
 
@@ -919,9 +833,7 @@ const MyPatients = () => {
                                     <X
                                       size={12}
                                       className="cursor-pointer hover:text-red-500 transition-colors"
-                                      onClick={() =>
-                                        removeTag(index, patient.id)
-                                      }
+                                      onClick={() => removeTag(index)}
                                     />
                                   </span>
                                 ))}
@@ -932,7 +844,7 @@ const MyPatients = () => {
                                       ? "Add words individually..."
                                       : ""
                                   }
-                                  onKeyDown={(e) => addTag(e, patient.id)}
+                                  onKeyDown={(e) => addTag(e)}
                                 />
                               </div>
                             </div>
@@ -951,7 +863,6 @@ const MyPatients = () => {
                               onChange={(e) =>
                                 setCurrentSentence(e.target.value)
                               }
-                              onBlur={() => handleBlur(patient.id)}
                             />
 
                             <div className="flex gap-4 mt-6">
