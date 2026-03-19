@@ -98,20 +98,22 @@ def _speak(text: str) -> Optional[str]:
 def execution_node(state: SpeechTherapyState) -> dict:
     """
     LangGraph node: deliver feedback as audio + text, mark session complete.
+    Customizes message based on perception_failure_reason if present.
     """
     _get_settings()   # initialise hardware config if available
 
-    feedback         = state.get("feedback") or {}
-    feedback_text    = feedback.get("feedback_text", "No feedback generated.")
-    practice         = state.get("practice_exercise", "")
-    patient_name     = state.get("patient_name", "friend")
-    target_word      = state.get("target_word", "")
-    error_report     = state.get("error_report") or {}
-    error_summary    = error_report.get("error_summary") or {}
-    semantic_label   = state.get("semantic_label", "N/A")
-    target_words     = state.get("target_words") or []
-    current_index    = int(state.get("current_target_index", 0) or 0)
-    transcript       = state.get("transcript", "")
+    feedback              = state.get("feedback") or {}
+    feedback_text         = feedback.get("feedback_text", "No feedback generated.")
+    practice              = state.get("practice_exercise", "")
+    patient_name          = state.get("patient_name", "friend")
+    target_word           = state.get("target_word", "")
+    error_report          = state.get("error_report") or {}
+    error_summary         = error_report.get("error_summary") or {}
+    semantic_label        = state.get("semantic_label", "N/A")
+    perception_fail_reason = state.get("perception_failure_reason")
+    target_words          = state.get("target_words") or []
+    current_index         = int(state.get("current_target_index", 0) or 0)
+    transcript            = state.get("transcript", "")
 
     # ── Terminal summary ─────────────────────────────────────────
     print("\n" + "█" * 55)
@@ -122,6 +124,8 @@ def execution_node(state: SpeechTherapyState) -> dict:
     print(f"  Accuracy   : {error_report.get('accuracy', 'N/A')}%")
     print(f"  Errors     : {error_report.get('total_errors', 'N/A')}")
     print(f"  Semantic   : {semantic_label}")
+    if perception_fail_reason:
+        print(f"  Perception : {perception_fail_reason}")
     print("─" * 55)
     print(f"  FEEDBACK:\n  {feedback_text}")
     print("─" * 55)
@@ -129,9 +133,10 @@ def execution_node(state: SpeechTherapyState) -> dict:
         print(f"  PRACTICE:\n  {practice}")
     print("█" * 55 + "\n")
 
-    # ── Audio output ─────────────────────────────────────────────
-    full_speech = f"{feedback_text}  {practice}" if practice else feedback_text
-    audio_path  = _speak(full_speech)
+    # ── Build full speech with reason-specific message prefix ────────────
+    failure_msg   = _get_failure_reason_message(perception_fail_reason, target_word)
+    full_speech   = f"{failure_msg}{feedback_text}  {practice}" if practice else f"{failure_msg}{feedback_text}"
+    audio_path    = _speak(full_speech)
 
     if audio_path:
         print(f"🔊 Audio saved → {audio_path}")
