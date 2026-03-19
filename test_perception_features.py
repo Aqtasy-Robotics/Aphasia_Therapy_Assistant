@@ -66,3 +66,23 @@ test_cases = [
     }
 ]
 
+all_passed = True
+for i, test in enumerate(test_cases, 1):
+    reason = test['reason']
+    word = test['word']
+    msg = _get_failure_reason_message(reason, word)
+    
+    # Check if expected keywords are present
+    keywords_present = all(kw.lower() in msg.lower() for kw in test['expected_keywords'])
+    
+    status = "✅" if (keywords_present or reason is None) else "❌"
+    all_passed = all_passed and (keywords_present or reason is None)
+    
+    print(f"\n  Test 2.{i}: {test['description']}")
+    print(f"  Input: reason='{reason}', word='{word}'")
+    print(f"  Message: {repr(msg[:70])}")
+    if test['expected_keywords']:
+        print(f"  Expected keywords: {test['expected_keywords']}")
+        print(f"  Keywords found: {keywords_present}")
+    print(f"  {status}")
+
