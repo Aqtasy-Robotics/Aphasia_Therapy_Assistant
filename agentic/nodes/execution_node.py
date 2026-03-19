@@ -1,4 +1,4 @@
-1`"""
+"""
 nodes/execution_node.py — Output delivery wrapped as a LangGraph node.
 
 Original main.py (Raspberry Pi execution agent) is preserved structurally.
@@ -20,6 +20,7 @@ from __future__ import annotations
 import os
 import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -173,8 +174,12 @@ def execution_node(state: SpeechTherapyState) -> dict:
             "difficulty_level": state.get("difficulty_level") or "medium",
         },
     )
+    mem0_error: Optional[str] = None
     if stored_in_mem0:
         logger.info("Stored session memory in Mem0 for patient {} and word '{}'", patient_name, target_word)
+    else:
+        mem0_error = "Mem0 session memory was not stored for this attempt."
+        logger.warning(mem0_error)
 
     next_index = current_index
     next_target_word = target_word
@@ -192,6 +197,13 @@ def execution_node(state: SpeechTherapyState) -> dict:
     else:
         print("✅ All target words completed.")
 
+    duration = state.get("session_duration_secs")
+    if duration is None and state.get("session_start") is not None:
+        try:
+            duration = int(max(0, time.time() - float(state.get("session_start") or 0)))
+        except Exception:
+            duration = None
+
     return {
         "audio_output_path": audio_path,
         "session_complete":  not has_more_target_words,
@@ -200,7 +212,17 @@ def execution_node(state: SpeechTherapyState) -> dict:
         "has_more_target_words": has_more_target_words,
         "retry_count":       next_retry_count,
         "feedback_attempts": next_feedback_attempts,
+        "transcript":        None if has_more_target_words else transcript,
+        "confidence_score":  None if has_more_target_words else state.get("confidence_score"),
+        "target_phonemes":   None if has_more_target_words else state.get("target_phonemes"),
+        "attempt_phonemes":  None if has_more_target_words else state.get("attempt_phonemes"),
+        "error_report":      None if has_more_target_words else state.get("error_report"),
+        "semantic_label":    None if has_more_target_words else state.get("semantic_label"),
+        "feedback":          None if has_more_target_words else state.get("feedback"),
+        "practice_exercise": None if has_more_target_words else state.get("practice_exercise"),
+        "memory_context":    [] if has_more_target_words else state.get("memory_context", []),
         "session_history":   history,
+        "session_duration_secs": duration,
         "report_id":         state.get("report_id"),
-        "current_error":     None,
+        "current_error":     mem0_error,
     }
