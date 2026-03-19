@@ -154,3 +154,20 @@ for i, test_case in enumerate(mock_states, 1):
     print(f"  Expected: '{test_case['expected_route']}'")
     print(f"  {status}")
 
+if routing_passed:
+    print("\n✅ All edge routing tests passed!")
+else:
+    print("\n❌ Some edge routing tests failed!")
+    sys.exit(1)
+
+# ── Summary ────────────────────────────────────────────────────
+print("\n" + "="*60)
+print("✅ ALL TESTS PASSED - IMPLEMENTATION VERIFIED!")
+print("="*60)
+print("\nFeature Summary:")
+print("  ✓ perception_failure_reason field in state")
+print("  ✓ 3 failure types detected: silence, noise, non_english")
+print("  ✓ Targeted re-record messages generated")
+print("  ✓ Edge routing logic respects failure reasons")
+print("  ✓ Escalates to therapist_review after MAX_RETRIES")
+print("\nReady for production testing with actual audio input.\n")
