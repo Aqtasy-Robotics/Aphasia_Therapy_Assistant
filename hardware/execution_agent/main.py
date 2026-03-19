@@ -13,8 +13,8 @@ from src.communication.models import ActionEnum
 from src.dispatcher import Dispatcher
 from src.services.audio_utils import list_audio_devices
 from src.services.ear import listen
-from src.services.face import show_face
-from src.services.head import move_head
+from src.services.face import show_face, shutdown_face
+from src.services.head import move_head, shutdown_head
 from src.services.mouth import speak
 from src.ui.body_app import show_ui
 from src.settings import load_settings_or_exit
@@ -96,8 +96,7 @@ Log Level: {settings.log_level}
     # Log configuration summary
     logger.info("Configuration loaded successfully")
     logger.debug(f"Audio sample rate: {settings.audio.sample_rate} Hz")
-    logger.debug(f"GPIO pins - Pan: {settings.gpio.servo_pan_pin}, "
-                f"Tilt: {settings.gpio.servo_tilt_pin}")
+    logger.debug(f"GPIO pin - Pan: {settings.gpio.servo_pan_pin}")
     logger.debug(f"OLED: {settings.oled.width}x{settings.oled.height} "
                 f"at {settings.oled.i2c_address}")
 
@@ -146,10 +145,15 @@ Log Level: {settings.log_level}
                 logger.exception("Error in polling loop: {}", e)
                 await asyncio.sleep(settings.polling.interval_seconds)
     finally:
-        # Ensure HTTP client is closed on shutdown
-        await api_client.aclose()
+        # Ensure hardware + HTTP client are closed on shutdown.
+        await asyncio.gather(
+            shutdown_head(),
+            shutdown_face(),
+            api_client.aclose(),
+            return_exceptions=True,
+        )
         logger.info("Shutdown complete")
-
+        
 if __name__ == "__main__":
     # Register signal handlers for graceful shutdown
     signal.signal(signal.SIGINT, handle_shutdown)

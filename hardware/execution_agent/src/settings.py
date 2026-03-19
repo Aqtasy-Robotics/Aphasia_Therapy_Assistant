@@ -41,10 +41,9 @@ class AudioConfig(BaseModel):
 
 
 class GPIOConfig(BaseModel):
-    """GPIO pin assignments for servos."""
+    """GPIO configuration for pan servo control."""
 
     servo_pan_pin: int = Field(ge=0, le=27, description="BCM pin number for pan servo")
-    servo_tilt_pin: int = Field(ge=0, le=27, description="BCM pin number for tilt servo")
     servo_min_pulse_width: float = Field(gt=0.0)
     servo_max_pulse_width: float = Field(gt=0.0)
 
