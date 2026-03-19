@@ -140,3 +140,17 @@ mock_states = [
     }
 ]
 
+routing_passed = True
+for i, test_case in enumerate(mock_states, 1):
+    state = test_case['state']
+    result = check_transcription_quality(state)
+    matched = result == test_case['expected_route']
+    routing_passed = routing_passed and matched
+    
+    status = "✅" if matched else "❌"
+    print(f"\n  Test 3.{i}: {test_case['name']}")
+    print(f"  State: {state}")
+    print(f"  Route returned: '{result}'")
+    print(f"  Expected: '{test_case['expected_route']}'")
+    print(f"  {status}")
+
