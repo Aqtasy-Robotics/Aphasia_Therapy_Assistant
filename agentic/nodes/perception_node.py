@@ -17,6 +17,8 @@ import soundfile as sf
 from dotenv import load_dotenv
 from groq import Groq
 
+from edges import CONFIDENCE_THRESHOLD
+from nodes.execution_node import _get_failure_reason_message
 from state import SpeechTherapyState
 
 load_dotenv()
@@ -74,34 +76,86 @@ def _transcribe_audio(file_path: str) -> tuple[str, float]:
     return text, confidence
 
 
+def _detect_perception_failure_reason(transcript: str, confidence: float, target_word: str | None) -> str | None:
+    """Infer why a recording attempt failed so we can give a better prompt.
+
+    The three common failure modes are:
+      - silence: user didn't speak (empty transcript)
+      - noise: low confidence but the transcript contains the expected word
+      - non_english: low confidence and the transcript doesn't match the target
+    """
+    if not transcript.strip():
+        return "silence"
+
+    if confidence < CONFIDENCE_THRESHOLD:
+        # If they said something different than the target word, assume they
+        # might be speaking in another language or saying a different phrase.
+        if target_word and target_word.strip() and target_word.lower() not in transcript.lower():
+            return "non_english"
+        return "noise"
+
+    return None
+
+
 # ── LangGraph node ───────────────────────────────────────────────────────────
 
 def perception_node(state: SpeechTherapyState) -> dict:
-    """
-    LangGraph node: record audio → transcribe → update state.
+    """LangGraph node: record audio → transcribe → update state.
+
     Increments retry_count so the conditional edge can cap retries.
+    Provides a targeted hint when re-recording to improve the patient's experience.
     """
     audio_path: str | None = None
+
+    # If we are re-recording, give a gentle hint about why the previous attempt failed.
+    prev_reason = state.get("perception_failure_reason")
+    target_word = state.get("target_word") or ""
+    if prev_reason:
+        msg = _get_failure_reason_message(prev_reason, target_word)
+        if msg:
+            print(msg)
+
+    retry_count = state.get("retry_count", 0) + 1
+    transcript_attempts = list(state.get("transcript_attempts") or [])
+
     try:
         audio_path = _record_audio()
         print("Transcribing audio...")
         text, confidence = _transcribe_audio(audio_path)
         print(f"Transcription: {text!r}  (confidence proxy: {confidence:.2f})")
 
+        failure_reason = _detect_perception_failure_reason(text, confidence, target_word)
+        transcript_attempts.append({
+            "transcript": text,
+            "confidence": confidence,
+            "failure_reason": failure_reason,
+        })
+
         return {
-            "transcript":       text,
-            "confidence_score": confidence,
-            "retry_count":      state.get("retry_count", 0) + 1,
-            "current_error":    None,
+            "transcript":               text,
+            "confidence_score":         confidence,
+            "retry_count":              retry_count,
+            "perception_failure_reason": failure_reason,
+            "transcript_attempts":      transcript_attempts,
+            "current_error":            None,
         }
 
     except Exception as exc:
         print(f"[perception_node] ERROR: {exc}")
+        failure_reason = "error"
+        transcript_attempts.append({
+            "transcript": "",
+            "confidence": -9.9,
+            "failure_reason": failure_reason,
+            "error": str(exc),
+        })
         return {
-            "transcript":       "",
-            "confidence_score": -9.9,
-            "retry_count":      state.get("retry_count", 0) + 1,
-            "current_error":    str(exc),
+            "transcript":               "",
+            "confidence_score":         -9.9,
+            "retry_count":              retry_count,
+            "perception_failure_reason": failure_reason,
+            "transcript_attempts":      transcript_attempts,
+            "current_error":            str(exc),
         }
     finally:
         if audio_path and os.path.exists(audio_path):

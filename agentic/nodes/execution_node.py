@@ -24,7 +24,12 @@ import time
 from pathlib import Path
 from typing import Optional
 
-from loguru import logger
+try:
+    from loguru import logger
+except ImportError:  # fall back to stdlib logging if loguru isn't installed
+    import logging
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger("execution_node")
 
 from db.mem0_store import add_session_memory
 from state import SpeechTherapyState
@@ -91,6 +96,35 @@ def _speak(text: str) -> Optional[str]:
                 engine.stop()
             except Exception:
                 pass
+
+
+def _get_failure_reason_message(reason: Optional[str], target_word: str) -> str:
+    """Generate a patient-facing prompt based on why transcription failed."""
+    if not reason:
+        return ""
+
+    reason = str(reason).lower()
+
+    if reason == "silence":
+        return (
+            "I didn’t hear anything. Please speak a little louder and more clearly so I can understand "
+            "the word."
+        )
+
+    if reason == "noise":
+        return (
+            "There is a lot of background noise, so I couldn't hear you clearly. "
+            "Can you move to a quieter place and try saying the word again?"
+        )
+
+    if reason == "non_english":
+        word = target_word.strip() or "the target word"
+        return (
+            f"It sounds like you said something different. Let's try again — please say the target word: '{word}'."
+        )
+
+    # Fallback for unrecognized failure reasons.
+    return "I had trouble understanding that. Please try saying the word again clearly."
 
 
 # ── LangGraph node ───────────────────────────────────────────────────────────

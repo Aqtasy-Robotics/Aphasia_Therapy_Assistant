@@ -1,0 +1,262 @@
+#:import dp kivy.metrics.dp
+
+<SpeechTherapyRoot>:
+    canvas.before:
+        Color:
+            rgba: 248/255, 250/255, 252/255, 1
+        Rectangle:
+            pos: self.pos
+            size: self.size
+
+    orientation: "vertical"
+    padding: 0
+    spacing: 0
+
+    # Top navigation bar
+    BoxLayout:
+        orientation: "horizontal"
+        size_hint_y: 0.08
+        padding: dp(15)
+        spacing: dp(10)
+        canvas.before:
+            Color:
+                rgba: 1, 1, 1, 1
+            Rectangle:
+                pos: self.pos
+                size: self.size
+            Color:
+                rgba: 0.9, 0.9, 0.92, 1
+            Line:
+                width: 1
+                rectangle: (self.x, self.y, self.width, self.height)
+
+        Button:
+            text: "← Back to Home"
+            size_hint_x: 0.3
+            background_normal: ""
+            background_color: (1, 1, 1, 0)
+            color: (23/255, 37/255, 84/255, 1)
+            font_size: 11
+            on_press: root.go_to_home()
+
+        Widget:
+            size_hint_x: 0.7
+
+    # Progress section
+    BoxLayout:
+        orientation: "vertical"
+        size_hint_y: 0.1
+        padding: dp(15)
+        spacing: dp(8)
+
+        BoxLayout:
+            size_hint_y: 0.5
+            spacing: dp(20)
+
+            Label:
+                text: "Word " + root.word_progress_text
+                font_size: 11
+                color: (107/255, 114/255, 128/255, 1)
+                size_hint_x: 0.5
+
+            Label:
+                text: "Category: " + root.current_category_text
+                font_size: 11
+                color: (107/255, 114/255, 128/255, 1)
+                size_hint_x: 0.5
+
+        # Progress bar
+        BoxLayout:
+            size_hint_y: 0.5
+            canvas.before:
+                Color:
+                    rgba: 0.9, 0.9, 0.92, 1
+                Rectangle:
+                    pos: self.pos
+                    size: self.size
+            canvas:
+                Color:
+                    rgba: 0, 102/255, 1, 1
+                Rectangle:
+                    pos: self.pos
+                    size: (self.width * root.progress_ratio, self.height)
+
+    # Main content area (word + controls)
+    BoxLayout:
+        orientation: "vertical"
+        size_hint_y: 0.72
+        padding: dp(30)
+        spacing: dp(30)
+
+        Widget:
+            size_hint_y: 0.15
+
+        # Word display with nav arrows
+        BoxLayout:
+            size_hint_y: 0.5
+            spacing: dp(20)
+
+            # Left arrow button
+            Button:
+                text: "<"
+                font_size: 32
+                bold: True
+                size_hint_x: 0.15
+                background_normal: ""
+                background_color: (0.9, 0.9, 0.92, 1)
+                color: (0, 102/255, 1, 1)
+                on_press: root.previous_word()
+                canvas.before:
+                    Color:
+                        rgba: 0.9, 0.9, 0.92, 1
+                    # Create circular button shape
+                    Line:
+                        width: 1
+                        circle: (self.center_x, self.center_y, self.width/2 - dp(5))
+
+            # Word display
+            BoxLayout:
+                size_hint_x: 0.7
+                
+                Label:
+                    text: root.current_word_text
+                    font_size: 72
+                    bold: True
+                    color: 0, 0, 0, 1
+                    size_hint_x: 1
+
+            # Right arrow button
+            Button:
+                text: ">"
+                font_size: 32
+                bold: True
+                size_hint_x: 0.15
+                background_normal: ""
+                background_color: (0.9, 0.9, 0.92, 1)
+                color: (0, 102/255, 1, 1)
+                on_press: root.next_word()
+                canvas.before:
+                    Color:
+                        rgba: 0.9, 0.9, 0.92, 1
+                    Line:
+                        width: 1
+                        circle: (self.center_x, self.center_y, self.width/2 - dp(5))
+
+        Widget:
+            size_hint_y: 0.1
+
+        # Microphone button
+        BoxLayout:
+            size_hint_y: 0.25
+            padding: dp(20)
+
+            Button:
+                text: "🎤"
+                font_size: 48
+                background_normal: ""
+                background_color: (0, 102/255, 1, 1)
+                color: (1, 1, 1, 1)
+                on_press: root.on_start_stop_button_press()
+                canvas.before:
+                    Color:
+                        rgba: 0, 102/255, 1, 1
+                    Ellipse:
+                        pos: self.pos
+                        size: self.size
+
+            Label:
+                text: "Click to speak"
+                font_size: 12
+                color: (107/255, 114/255, 128/255, 1)
+
+    # Bottom stats
+    BoxLayout:
+        orientation: "horizontal"
+        size_hint_y: 0.1
+        padding: dp(15)
+        spacing: dp(10)
+
+        # Accuracy stat
+        BoxLayout:
+            orientation: "vertical"
+            canvas.before:
+                Color:
+                    rgba: 1, 1, 1, 1
+                Rectangle:
+                    pos: self.pos
+                    size: self.size
+                Color:
+                    rgba: 0.9, 0.9, 0.92, 1
+                Line:
+                    width: 1
+                    rectangle: (self.x, self.y, self.width, self.height)
+            padding: dp(8)
+            spacing: dp(2)
+
+            Label:
+                text: "Accuracy"
+                font_size: 9
+                color: (107/255, 114/255, 128/255, 1)
+
+            Label:
+                text: root.accuracy_text
+                font_size: 18
+                bold: True
+                color: (0, 102/255, 1, 1)
+
+        # Vowels stat
+        BoxLayout:
+            orientation: "vertical"
+            canvas.before:
+                Color:
+                    rgba: 1, 1, 1, 1
+                Rectangle:
+                    pos: self.pos
+                    size: self.size
+                Color:
+                    rgba: 0.9, 0.9, 0.92, 1
+                Line:
+                    width: 1
+                    rectangle: (self.x, self.y, self.width, self.height)
+            padding: dp(8)
+            spacing: dp(2)
+
+            Label:
+                text: "Vowels"
+                font_size: 9
+                color: (107/255, 114/255, 128/255, 1)
+
+            Label:
+                text: root.vowel_text
+                font_size: 18
+                bold: True
+                color: (6/255, 78/255, 59/255, 1)
+
+        # Consonants stat
+        BoxLayout:
+            orientation: "vertical"
+            canvas.before:
+                Color:
+                    rgba: 1, 1, 1, 1
+                Rectangle:
+                    pos: self.pos
+                    size: self.size
+                Color:
+                    rgba: 0.9, 0.9, 0.92, 1
+                Line:
+                    width: 1
+                    rectangle: (self.x, self.y, self.width, self.height)
+            padding: dp(8)
+            spacing: dp(2)
+
+            Label:
+                text: "Detected"
+                font_size: 9
+                color: (107/255, 114/255, 128/255, 1)
+
+            Label:
+                text: root.detected_word_text
+                font_size: 16
+                bold: True
+                color: (23/255, 37/255, 84/255, 1)
+

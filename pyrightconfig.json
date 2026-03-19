@@ -1,14 +1,19 @@
 {
   "include": ["."],
-  "pythonPath": "<python>",
-  "pythonVersion": "3.10",
+  "pythonVersion": "3.13",
   "typeCheckingMode": "basic",
   "pythonPlatform": "Windows",
+  "venvPath": ".",
   "executionEnvironments": [
     {
-      "root": ".",
-      "pythonPath": "<python>"
+      "root": "hardware/execution_agent",
+      "venv": "venv"
+    },
+    {
+      "root": "."
     }
   ],
-  "extraPaths": ["./Agentic"]
+  "extraPaths": [".", "Agentic", "hardware/execution_agent/src"],
+  "ignore": ["c:\\Program Files\\Python313\\Lib\\multiprocessing"],
+  "reportMissingImports": false
 }
