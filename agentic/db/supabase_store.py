@@ -365,6 +365,42 @@ def fetch_personalization_config(
     return config
 
 
+def _is_bucket_not_found_error(error: Exception) -> bool:
+    """Return True when a Supabase Storage operation fails due to missing bucket."""
+
+    message = str(error).lower()
+    return "bucket not found" in message
+
+
+def _ensure_storage_bucket(client: Client, bucket_name: str) -> bool:
+    """Ensure the storage bucket exists; create it when missing."""
+
+    storage: Any = client.storage
+
+    try:
+        storage.get_bucket(bucket_name)
+        return True
+    except Exception as exc:
+        if not _is_bucket_not_found_error(exc):
+            print(f"[agentic-db] Could not verify bucket '{bucket_name}': {exc}")
+            return False
+
+    try:
+        try:
+            storage.create_bucket(bucket_name, options={"public": False})
+        except TypeError:
+            # Fallback for versions expecting the public flag directly.
+            storage.create_bucket(bucket_name, public=False)
+        print(f"[agentic-db] Created missing storage bucket '{bucket_name}'.")
+        return True
+    except Exception as create_exc:
+        message = str(create_exc).lower()
+        if "already exists" in message or "duplicate" in message or "conflict" in message:
+            return True
+        print(f"[agentic-db] Failed to create storage bucket '{bucket_name}': {create_exc}")
+        return False
+
+
 def persist_session_state(state: SpeechTherapyState) -> Optional[str]:
     """Persist the final session state into the `session_reports` table.
 
@@ -605,8 +641,25 @@ def persist_session_state(state: SpeechTherapyState) -> Optional[str]:
         try:
             client.storage.from_(bucket_name).upload(csv_object_path, csv_bytes)
         except Exception as upload_exc:
-            print(f"[agentic-db] CSV upload failed (bucket={bucket_name}, path={csv_object_path}): {upload_exc}")
-            return
+            if _is_bucket_not_found_error(upload_exc):
+                if _ensure_storage_bucket(client, bucket_name):
+                    try:
+                        client.storage.from_(bucket_name).upload(csv_object_path, csv_bytes)
+                    except Exception as retry_exc:
+                        print(
+                            f"[agentic-db] CSV upload retry failed "
+                            f"(bucket={bucket_name}, path={csv_object_path}): {retry_exc}"
+                        )
+                        return
+                else:
+                    print(
+                        f"[agentic-db] CSV upload failed and bucket could not be ensured "
+                        f"(bucket={bucket_name}, path={csv_object_path})."
+                    )
+                    return
+            else:
+                print(f"[agentic-db] CSV upload failed (bucket={bucket_name}, path={csv_object_path}): {upload_exc}")
+                return
 
         try:
             client.table(_SESSION_REPORTS_TABLE).update({"csv_path": csv_object_path}).eq("id", inserted_report_id).execute()
