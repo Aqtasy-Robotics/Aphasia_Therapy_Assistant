@@ -18,10 +18,8 @@ NOTE: The GPIO / OLED / servo logic referenced in settings is NOT removed —
 from __future__ import annotations
 
 import os
-import sys
 import tempfile
 import time
-from pathlib import Path
 from typing import Optional
 
 from loguru import logger
@@ -29,12 +27,27 @@ from loguru import logger
 from db.mem0_store import add_session_memory
 from state import SpeechTherapyState
 
-# ── Optional TTS (pyttsx3 works offline on Raspberry Pi) ────────────────────
+# ── Optional TTS (Cartesia cloud TTS) ───────────────────────────────────────
 try:
-    import pyttsx3
-    _TTS_AVAILABLE = True
+    from cartesia import Cartesia
 except Exception:
+    Cartesia = None
+
+_CARTESIA_API_KEY = os.getenv("CARTESIA_API_KEY")
+_CARTESIA_MODEL_ID = os.getenv("CARTESIA_MODEL_ID", "sonic-3")
+_CARTESIA_VOICE_ID = os.getenv("CARTESIA_VOICE_ID")
+_CARTESIA_SAMPLE_RATE = int(os.getenv("CARTESIA_SAMPLE_RATE", "22050"))
+
+if Cartesia is None or not _CARTESIA_API_KEY:
     _TTS_AVAILABLE = False
+    _cartesia_client = None
+else:
+    _TTS_AVAILABLE = True
+    try:
+        _cartesia_client = Cartesia(api_key=_CARTESIA_API_KEY)
+    except Exception:
+        _cartesia_client = None
+        _TTS_AVAILABLE = False
 
 
 # ── Lazy settings load (original Settings infrastructure) ───────────────────
@@ -87,30 +100,33 @@ def _speak(text: str) -> Optional[str]:
     Returns path to saved .wav if successful, else None.
     Falls back to printing text if TTS is unavailable.
     """
-    if not _TTS_AVAILABLE:
+    if not _TTS_AVAILABLE or _cartesia_client is None:
         logger.warning("TTS not available — text-only mode.")
         return None
+    if not _CARTESIA_VOICE_ID:
+        logger.warning("CARTESIA_VOICE_ID missing — text-only mode.")
+        return None
 
-    engine = None
     try:
-        # Create a fresh engine for each utterance to avoid runAndWait hangs
-        # when multiple words are processed in one session.
-        engine = pyttsx3.init()
+        # Generate wav output directly from Cartesia and persist to temp file.
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
         tmp.close()
-        engine.save_to_file(text, tmp.name)
-        engine.runAndWait()
+        response = _cartesia_client.tts.generate(
+            model_id=_CARTESIA_MODEL_ID,
+            transcript=text,
+            voice={"mode": "id", "id": _CARTESIA_VOICE_ID},
+            output_format={
+                "container": "wav",
+                "encoding": "pcm_f32le",
+                "sample_rate": _CARTESIA_SAMPLE_RATE,
+            },
+        )
+        response.write_to_file(tmp.name)
         logger.info("Audio feedback saved to {}", tmp.name)
         return tmp.name
     except Exception as exc:
-        logger.error("TTS error: {}", exc)
+        logger.error("Cartesia TTS error: {}", exc)
         return None
-    finally:
-        if engine is not None:
-            try:
-                engine.stop()
-            except Exception:
-                pass
 
 
 # ── LangGraph node ───────────────────────────────────────────────────────────
