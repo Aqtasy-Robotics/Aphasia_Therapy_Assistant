@@ -86,3 +86,57 @@ for i, test in enumerate(test_cases, 1):
         print(f"  Keywords found: {keywords_present}")
     print(f"  {status}")
 
+if all_passed:
+    print("\n✅ All message generation tests passed!")
+else:
+    print("\n❌ Some message generation tests failed!")
+    sys.exit(1)
+
+# ── Test 3: Edge Routing Logic ─────────────────────────────────
+print("\n[TEST 3] Edge Routing with Perception Failure Reason")
+print("-" * 60)
+
+# Mock state for testing edge routing
+mock_states = [
+    {
+        'name': 'Successful transcription (no failure reason)',
+        'state': {
+            'transcript': 'the cat sat',
+            'confidence_score': -0.5,
+            'retry_count': 0,
+            'perception_failure_reason': None
+        },
+        'expected_route': 'analyze_phonemes'
+    },
+    {
+        'name': 'Retryable failure (silence)',
+        'state': {
+            'transcript': 'the cat sat',
+            'confidence_score': -1.5,
+            'retry_count': 0,
+            'perception_failure_reason': 'silence'
+        },
+        'expected_route': 're_record'
+    },
+    {
+        'name': 'Retryable failure (noise)',
+        'state': {
+            'transcript': 'the cat sat',
+            'confidence_score': -2.0,
+            'retry_count': 1,
+            'perception_failure_reason': 'noise'
+        },
+        'expected_route': 're_record'
+    },
+    {
+        'name': 'Max retries exceeded',
+        'state': {
+            'transcript': '',
+            'confidence_score': -3.0,
+            'retry_count': 2,  # MAX_RECORD_RETRIES = 2
+            'perception_failure_reason': 'silence'
+        },
+        'expected_route': 'therapist_review'
+    }
+]
+
