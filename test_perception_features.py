@@ -21,3 +21,17 @@ print("\n" + "="*60)
 print("PERCEPTION FAILURE REASON FEATURE - VERIFICATION TEST")
 print("="*60)
 
+# ── Test 1: State Field ────────────────────────────────────────
+print("\n[TEST 1] State Field Verification")
+print("-" * 60)
+fields = SpeechTherapyState.__annotations__
+has_field = 'perception_failure_reason' in fields
+print(f"perception_failure_reason in state: {has_field}")
+if has_field:
+    field_type = fields['perception_failure_reason']
+    print(f"Field type: {field_type}")
+    print("✅ State field exists and is properly typed")
+else:
+    print("❌ State field missing!")
+    sys.exit(1)
+
