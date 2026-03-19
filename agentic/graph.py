@@ -12,7 +12,7 @@ High-level pipeline flow:
 """
 
 from __future__ import annotations  # enable postponed evaluation of type annotations
-from asyncio import graph  # imported but unused; kept to mirror original file structure
+#from asyncio import graph  # imported but unused; kept to mirror original file structure
 import time  # used to timestamp session start and compute duration
 
 from langgraph.graph import StateGraph, END  # core LangGraph primitives for building the state machine
@@ -261,7 +261,7 @@ def run_session() -> SpeechTherapyState:
         print(f"Supabase session report id: {final_state['report_id']}")  # show the Supabase report ID if persistence succeeded
     if final_state.get("session_outcome"):
         print(f"Session outcome: {final_state['session_outcome']}")       # show the explicit outcome label for this run
-    return final_state  # hand the final state back to the caller (for tests / further inspection)
+    return final_state  # type: ignore # hand the final state back to the caller (for tests / further inspection)
 
 
 if __name__ == "__main__":
