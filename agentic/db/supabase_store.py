@@ -14,7 +14,8 @@ from typing import Any, Dict, Optional
 from dotenv import load_dotenv
 from supabase import Client, create_client
 
-from state import SpeechTherapyState
+# FIXED: Absolute import from the root project level
+from agentic.state import SpeechTherapyState
 
 # Load environment from the agentic .env (and parent env)
 load_dotenv()

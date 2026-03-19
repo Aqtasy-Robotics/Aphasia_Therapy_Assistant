@@ -1,157 +1,105 @@
 import os
-from uuid import UUID
-from typing import List, Optional
-from fastapi import FastAPI, HTTPException, status
-from pydantic import BaseModel, Field
+import time
+from datetime import datetime
+from typing import Optional, Dict, Any
+
+from fastapi import FastAPI, UploadFile, File
+from pydantic import BaseModel
 from supabase import create_client, Client
 from dotenv import load_dotenv
 
-# Load credentials from .env
+# Absolute imports from the root project level
+from agentic.db.supabase_store import persist_session_state
+from agentic.state import SpeechTherapyState
+
 load_dotenv()
 
-#Creating the Fast API App
 app = FastAPI(
     title="Waabi Robot Bridge API",
-    description="Backend bridge between Waabi hardware and Aqtasy Supabase DB",
-    version="1.1.0"
+    description="Backend bridge between Waabi hardware and Aqtasy Supabase DB"
 )
 
-# Initialize Supabase Client
 url: str = os.getenv("SUPABASE_URL")
 key: str = os.getenv("SUPABASE_SERVICE_KEY")
 
 if not url or not key:
-    raise RuntimeError("Missing Supabase credentials in environment variables.")
+    raise ValueError("Missing SUPABASE credentials. Check your root .env file.")
 
-# Connecting to Supabase
 supabase: Client = create_client(url, key)
 
+class ExecutionCommand(BaseModel):
+    command_id: str
+    action: str
+    payload: Dict[str, Any] = {}
+    timestamp: Optional[float] = None
 
-# --- DATA MODELS (PYDANTIC) ---
-
-class SessionUpdate(BaseModel):
-    """Schema for updating session status from the robot."""
-    status: str = Field(..., pattern="^(upcoming|in-progress|completed|cancelled)$")
-
-# This session response structure is based on the way the supabase tables were created
-class SessionResponse(BaseModel):
-    """Schema for session data returned to the robot."""
-    id: int
-    patient_id: UUID
-    therapist_id: UUID
-    session_date: str
-    session_time: str
-    bot_name: str
+class CommandAck(BaseModel):
+    command_id: str
+    device_id: str
     status: str
+    result: Optional[Dict[str, Any]] = None
+    timestamp: Optional[float] = None
 
-
-class PatientProfile(BaseModel):
-    """Simplified profile for robot greeting logic."""
-    full_name: str
-#the only data the robot need is the patient name
-
-
-# --- ROBOT ENDPOINTS ---
-
-@app.get("/", tags=["Health"]) # Check if the bridge is active
+@app.get("/health", tags=["Health"])
 async def health_check():
-    return {"status": "online", "robot": "Waabi", "bridge": "Active"} # Monitors status of the robot
+    return {"status": "online", "robot": "Waabi", "bridge": "Active"}
 
-# GEts the robot agenda for that particular day
-@app.get(
-    "/robot/agenda/{therapist_id}",
-    response_model=List[SessionResponse],
-    tags=["Robot Core"]
-)
-
-# The robot gets the therapist id to obtain the agenda
-async def get_robot_agenda(therapist_id: UUID):
-    """
-    Fetches all 'upcoming' sessions for Waabi's specific therapist.
-    Ensures the robot knows who it is seeing today.
-    """
+@app.get("/commands/{device_id}", response_model=Optional[ExecutionCommand], tags=["Robot Bridge"])
+async def get_robot_command(device_id: str):
     try:
-        # Query sessions filtered by therapist and 'upcoming' status
-        response = supabase.table("sessions") \
-            .select("*") \
-            .eq("therapist_id", str(therapist_id)) \
-            .eq("status", "upcoming") \
-            .order("session_date", desc=False) \
-            .execute()
-
-        return response.data
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch agenda: {str(e)}"
+        profile_response = supabase.table("profiles").select("full_name").eq("id", device_id).single().execute()
+        profile = profile_response.data or {}
+        name = profile.get("full_name", "there")
+        now_iso = datetime.utcnow().isoformat()
+        
+        return ExecutionCommand(
+            command_id=f"cmd-{now_iso}",
+            action="speak",
+            payload={"text": f"Hello {name}, let's start our session."},
+            timestamp=datetime.utcnow().timestamp(),
         )
+    except Exception:
+        return None 
 
+@app.post("/status", tags=["Robot Bridge"])
+async def post_robot_status(ack: CommandAck):
+    result: Dict[str, Any] = ack.result or {}
+    
+    state: SpeechTherapyState = {
+        "patient_id": result.get("patient_id") or ack.device_id,
+        "assignment_id": result.get("assignment_id"),
+        "target_word": result.get("target_word"),
+        "transcript": result.get("transcript"),
+        "error_report": result.get("error_report"),
+        "semantic_label": result.get("semantic_label"),
+        "feedback": result.get("feedback"),
+        "practice_exercise": result.get("practice_exercise"),
+        "session_start": result.get("session_start") or time.time(),
+        "session_duration_secs": result.get("session_duration_secs"),
+        "audio_path": None,
+        "confidence_score": None,
+        "retry_count": 0,
+        "patient_name": result.get("patient_name", ""),
+        "target_phonemes": None,
+        "attempt_phonemes": None,
+        "feedback_attempts": 0,
+        "word_source": result.get("word_source"),
+        "report_id": None,
+        "audio_output_path": None,
+    }
+    
+    report_id = persist_session_state(state)
+    return {"report_id": report_id}
 
-@app.patch(
-    "/robot/session/{session_id}",
-    response_model=SessionResponse,
-    tags=["Robot Core"]
-)
-
-# The session data is taken from the session table in supabase
-async def update_session_status(session_id: int, update: SessionUpdate):
-    """
-    Updates session status (e.g., Robot moves session to 'in-progress' upon start).
-    """
+@app.post("/audio/{device_id}", tags=["Robot Bridge"])
+async def upload_robot_audio(device_id: str, file: UploadFile = File(...)):
     try:
-        response = supabase.table("sessions") \
-            .update({"status": update.status}) \
-            .eq("id", session_id) \
-            .execute()
-
-        if not response.data:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Session ID not found in database."
-            )
-
-        return response.data[0]
+        content = await file.read()
+        file_path = f"{device_id}/{int(time.time())}_{file.filename}"
+        
+        supabase.storage.from_("robot-audio").upload(file_path, content)
+        
+        return {"status": "ok", "path": file_path}
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Status update failed: {str(e)}"
-        )
-
-# Gets the patient name from the profiles table
-@app.get(
-    "/robot/patient/{patient_id}",
-    response_model=PatientProfile,
-    tags=["Utility"]
-)
-async def get_patient_name(patient_id: UUID):
-    """
-    Allows Waabi to fetch a patient's name for personalized greetings.
-    """
-    try:
-        response = supabase.table("profiles") \
-            .select("full_name") \
-            .eq("id", str(patient_id)) \
-            .single() \
-            .execute()
-
-        if not response.data:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Patient profile not found."
-            )
-
-        return response.data
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error fetching patient data: {str(e)}"
-        )
-
-
-# --- SERVER START ---
-
-if __name__ == "__main__":
-    import uvicorn
-
-    # Use 0.0.0.0 so the Raspberry Pi can connect over your local network
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+        print(f"Audio upload failed: {e}")
+        return {"status": "error", "message": str(e)}
