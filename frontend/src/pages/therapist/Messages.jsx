@@ -17,8 +17,8 @@ import {
 const TherapistMessages = () => {
   const [assignedPatients, setAssignedPatients] = useState([]);
   const [showNewChatModal, setShowNewChatModal] = useState(false);
-  const [activeChat, setActiveChat] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [_activeChat, _setActiveChat] = useState(null);
+  const [_loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchAssignedPatients = async () => {

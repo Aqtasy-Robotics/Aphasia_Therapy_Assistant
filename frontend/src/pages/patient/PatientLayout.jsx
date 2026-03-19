@@ -94,7 +94,7 @@ const PatientLayout = () => {
             onClick={() => handleNav("/patient-chat")}
           />
           <NavItem
-            label="Settings"
+            label="My Profile"
             active={isActive("/profile")}
             onClick={() => handleNav("/profile")}
           />
