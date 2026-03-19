@@ -18,7 +18,7 @@ sentence-transformers>=2.2.2
 wordfreq>=3.0.0
 
 # ── Text-to-speech (execution agent) ────────────────────────────
-cartesia>=3.0.0
+pyttsx3>=2.90
 
 # ── Utilities ────────────────────────────────────────────────────
 python-dotenv>=1.0.0

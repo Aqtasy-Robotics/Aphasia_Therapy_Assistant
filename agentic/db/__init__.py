@@ -5,6 +5,12 @@ agentic package. Uses a relative import so the package can be imported
 when ``agentic`` is run as a script.
 """
 
-from .supabase_store import persist_session_state
+from .mem0_store import add_session_memory, search_session_memories
+from .supabase_store import persist_session_state, fetch_personalization_config
 
-__all__ = ["persist_session_state"]
+__all__ = [
+	"persist_session_state",
+	"fetch_personalization_config",
+	"add_session_memory",
+	"search_session_memories",
+]

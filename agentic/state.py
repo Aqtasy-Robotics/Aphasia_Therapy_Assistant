@@ -17,7 +17,6 @@ class SpeechTherapyState(TypedDict):
     audio_path:         Optional[str]        # temp .wav file path
     transcript:         Optional[str]        # whisper output
     confidence_score:   Optional[float]      # avg_logprob from whisper
-    perception_failure_reason: Optional[str] # reason for perception failure: "silence", "noise", "non_english", or None if successful
     retry_count:        int                  # how many re-record attempts
     transcript_attempts: Optional[List[Dict[str, Any]]]  # all perception attempts across session (for audit/debug)
 

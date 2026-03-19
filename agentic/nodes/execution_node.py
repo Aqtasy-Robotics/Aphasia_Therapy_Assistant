@@ -18,8 +18,10 @@ NOTE: The GPIO / OLED / servo logic referenced in settings is NOT removed —
 from __future__ import annotations
 
 import os
+import sys
 import tempfile
 import time
+from pathlib import Path
 from typing import Optional
 
 from loguru import logger
@@ -27,27 +29,12 @@ from loguru import logger
 from db.mem0_store import add_session_memory
 from state import SpeechTherapyState
 
-# ── Optional TTS (Cartesia cloud TTS) ───────────────────────────────────────
+# ── Optional TTS (pyttsx3 works offline on Raspberry Pi) ────────────────────
 try:
-    from cartesia import Cartesia
-except Exception:
-    Cartesia = None
-
-_CARTESIA_API_KEY = os.getenv("CARTESIA_API_KEY")
-_CARTESIA_MODEL_ID = os.getenv("CARTESIA_MODEL_ID", "sonic-3")
-_CARTESIA_VOICE_ID = os.getenv("CARTESIA_VOICE_ID")
-_CARTESIA_SAMPLE_RATE = int(os.getenv("CARTESIA_SAMPLE_RATE", "22050"))
-
-if Cartesia is None or not _CARTESIA_API_KEY:
-    _TTS_AVAILABLE = False
-    _cartesia_client = None
-else:
+    import pyttsx3
     _TTS_AVAILABLE = True
-    try:
-        _cartesia_client = Cartesia(api_key=_CARTESIA_API_KEY)
-    except Exception:
-        _cartesia_client = None
-        _TTS_AVAILABLE = False
+except Exception:
+    _TTS_AVAILABLE = False
 
 
 # ── Lazy settings load (original Settings infrastructure) ───────────────────
@@ -74,59 +61,36 @@ def _get_settings():
 
 # ── Audio output helper ──────────────────────────────────────────────────────
 
-def _get_failure_reason_message(failure_reason: str | None, target_word: str) -> str:
-    """
-    Generate a customized message based on perception failure reason.
-    Returns empty string if no failure (reason is None).
-    """
-    if not failure_reason:
-        return ""
-    
-    if failure_reason == "silence":
-        return "I didn't hear you clearly. Please speak a bit louder and try again. "
-    elif failure_reason == "noise":
-        return "There's too much background noise. Can you move to a quieter place and try again? "
-    elif failure_reason == "non_english":
-        return f"Let's focus on the target word. The word is: {target_word}. Please say it clearly and try again. "
-    elif failure_reason == "error":
-        return "I had trouble recording. Please try again. "
-    else:
-        return ""
-
-
 def _speak(text: str) -> Optional[str]:
     """
     Convert feedback text to speech.
     Returns path to saved .wav if successful, else None.
     Falls back to printing text if TTS is unavailable.
     """
-    if not _TTS_AVAILABLE or _cartesia_client is None:
+    if not _TTS_AVAILABLE:
         logger.warning("TTS not available — text-only mode.")
         return None
-    if not _CARTESIA_VOICE_ID:
-        logger.warning("CARTESIA_VOICE_ID missing — text-only mode.")
-        return None
 
+    engine = None
     try:
-        # Generate wav output directly from Cartesia and persist to temp file.
+        # Create a fresh engine for each utterance to avoid runAndWait hangs
+        # when multiple words are processed in one session.
+        engine = pyttsx3.init()
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
         tmp.close()
-        response = _cartesia_client.tts.generate(
-            model_id=_CARTESIA_MODEL_ID,
-            transcript=text,
-            voice={"mode": "id", "id": _CARTESIA_VOICE_ID},
-            output_format={
-                "container": "wav",
-                "encoding": "pcm_f32le",
-                "sample_rate": _CARTESIA_SAMPLE_RATE,
-            },
-        )
-        response.write_to_file(tmp.name)
+        engine.save_to_file(text, tmp.name)
+        engine.runAndWait()
         logger.info("Audio feedback saved to {}", tmp.name)
         return tmp.name
     except Exception as exc:
-        logger.error("Cartesia TTS error: {}", exc)
+        logger.error("TTS error: {}", exc)
         return None
+    finally:
+        if engine is not None:
+            try:
+                engine.stop()
+            except Exception:
+                pass
 
 
 # ── LangGraph node ───────────────────────────────────────────────────────────
@@ -134,22 +98,20 @@ def _speak(text: str) -> Optional[str]:
 def execution_node(state: SpeechTherapyState) -> dict:
     """
     LangGraph node: deliver feedback as audio + text, mark session complete.
-    Customizes message based on perception_failure_reason if present.
     """
     _get_settings()   # initialise hardware config if available
 
-    feedback              = state.get("feedback") or {}
-    feedback_text         = feedback.get("feedback_text", "No feedback generated.")
-    practice              = state.get("practice_exercise", "")
-    patient_name          = state.get("patient_name", "friend")
-    target_word           = state.get("target_word", "")
-    error_report          = state.get("error_report") or {}
-    error_summary         = error_report.get("error_summary") or {}
-    semantic_label        = state.get("semantic_label", "N/A")
-    perception_fail_reason = state.get("perception_failure_reason")
-    target_words          = state.get("target_words") or []
-    current_index         = int(state.get("current_target_index", 0) or 0)
-    transcript            = state.get("transcript", "")
+    feedback         = state.get("feedback") or {}
+    feedback_text    = feedback.get("feedback_text", "No feedback generated.")
+    practice         = state.get("practice_exercise", "")
+    patient_name     = state.get("patient_name", "friend")
+    target_word      = state.get("target_word", "")
+    error_report     = state.get("error_report") or {}
+    error_summary    = error_report.get("error_summary") or {}
+    semantic_label   = state.get("semantic_label", "N/A")
+    target_words     = state.get("target_words") or []
+    current_index    = int(state.get("current_target_index", 0) or 0)
+    transcript       = state.get("transcript", "")
 
     # ── Terminal summary ─────────────────────────────────────────
     print("\n" + "█" * 55)
@@ -160,8 +122,6 @@ def execution_node(state: SpeechTherapyState) -> dict:
     print(f"  Accuracy   : {error_report.get('accuracy', 'N/A')}%")
     print(f"  Errors     : {error_report.get('total_errors', 'N/A')}")
     print(f"  Semantic   : {semantic_label}")
-    if perception_fail_reason:
-        print(f"  Perception : {perception_fail_reason}")
     print("─" * 55)
     print(f"  FEEDBACK:\n  {feedback_text}")
     print("─" * 55)
@@ -169,10 +129,9 @@ def execution_node(state: SpeechTherapyState) -> dict:
         print(f"  PRACTICE:\n  {practice}")
     print("█" * 55 + "\n")
 
-    # ── Build full speech with reason-specific message prefix ────────────
-    failure_msg   = _get_failure_reason_message(perception_fail_reason, target_word)
-    full_speech   = f"{failure_msg}{feedback_text}  {practice}" if practice else f"{failure_msg}{feedback_text}"
-    audio_path    = _speak(full_speech)
+    # ── Audio output ─────────────────────────────────────────────
+    full_speech = f"{feedback_text}  {practice}" if practice else feedback_text
+    audio_path  = _speak(full_speech)
 
     if audio_path:
         print(f"🔊 Audio saved → {audio_path}")

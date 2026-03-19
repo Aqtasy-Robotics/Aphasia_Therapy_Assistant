@@ -74,54 +74,11 @@ def _transcribe_audio(file_path: str) -> tuple[str, float]:
     return text, confidence
 
 
-def _detect_failure_reason(audio_path: str, transcript: str, confidence: float) -> str | None:
-    """
-    Classify the reason for a perception failure.
-    Returns: "silence", "noise", "non_english", or None (success).
-    
-    Priority: silence > non_english > noise
-    (silence is most obvious user error, noise is detectable from confidence, 
-     non-English is least certain but important for patient guidance).
-    """
-    
-    # ── Detect silence: RMS energy of audio is very low ───────────────────
-    try:
-        audio_data, _ = sf.read(audio_path)
-        rms_energy = np.sqrt(np.mean(audio_data ** 2))
-        
-        # If RMS is below threshold (0.01), audio is essentially silent
-        if rms_energy < 0.01:
-            print("[detection] Silence detected (RMS energy too low).")
-            return "silence"
-    except Exception as exc:
-        print(f"[detection] Could not compute RMS energy: {exc}")
-    
-    # ── Detect non-English: Empty or very short transcript despite good recording ─
-    # If we have a recording but got almost nothing back, likely non-English
-    # This is a heuristic: could also check if Whisper detected a different language
-    if not transcript.strip() or (len(transcript.strip()) < 2 and confidence > -2.0):
-        # Transcript is empty or too short, but confidence suggests audio was OK
-        # Likely non-English or gibberish
-        print("[detection] Possible non-English: empty/short transcript with marginal confidence.")
-        return "non_english"
-    
-    # ── Detect noise: Low confidence + some transcript ──────────────────
-    # Confidence < -1.2 suggests noisy recording, but transcript exists
-    NOISE_CONFIDENCE_THRESHOLD = -1.2
-    if confidence < NOISE_CONFIDENCE_THRESHOLD and transcript.strip():
-        print(f"[detection] Noise detected (confidence {confidence:.2f} below {NOISE_CONFIDENCE_THRESHOLD}).")
-        return "noise"
-    
-    # ── No failure detected ───────────────────────────────────────────────
-    return None
-
-
 # ── LangGraph node ───────────────────────────────────────────────────────────
 
 def perception_node(state: SpeechTherapyState) -> dict:
     """
     LangGraph node: record audio → transcribe → update state.
-    Detects failure reason (silence, noise, non-English) if transcription fails.
     Increments retry_count so the conditional edge can cap retries.
     """
     audio_path: str | None = None
@@ -131,25 +88,20 @@ def perception_node(state: SpeechTherapyState) -> dict:
         text, confidence = _transcribe_audio(audio_path)
         print(f"Transcription: {text!r}  (confidence proxy: {confidence:.2f})")
 
-        # Detect failure reason (if any)
-        failure_reason = _detect_failure_reason(audio_path, text, confidence) if audio_path else None
-
         return {
-            "transcript":              text,
-            "confidence_score":        confidence,
-            "perception_failure_reason": failure_reason,
-            "retry_count":             state.get("retry_count", 0) + 1,
-            "current_error":           None,
+            "transcript":       text,
+            "confidence_score": confidence,
+            "retry_count":      state.get("retry_count", 0) + 1,
+            "current_error":    None,
         }
 
     except Exception as exc:
         print(f"[perception_node] ERROR: {exc}")
         return {
-            "transcript":              "",
-            "confidence_score":        -9.9,
-            "perception_failure_reason": "error",
-            "retry_count":             state.get("retry_count", 0) + 1,
-            "current_error":           str(exc),
+            "transcript":       "",
+            "confidence_score": -9.9,
+            "retry_count":      state.get("retry_count", 0) + 1,
+            "current_error":    str(exc),
         }
     finally:
         if audio_path and os.path.exists(audio_path):

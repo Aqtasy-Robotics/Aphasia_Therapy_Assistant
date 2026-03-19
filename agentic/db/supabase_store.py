@@ -14,8 +14,12 @@ from typing import Any, Dict, Optional
 from dotenv import load_dotenv
 from supabase import Client, create_client
 
-# FIXED: Absolute import from the root project level
-from agentic.state import SpeechTherapyState
+try:
+    # Package import path used when backend imports agentic.* modules.
+    from agentic.state import SpeechTherapyState
+except ImportError:
+    # Local import path used when running agentic scripts directly.
+    from state import SpeechTherapyState
 
 # Load environment from the agentic .env (and parent env)
 load_dotenv()
