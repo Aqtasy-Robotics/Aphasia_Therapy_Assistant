@@ -10,7 +10,7 @@ from src.communication.api_client import ApiClient
 from src.communication.models import ActionEnum, CommandAck, ExecutionCommand, StatusEnum
 from src.settings import Settings
 
-DriverFunc = Callable[[Dict[str, Any]], Awaitable[Dict[str, Any]]]
+DriverFunc = Callable[..., Awaitable[Dict[str, Any]]]
 
 
 class Dispatcher:
@@ -63,6 +63,9 @@ class Dispatcher:
             if action == ActionEnum.LISTEN and self._api_client is not None:
                 # listen() needs api_client for audio upload and settings for device selection
                 result = await driver(payload, self._api_client, self._settings)
+            elif action in (ActionEnum.MOVE_HEAD, ActionEnum.SHOW_FACE):
+                # head/face drivers need settings for hardware runtime config
+                result = await driver(payload, self._settings)
             elif action == ActionEnum.SPEAK:
                 # speak() needs settings for model path and audio config
                 result = await driver(payload, self._settings)
