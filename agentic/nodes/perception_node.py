@@ -74,6 +74,28 @@ def _transcribe_audio(file_path: str) -> tuple[str, float]:
     return text, confidence
 
 
+def _detect_failure_reason(audio_path: str, transcript: str, confidence: float) -> str | None:
+    """
+    Classify the reason for a perception failure.
+    Returns: "silence", "noise", "non_english", or None (success).
+    
+    Priority: silence > non_english > noise
+    (silence is most obvious user error, noise is detectable from confidence, 
+     non-English is least certain but important for patient guidance).
+    """
+    
+    # ── Detect silence: RMS energy of audio is very low ───────────────────
+    try:
+        audio_data, _ = sf.read(audio_path)
+        rms_energy = np.sqrt(np.mean(audio_data ** 2))
+        
+        # If RMS is below threshold (0.01), audio is essentially silent
+        if rms_energy < 0.01:
+            print("[detection] Silence detected (RMS energy too low).")
+            return "silence"
+    except Exception as exc:
+        print(f"[detection] Could not compute RMS energy: {exc}")
+    
 # ── LangGraph node ───────────────────────────────────────────────────────────
 
 def perception_node(state: SpeechTherapyState) -> dict:
