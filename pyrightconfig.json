@@ -1,0 +1,14 @@
+{
+  "include": ["."],
+  "pythonPath": "<python>",
+  "pythonVersion": "3.10",
+  "typeCheckingMode": "basic",
+  "pythonPlatform": "Windows",
+  "executionEnvironments": [
+    {
+      "root": ".",
+      "pythonPath": "<python>"
+    }
+  ],
+  "extraPaths": ["./Agentic"]
+}
