@@ -61,6 +61,13 @@ def _get_settings():
 
 # ── Audio output helper ──────────────────────────────────────────────────────
 
+def _get_failure_reason_message(failure_reason: str | None, target_word: str) -> str:
+    """
+    Generate a customized message based on perception failure reason.
+    Returns empty string if no failure (reason is None).
+    """
+    if not failure_reason:
+        return ""
 def _speak(text: str) -> Optional[str]:
     """
     Convert feedback text to speech.
