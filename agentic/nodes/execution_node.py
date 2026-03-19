@@ -1,4 +1,4 @@
-"""
+1`"""
 nodes/execution_node.py — Output delivery wrapped as a LangGraph node.
 
 Original main.py (Raspberry Pi execution agent) is preserved structurally.
@@ -25,16 +25,14 @@ from typing import Optional
 
 from loguru import logger
 
+from db.mem0_store import add_session_memory
 from state import SpeechTherapyState
-from db import persist_session_state
 
 # ── Optional TTS (pyttsx3 works offline on Raspberry Pi) ────────────────────
 try:
     import pyttsx3
-    _tts_engine = pyttsx3.init()
     _TTS_AVAILABLE = True
 except Exception:
-    _tts_engine    = None
     _TTS_AVAILABLE = False
 
 
@@ -68,20 +66,30 @@ def _speak(text: str) -> Optional[str]:
     Returns path to saved .wav if successful, else None.
     Falls back to printing text if TTS is unavailable.
     """
-    if not _TTS_AVAILABLE or _tts_engine is None:
+    if not _TTS_AVAILABLE:
         logger.warning("TTS not available — text-only mode.")
         return None
 
+    engine = None
     try:
+        # Create a fresh engine for each utterance to avoid runAndWait hangs
+        # when multiple words are processed in one session.
+        engine = pyttsx3.init()
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
         tmp.close()
-        _tts_engine.save_to_file(text, tmp.name)
-        _tts_engine.runAndWait()
+        engine.save_to_file(text, tmp.name)
+        engine.runAndWait()
         logger.info("Audio feedback saved to {}", tmp.name)
         return tmp.name
     except Exception as exc:
         logger.error("TTS error: {}", exc)
         return None
+    finally:
+        if engine is not None:
+            try:
+                engine.stop()
+            except Exception:
+                pass
 
 
 # ── LangGraph node ───────────────────────────────────────────────────────────
@@ -98,7 +106,11 @@ def execution_node(state: SpeechTherapyState) -> dict:
     patient_name     = state.get("patient_name", "friend")
     target_word      = state.get("target_word", "")
     error_report     = state.get("error_report") or {}
+    error_summary    = error_report.get("error_summary") or {}
     semantic_label   = state.get("semantic_label", "N/A")
+    target_words     = state.get("target_words") or []
+    current_index    = int(state.get("current_target_index", 0) or 0)
+    transcript       = state.get("transcript", "")
 
     # ── Terminal summary ─────────────────────────────────────────
     print("\n" + "█" * 55)
@@ -125,20 +137,70 @@ def execution_node(state: SpeechTherapyState) -> dict:
     else:
         print("🔇 Text-only mode (TTS unavailable or not installed).")
 
-    # ── Persist session report to Supabase, if configured ───────
-    # Merge current state with execution outputs so persistence sees
-    # the audio path and a best-effort duration.
-    try:
-        merged_state = dict(state)
-        merged_state["audio_output_path"] = audio_path
-    except Exception:
-        merged_state = state  # Fallback: use original mapping
+    history = list(state.get("session_history") or [])
+    history.append(
+        {
+            "target_word": target_word,
+            "transcript": transcript,
+            "accuracy": error_report.get("accuracy", 0),
+            "total_errors": error_report.get("total_errors", 0),
+            "substitutions": error_summary.get("substitutions", 0),
+            "omissions": error_summary.get("omissions", 0),
+            "insertions": error_summary.get("insertions", 0),
+            "semantic_label": semantic_label,
+            "feedback_text": feedback_text,
+            "practice_exercise": practice,
+            "model_used": feedback.get("model_used"),
+        }
+    )
 
-    report_id = persist_session_state(merged_state)  # May be None if disabled/failed.
+    stored_in_mem0 = add_session_memory(
+        patient_id=state.get("patient_id"),
+        payload={
+            "patient_name": patient_name,
+            "target_word": target_word,
+            "transcript": transcript,
+            "accuracy": error_report.get("accuracy", 0),
+            "total_errors": error_report.get("total_errors", 0),
+            "substitutions": error_summary.get("substitutions", 0),
+            "omissions": error_summary.get("omissions", 0),
+            "insertions": error_summary.get("insertions", 0),
+            "semantic_label": semantic_label,
+            "feedback_text": feedback_text,
+            "practice_exercise": practice,
+            "therapy_goals": state.get("therapy_goals") or [],
+            "phonemes_to_focus_on": state.get("phonemes_to_focus_on") or [],
+            "difficulty_level": state.get("difficulty_level") or "medium",
+        },
+    )
+    if stored_in_mem0:
+        logger.info("Stored session memory in Mem0 for patient {} and word '{}'", patient_name, target_word)
+
+    next_index = current_index
+    next_target_word = target_word
+    has_more_target_words = False
+    next_retry_count = state.get("retry_count", 0)
+    next_feedback_attempts = state.get("feedback_attempts", 0)
+
+    if isinstance(target_words, list) and target_words and current_index + 1 < len(target_words):
+        next_index = current_index + 1
+        next_target_word = str(target_words[next_index]).strip()
+        has_more_target_words = True
+        next_retry_count = 0
+        next_feedback_attempts = 0
+        print(f"➡️ Next target word: '{next_target_word}'")
+    else:
+        print("✅ All target words completed.")
 
     return {
         "audio_output_path": audio_path,
-        "session_complete":  True,
-        "report_id":         report_id,
+        "session_complete":  not has_more_target_words,
+        "target_word":       next_target_word,
+        "current_target_index": next_index,
+        "has_more_target_words": has_more_target_words,
+        "retry_count":       next_retry_count,
+        "feedback_attempts": next_feedback_attempts,
+        "session_history":   history,
+        "report_id":         state.get("report_id"),
         "current_error":     None,
     }
