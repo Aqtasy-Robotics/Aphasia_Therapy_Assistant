@@ -68,7 +68,11 @@ Keep your total response under 6 sentences."""
 
 def _build_user_prompt(error_report: Dict[str, Any],
                        target_word: str,
-                       patient_name: str) -> str:
+                       patient_name: str,
+                       therapy_goals: Optional[list[str]] = None,
+                       phonemes_to_focus_on: Optional[list[str]] = None,
+                       difficulty_level: Optional[str] = None,
+                       memory_context: Optional[list[dict[str, Any]]] = None) -> str:
     accuracy       = error_report.get("accuracy", 0)
     total_errors   = error_report.get("total_errors", 0)
     target_ph      = error_report.get("target_phonemes", [])
@@ -111,6 +115,12 @@ PHONEME ANALYSIS:
     else:
         prompt += "\n✓ NO ERRORS DETECTED - Perfect pronunciation!\n"
 
+    memory_lines = []
+    for idx, item in enumerate(memory_context or [], 1):
+        memory_text = str(item.get("memory") or "").strip()
+        if memory_text:
+            memory_lines.append(f"- Memory {idx}: {memory_text}")
+
     prompt += f"""
 CONTEXT FOR YOUR FEEDBACK:
 - If accuracy is 90%+: Celebrate their success enthusiastically but briefly
@@ -118,9 +128,20 @@ CONTEXT FOR YOUR FEEDBACK:
 - If accuracy is 50-69%: Be encouraging, focus on just ONE error to fix
 - If accuracy is below 50%: Be extra patient and supportive, suggest starting slower
 
+PERSONALISATION CONTEXT FROM THERAPIST:
+- Therapy goals: {', '.join(therapy_goals or []) if (therapy_goals or []) else 'Not provided'}
+- Phonemes to focus on: {' '.join(phonemes_to_focus_on or []) if (phonemes_to_focus_on or []) else 'Not provided'}
+- Requested difficulty level: {difficulty_level or 'medium'}
+
+RELEVANT PRIOR SESSION MEMORIES:
+{chr(10).join(memory_lines) if memory_lines else '- No prior session memories found.'}
+
 YOUR TASK:
 Generate natural, warm, conversational feedback for {patient_name} about their attempt to say "{target_word}".
 Use the error information above to create specific, personalized guidance.
+Prioritize therapist goals when present. If specific phonemes are listed, emphasize them in your tip.
+Use prior session memories only to maintain continuity and adapt your wording. Do not mention Mem0, memory retrieval, or hidden system context.
+Adjust strictness to difficulty: easy = extra supportive and simple, medium = balanced, hard = more precise correction.
 Remember: Very short sentences, simple words, ONE main tip, be encouraging.
 Make it sound natural and human - like a caring therapist talking to their patient."""
     return prompt
@@ -131,6 +152,10 @@ Make it sound natural and human - like a caring therapist talking to their patie
 def generate_feedback(error_report: Dict[str, Any],
                       target_word: str,
                       patient_name: str = "friend",
+                      therapy_goals: Optional[list[str]] = None,
+                      phonemes_to_focus_on: Optional[list[str]] = None,
+                      difficulty_level: Optional[str] = None,
+                      memory_context: Optional[list[dict[str, Any]]] = None,
                       api_key: Optional[str] = None,
                       model: str = "llama-3.3-70b-versatile") -> Dict[str, Any]:
 
@@ -140,7 +165,15 @@ def generate_feedback(error_report: Dict[str, Any],
         return _fallback_feedback(error_report, target_word, patient_name)
 
     system_prompt = _get_system_prompt()
-    user_prompt   = _build_user_prompt(error_report, target_word, patient_name)
+    user_prompt   = _build_user_prompt(
+        error_report,
+        target_word,
+        patient_name,
+        therapy_goals=therapy_goals,
+        phonemes_to_focus_on=phonemes_to_focus_on,
+        difficulty_level=difficulty_level,
+        memory_context=memory_context,
+    )
 
     try:
         client = Groq(api_key=api_key)
@@ -294,12 +327,20 @@ def feedback_generation_node(state: SpeechTherapyState) -> dict:
     error_report  = state.get("error_report", {})
     target_word   = state.get("target_word", "")
     patient_name  = state.get("patient_name", "friend")
+    therapy_goals = state.get("therapy_goals") or []
+    phonemes_to_focus_on = state.get("phonemes_to_focus_on") or []
+    difficulty_level = state.get("difficulty_level") or "medium"
+    memory_context = state.get("memory_context") or []
 
     print("\nGenerating personalised feedback...")
     feedback = generate_feedback(
         error_report=error_report,
         target_word=target_word,
         patient_name=patient_name,
+        therapy_goals=therapy_goals,
+        phonemes_to_focus_on=phonemes_to_focus_on,
+        difficulty_level=difficulty_level,
+        memory_context=memory_context,
     )
     print_feedback(feedback)
 
