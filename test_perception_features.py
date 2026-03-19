@@ -35,3 +35,34 @@ else:
     print("❌ State field missing!")
     sys.exit(1)
 
+# ── Test 2: Message Generation ─────────────────────────────────
+print("\n[TEST 2] Message Generation Functions")
+print("-" * 60)
+
+test_cases = [
+    {
+        'reason': 'silence',
+        'word': 'cat',
+        'expected_keywords': ['louder', 'speak', 'clearly'],
+        'description': 'Silence detection message'
+    },
+    {
+        'reason': 'noise',
+        'word': 'dog',
+        'expected_keywords': ['noise', 'quiet'],
+        'description': 'Noise detection message'
+    },
+    {
+        'reason': 'non_english',
+        'word': 'apple',
+        'expected_keywords': ['target', 'word', 'apple'],
+        'description': 'Non-English detection message'
+    },
+    {
+        'reason': None,
+        'word': 'bird',
+        'expected_keywords': [],
+        'description': 'None (successful recording) message'
+    }
+]
+
