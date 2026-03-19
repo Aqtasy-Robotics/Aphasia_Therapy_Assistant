@@ -175,6 +175,7 @@ def run_session() -> SpeechTherapyState:
         "transcript":        None,          # will hold the latest transcribed text
         "confidence_score":  None,          # will store confidence proxy from Whisper
         "retry_count":       0,             # start with zero re-record attempts
+        "perception_failure_reason": None,  # why the last recording failed (if it did)
         "transcript_attempts": [],          # store all transcript attempts across re-record loops
 
         # Session meta

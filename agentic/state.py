@@ -18,6 +18,7 @@ class SpeechTherapyState(TypedDict):
     transcript:         Optional[str]        # whisper output
     confidence_score:   Optional[float]      # avg_logprob from whisper
     retry_count:        int                  # how many re-record attempts
+    perception_failure_reason: Optional[str]  # 'silence' | 'noise' | 'non_english' (used to guide re-record prompts)
     transcript_attempts: Optional[List[Dict[str, Any]]]  # all perception attempts across session (for audit/debug)
 
     # ── Session meta (collected once at start) ──────────────────
