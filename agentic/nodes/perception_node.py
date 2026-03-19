@@ -121,6 +121,7 @@ def _detect_failure_reason(audio_path: str, transcript: str, confidence: float) 
 def perception_node(state: SpeechTherapyState) -> dict:
     """
     LangGraph node: record audio → transcribe → update state.
+    Detects failure reason (silence, noise, non-English) if transcription fails.
     Increments retry_count so the conditional edge can cap retries.
     """
     audio_path: str | None = None
@@ -130,11 +131,15 @@ def perception_node(state: SpeechTherapyState) -> dict:
         text, confidence = _transcribe_audio(audio_path)
         print(f"Transcription: {text!r}  (confidence proxy: {confidence:.2f})")
 
+        # Detect failure reason (if any)
+        failure_reason = _detect_failure_reason(audio_path, text, confidence) if audio_path else None
+
         return {
-            "transcript":       text,
-            "confidence_score": confidence,
-            "retry_count":      state.get("retry_count", 0) + 1,
-            "current_error":    None,
+            "transcript":              text,
+            "confidence_score":        confidence,
+            "perception_failure_reason": failure_reason,
+            "retry_count":             state.get("retry_count", 0) + 1,
+            "current_error":           None,
         }
 
     except Exception as exc:
