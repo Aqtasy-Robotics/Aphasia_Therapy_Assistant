@@ -15,9 +15,7 @@ const TherapistLayout = () => {
 
   useEffect(() => {
     const checkSession = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+      const { data: { session } } = await supabase.auth.getSession();
 
       if (session) {
         setUserData({
@@ -33,10 +31,7 @@ const TherapistLayout = () => {
 
     checkSession();
 
-    // FIX: Removed the unused 'session' parameter from this callback
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === "SIGNED_OUT") navigate("/login");
     });
 
@@ -52,27 +47,37 @@ const TherapistLayout = () => {
   if (loading)
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#f8fafc]">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#5cb338]"></div>
+        {/* Loading spinner updated to Midnight Emerald */}
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#012b1d]"></div>
       </div>
     );
 
   return (
-    /* FIXED WRAPPER: Prevents whole-page scrolling */
-    <div className="flex h-screen w-full bg-[#f8fafc] relative overflow-hidden font-sans">
-      {/* Background decorative blobs for Glassmorphism depth */}
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-[#5cb338]/5 rounded-full blur-[120px] pointer-events-none animate-pulse"></div>
-      <div className="absolute bottom-[-10%] right-[-10%] w-[30%] h-[30%] bg-blue-500/5 rounded-full blur-[100px] pointer-events-none animate-bounce delay-1000 duration-[10s]"></div>
+    <div className="flex h-screen w-full bg-[#f8fafc] relative overflow-hidden font-sans antialiased">
+      
+      {/* Dynamic Background Accents */}
+      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-[#012b1d]/5 rounded-full blur-[120px] pointer-events-none animate-pulse"></div>
+      <div className="absolute bottom-[-10%] right-[-10%] w-[30%] h-[30%] bg-[#172554]/5 rounded-full blur-[100px] pointer-events-none animate-bounce delay-1000 duration-[10s]"></div>
 
-      {/* SIDEBAR: Glassmorphism and Stationary */}
-      <aside className="w-64 bg-white/70 backdrop-blur-xl border-r border-white/20 flex flex-col p-6 h-full z-50 shadow-[4px_0_24px_rgba(0,0,0,0.02)] transition-all duration-500 ease-in-out">
-        <div className="flex flex-col items-center mb-10 transition-transform duration-500 hover:scale-105">
-          <img src={logo} alt="Logo" className="h-12 mb-2" />
-          <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">
+      {/* SIDEBAR: Midnight Emerald (#012b1d) */}
+      <aside className="w-64 bg-[#012b1d] flex flex-col p-8 h-full z-50 shadow-[10px_0_40px_rgba(0,0,0,0.3)] relative">
+        
+        {/* Vertical glass rim highlight */}
+        <div className="absolute inset-y-0 right-0 w-[1px] bg-white/10 pointer-events-none"></div>
+
+        <div className="relative z-10 flex flex-col items-center mb-16 transition-transform duration-500 hover:scale-105">
+          <img 
+            src={logo} 
+            alt="Logo" 
+            className="h-16 mb-4 brightness-0 invert opacity-100 filter drop-shadow-md" 
+          />
+          {/* SIDEBAR SUB-HEADER: 10px */}
+          <span className="text-[10px] font-extrabold text-white/50 uppercase tracking-[0.4em] text-center">
             Therapist Portal
           </span>
         </div>
 
-        <nav className="flex-1 space-y-2">
+        <nav className="relative z-10 flex-1 space-y-5">
           <NavItem
             label="Home"
             active={isActive("/dashboard")}
@@ -105,28 +110,32 @@ const TherapistLayout = () => {
           />
         </nav>
 
-        <button
-          onClick={handleLogout}
-          className="flex items-center justify-center gap-3 text-gray-400 hover:text-red-500 transition-all duration-300 p-3 rounded-xl hover:bg-red-50/50 hover:backdrop-blur-md mt-auto group border border-transparent hover:border-red-100/50"
-        >
-          <span className="font-black text-[10px] uppercase tracking-widest">
-            Logout
-          </span>
-        </button>
+        {/* LOGOUT BUTTON SECTION: 10px */}
+        <div className="relative z-10 pt-8 mt-auto border-t border-white/10">
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center gap-3 text-white/50 hover:text-white transition-all duration-300 p-4 rounded-2xl hover:bg-white/10 group border border-transparent hover:border-white/20"
+          >
+            <span className="font-extrabold text-[10px] uppercase tracking-[0.3em]">
+              log out
+            </span>
+          </button>
+        </div>
       </aside>
 
-      {/* MAIN CONTENT: Independent Scroll Area */}
-      <main className="flex-1 h-full overflow-y-auto p-10 relative z-10 transition-all duration-500">
-        <header className="mb-10 flex justify-between items-center animate-in slide-in-from-top duration-700">
-          <div className="bg-white/40 backdrop-blur-md px-5 py-2.5 rounded-full border border-white/60 shadow-sm flex items-center gap-3 hover:bg-white/60 transition-colors duration-500">
-            <div className="w-2 h-2 rounded-full bg-[#5cb338] animate-pulse"></div>
-            <h2 className="text-[10px] font-black text-[#5cb338] uppercase tracking-[0.15em]">
+      {/* MAIN CONTENT AREA */}
+      <main className="flex-1 h-full overflow-y-auto p-12 relative z-10">
+        <header className="mb-12 flex justify-between items-center animate-in slide-in-from-top duration-700">
+          <div className="bg-white/80 backdrop-blur-xl px-8 py-4 rounded-2xl border border-white shadow-lg flex items-center gap-4">
+            <div className="w-2.5 h-2.5 rounded-full bg-[#012b1d] animate-pulse shadow-[0_0_10px_rgba(1,43,29,0.4)]"></div>
+            {/* ACTIVE USER BADGE: 10px */}
+            <h2 className="text-[10px] font-extrabold text-[#012b1d] uppercase tracking-[0.3em]">
               {userData.title} {userData.fullName} • {userData.clinicName}
             </h2>
           </div>
         </header>
 
-        <div className="max-w-7xl mx-auto animate-in fade-in zoom-in-95 duration-700">
+        <div className="max-w-7xl mx-auto animate-in fade-in zoom-in-95 duration-700 pb-20">
           <Outlet context={{ userData }} />
         </div>
       </main>
@@ -134,18 +143,22 @@ const TherapistLayout = () => {
   );
 };
 
-/* Glassmorphism NavItem for Therapist (Green Theme) */
+/* Reusable NavItem Component */
 const NavItem = ({ label, active, onClick }) => (
   <div
     onClick={onClick}
-    className={`group px-4 py-3 rounded-2xl cursor-pointer transition-all duration-500 ease-out flex items-center gap-3
+    className={`group px-6 py-4 rounded-[1.5rem] cursor-pointer transition-all duration-500 ease-out flex items-center gap-5
       ${
         active
-          ? "bg-white/60 backdrop-blur-md shadow-[0_8px_16px_rgba(92,179,56,0.1)] text-[#5cb338] font-black ring-1 ring-white/80 translate-x-2"
-          : "text-gray-400 hover:bg-white/40 hover:backdrop-blur-sm hover:text-gray-600 hover:translate-x-1"
+          ? "bg-white/15 text-white font-extrabold shadow-[0_12px_24px_rgba(0,0,0,0.3)] ring-1 ring-white/30 translate-x-2"
+          : "text-white/60 hover:bg-white/5 hover:text-white hover:translate-x-1"
       }`}
   >
-    <span className="text-[11px] uppercase tracking-[0.1em] font-black">
+    {/* Active Glow Dot */}
+    <div className={`w-2 h-2 rounded-full transition-all duration-500 ${active ? 'bg-white shadow-[0_0_12px_white] scale-110' : 'bg-transparent scale-0'}`} />
+    
+    {/* MAIN NAVIGATION LINKS: 11px */}
+    <span className="text-[11px] uppercase tracking-[0.2em] font-extrabold leading-none">
       {label}
     </span>
   </div>

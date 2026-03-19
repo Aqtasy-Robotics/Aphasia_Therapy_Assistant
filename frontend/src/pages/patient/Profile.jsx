@@ -1,37 +1,35 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "../../supabaseClient";
-import { 
-  User, Shield, Smartphone, HeartPulse, 
-  Volume2, Eye, Bell, Save, RefreshCw, Plus, Trash2 
+import {
+  User,
+  Shield,
+  HeartPulse,
+  Save,
+  Calendar,
+  ChevronLeft,
+  ChevronRight,
+  UserCog,
+  Building2,
 } from "lucide-react";
 
 const Profile = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [_therapists, setTherapists] = useState([]);
+  const [role, setRole] = useState(null);
+  const [assignedTherapist, setAssignedTherapist] = useState(null);
+
   const [profile, setProfile] = useState({
-    // Identity
     full_name: "",
-    nickname: "",
+    introduction: "",
     email: "",
     date_of_birth: "",
     selected_therapist_id: "",
-    aphasia_type: "Broca's Aphasia", // View-only default
-    
-    // Caretaker Link
-    caretaker_name: "",
-    caretaker_phone: "",
-    
-    // Robot Management
-    robot_online: true,
-    voice_speed: 1,
-    robot_volume: 70,
-    
-    // Accessibility & Notifications
-    high_contrast: false,
-    large_text: false,
-    caretaker_cc: true,
+    aphasia_type: "Broca's Aphasia",
   });
+
+  const [showDobPicker, setShowDobPicker] = useState(false);
+  const [pickerMonth, setPickerMonth] = useState(new Date(1980, 0, 1));
 
   useEffect(() => {
     getProfileAndTherapists();
@@ -50,17 +48,29 @@ const Profile = () => {
         .single();
 
       if (profileData) {
+        setRole(profileData.role);
         setProfile((prev) => ({ ...prev, ...profileData, email: user.email }));
+        if (profileData.date_of_birth) setPickerMonth(new Date(profileData.date_of_birth));
+
+        if (profileData.role === "patient" && profileData.selected_therapist_id) {
+          const { data: therapistData } = await supabase
+            .from("profiles")
+            .select("full_name, introduction, clinic_name")
+            .eq("id", profileData.selected_therapist_id)
+            .single();
+
+          if (therapistData) setAssignedTherapist(therapistData);
+        }
       }
 
-      const { data: therapistData } = await supabase
+      const { data: allTherapists } = await supabase
         .from("profiles")
         .select("id, full_name")
         .ilike("role", "therapist");
 
-      setTherapists(therapistData?.filter(t => t.full_name) || []);
+      setTherapists(allTherapists?.filter((t) => t.full_name) || []);
     } catch (error) {
-      console.error("Error loading profile:", error.message);
+      console.error("Error:", error.message);
     } finally {
       setLoading(false);
     }
@@ -71,12 +81,21 @@ const Profile = () => {
     setSaving(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      const { error: dbError } = await supabase
+      const updatePayload = {
+        id: user.id,
+        full_name: profile.full_name,
+        introduction: profile.introduction,
+        date_of_birth: profile.date_of_birth || null,
+        updated_at: new Date().toISOString(),
+      };
+
+      const { data, error: dbError } = await supabase
         .from("profiles")
-        .upsert({ id: user.id, ...profile, updated_at: new Date().toISOString() });
+        .upsert(updatePayload)
+        .select();
 
       if (dbError) throw dbError;
-      alert("Settings Synced! 🚀");
+      alert("Account Cloud Synced! ☁️");
     } catch (error) {
       alert("Update failed: " + error.message);
     } finally {
@@ -84,108 +103,142 @@ const Profile = () => {
     }
   };
 
-  if (loading) return (
-    <div className="flex min-h-screen items-center justify-center font-black text-[#4f6ef7] animate-pulse uppercase tracking-[0.2em] text-xs">
-      Syncing Aqtasy Cloud...
-    </div>
-  );
+  const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  const handleCustomDateSelect = (day) => {
+    const newDate = new Date(pickerMonth.getFullYear(), pickerMonth.getMonth(), day);
+    const offset = newDate.getTimezoneOffset();
+    const formattedDate = new Date(newDate.getTime() - offset * 60 * 1000).toISOString().split("T")[0];
+    setProfile({ ...profile, date_of_birth: formattedDate });
+    setShowDobPicker(false);
+  };
+
+  if (loading)
+    return (
+      <div className="flex min-h-screen items-center justify-center font-extrabold text-[#172554] animate-pulse uppercase tracking-[0.3em] text-[10px]">
+        Syncing Aqtasy Cloud...
+      </div>
+    );
 
   return (
-    <div className={`max-w-5xl mx-auto pb-32 animate-in fade-in duration-700 ${profile.large_text ? 'text-lg' : 'text-base'}`}>
-      
-      <header className="mb-10 flex justify-between items-end">
-        <div>
-          <h1 className="text-4xl font-black text-gray-800 tracking-tight">Account & Robot Settings</h1>
-          <p className="text-gray-500 font-medium mt-2 italic">Customize your practice environment with Waabi</p>
-        </div>
-        <div className="bg-white/40 backdrop-blur-md px-5 py-2.5 rounded-full border border-white/60 shadow-sm flex items-center gap-3">
-          <Shield className="w-4 h-4 text-[#4f6ef7]" />
-          <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Secure Caretaker Link</span>
-        </div>
+    <div className="max-w-5xl mx-auto pb-32 animate-in fade-in duration-700 font-sans antialiased">
+      <header className="mb-12">
+        <h1 className="text-4xl font-extrabold text-gray-800 tracking-tight">Account Settings</h1>
+        <p className="text-gray-500 font-semibold mt-2 text-sm italic">Manage your clinical profile and identity</p>
       </header>
 
-      <form onSubmit={handleUpdate} className="space-y-10">
-        
-        {/* 1. PERSONAL & MEDICAL IDENTITY */}
-        <section className="bg-white rounded-[3rem] p-10 border border-gray-100 shadow-2xl shadow-gray-200/40">
-          <SectionHeader icon={<User />} title="Personal Identity" />
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-10">
-            <InputField label="Full Name" value={profile.full_name} onChange={(v) => setProfile({...profile, full_name: v})} />
-            <InputField label="AI Robot Nickname" placeholder="What should Waabi call you?" value={profile.nickname} onChange={(v) => setProfile({...profile, nickname: v})} />
-            
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-4">Emergency Caretaker Link</label>
-              <div className="flex gap-3">
-                <input className="flex-1 bg-gray-50 rounded-2xl px-6 py-4 font-bold text-sm" placeholder="Caretaker Name" value={profile.caretaker_name} onChange={(e) => setProfile({...profile, caretaker_name: e.target.value})} />
-                <input className="flex-1 bg-gray-50 rounded-2xl px-6 py-4 font-bold text-sm" placeholder="Phone Number" value={profile.caretaker_phone} onChange={(e) => setProfile({...profile, caretaker_phone: e.target.value})} />
+      <form onSubmit={handleUpdate} className="space-y-12">
+        {/* PERSONAL IDENTITY */}
+        <section className="bg-white rounded-[3.5rem] p-10 border border-gray-50 shadow-2xl shadow-gray-200/40">
+          <SectionHeader icon={<User size={20} />} title="Personal Identity" />
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-12">
+            <InputField
+              label="Full Name"
+              value={profile.full_name}
+              onChange={(v) => setProfile({ ...profile, full_name: v })}
+            />
+
+            <div className="relative">
+              <label className="text-[10px] font-extrabold text-gray-400 uppercase tracking-[0.2em] ml-4 block mb-3">
+                Date of Birth
+              </label>
+              <div
+                onClick={() => setShowDobPicker(!showDobPicker)}
+                className="w-full bg-gray-50 hover:bg-white border border-transparent hover:border-gray-100 rounded-2xl pl-12 pr-4 py-5 text-sm font-bold text-gray-700 transition-all cursor-pointer flex items-center relative"
+              >
+                <Calendar className="w-4 h-4 text-[#172554] absolute left-5" />
+                {profile.date_of_birth || "Select Clinical DOB"}
               </div>
-            </div>
 
-            <div className="bg-blue-50/50 p-6 rounded-[2rem] border border-blue-100 flex items-center gap-4">
-               <HeartPulse className="text-[#4f6ef7] w-8 h-8" />
-               <div>
-                 <p className="text-[10px] font-black text-[#4f6ef7] uppercase tracking-widest">Optimized For</p>
-                 <p className="text-sm font-black text-gray-700">{profile.aphasia_type}</p>
-               </div>
-            </div>
-          </div>
-        </section>
-
-        {/* 2. ROBOT & DEVICE MANAGEMENT */}
-        <section className="bg-white rounded-[3rem] p-10 border border-gray-100 shadow-xl shadow-gray-200/20">
-          <SectionHeader icon={<Smartphone />} title="Robot Management" />
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-10">
-            
-            <div className="p-8 bg-gray-50 rounded-[2.5rem] flex flex-col items-center text-center">
-              <div className={`w-3 h-3 rounded-full mb-3 ${profile.robot_online ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
-              <p className="text-xs font-black uppercase tracking-widest text-gray-800">Waabi {profile.robot_online ? 'Online' : 'Offline'}</p>
-              <button type="button" className="mt-4 flex items-center gap-2 text-[#4f6ef7] text-[10px] font-black uppercase hover:underline"><RefreshCw size={12}/> Re-sync Hardware</button>
-            </div>
-
-            <div className="md:col-span-2 space-y-8">
-              <div className="space-y-4">
-                <div className="flex justify-between">
-                   <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Voice Speaking Speed</label>
-                   <span className="text-[10px] font-black text-[#4f6ef7]">{profile.voice_speed}x</span>
+              {showDobPicker && (
+                <div className="absolute top-[100px] left-0 w-80 bg-white border border-gray-100 shadow-[0_30px_60px_-15px_rgba(0,0,0,0.15)] rounded-[2rem] p-6 z-50 animate-in zoom-in-95 fade-in duration-300">
+                  <div className="flex justify-between items-center mb-6">
+                    <button type="button" onClick={() => setPickerMonth(new Date(pickerMonth.getFullYear(), pickerMonth.getMonth() - 1, 1))} className="p-2 hover:bg-gray-100 rounded-xl"><ChevronLeft size={18} /></button>
+                    <div className="flex items-center gap-1">
+                      <select className="text-[10px] font-extrabold text-[#172554] bg-gray-50 px-2 py-1 rounded-lg outline-none" value={pickerMonth.getMonth()} onChange={(e) => setPickerMonth(new Date(pickerMonth.getFullYear(), parseInt(e.target.value), 1))}>
+                        {monthNames.map((m, i) => <option key={m} value={i}>{m.slice(0, 3)}</option>)}
+                      </select>
+                      <select className="text-[10px] font-extrabold text-[#172554] bg-gray-50 px-2 py-1 rounded-lg outline-none" value={pickerMonth.getFullYear()} onChange={(e) => setPickerMonth(new Date(parseInt(e.target.value), pickerMonth.getMonth(), 1))}>
+                        {Array.from({ length: 100 }, (_, i) => new Date().getFullYear() - i).map(year => <option key={year} value={year}>{year}</option>)}
+                      </select>
+                    </div>
+                    <button type="button" onClick={() => setPickerMonth(new Date(pickerMonth.getFullYear(), pickerMonth.getMonth() + 1, 1))} className="p-2 hover:bg-gray-100 rounded-xl"><ChevronRight size={18} /></button>
+                  </div>
+                  <div className="grid grid-cols-7 gap-1 mb-2 text-center">
+                    {["S", "M", "T", "W", "T", "F", "S"].map(d => <span key={d} className="text-[9px] font-black text-gray-300 uppercase">{d}</span>)}
+                  </div>
+                  <div className="grid grid-cols-7 gap-1">
+                    {[...Array(new Date(pickerMonth.getFullYear(), pickerMonth.getMonth(), 1).getDay())].map((_, i) => <div key={i} />)}
+                    {[...Array(new Date(pickerMonth.getFullYear(), pickerMonth.getMonth() + 1, 0).getDate())].map((_, i) => {
+                      const day = i + 1;
+                      const dateStr = new Date(pickerMonth.getFullYear(), pickerMonth.getMonth(), day);
+                      const isSelected = profile.date_of_birth === new Date(dateStr.getTime() - dateStr.getTimezoneOffset() * 60000).toISOString().split("T")[0];
+                      return (
+                        <button key={day} type="button" onClick={() => handleCustomDateSelect(day)} className={`p-2.5 text-[10px] font-extrabold rounded-xl transition-all ${isSelected ? "bg-[#172554] text-white shadow-lg" : "text-gray-600 hover:bg-[#172554]/5"}`}>{day}</button>
+                      );
+                    })}
+                  </div>
                 </div>
-                <input type="range" min="0.5" max="2" step="0.1" className="w-full accent-[#4f6ef7]" value={profile.voice_speed} onChange={(e) => setProfile({...profile, voice_speed: e.target.value})} />
-              </div>
+              )}
+            </div>
 
-              <div className="space-y-4">
-                <div className="flex justify-between">
-                   <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Robot Hardware Volume</label>
-                   <span className="text-[10px] font-black text-[#4f6ef7]">{profile.robot_volume}%</span>
-                </div>
-                <input type="range" min="0" max="100" className="w-full accent-[#4f6ef7]" value={profile.robot_volume} onChange={(e) => setProfile({...profile, robot_volume: e.target.value})} />
+            <div className="md:col-span-2">
+              <label className="text-[10px] font-extrabold text-gray-400 uppercase tracking-[0.2em] ml-4">Introduction Bio</label>
+              <textarea
+                rows="4"
+                className="w-full bg-gray-50 hover:bg-white border border-transparent focus:border-gray-100 rounded-[2.5rem] px-8 py-6 font-semibold text-gray-700 outline-none focus:ring-4 focus:ring-[#172554]/5 mt-3 resize-none text-sm transition-all shadow-sm"
+                value={profile.introduction || ""}
+                placeholder="Share a bit about your journey, hobbies, and goals..."
+                onChange={(e) => setProfile({ ...profile, introduction: e.target.value })}
+              />
+            </div>
+
+            <div className="md:col-span-2 bg-[#064e3b]/5 p-8 rounded-[2.5rem] border border-[#064e3b]/10 flex items-center gap-6">
+              <div className="p-4 bg-white rounded-2xl shadow-sm"><HeartPulse className="text-[#064e3b] w-8 h-8" /></div>
+              <div>
+                <p className="text-[10px] font-extrabold text-[#064e3b] uppercase tracking-[0.3em]">Optimized Therapy For</p>
+                <p className="text-lg font-extrabold text-gray-800">{profile.aphasia_type}</p>
               </div>
             </div>
           </div>
         </section>
 
-        {/* 3. VISUAL & ACCESSIBILITY */}
-        <section className="bg-white rounded-[3rem] p-10 border border-gray-100 shadow-xl shadow-gray-200/20">
-          <SectionHeader icon={<Eye />} title="Visual Accessibility" />
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-10">
-            <ToggleCard label="Large Text Mode" description="Increases UI scale for easier reading." checked={profile.large_text} onChange={(v) => setProfile({...profile, large_text: v})} />
-            <ToggleCard label="High Contrast" description="Forces black-on-white high visibility look." checked={profile.high_contrast} onChange={(v) => setProfile({...profile, high_contrast: v})} />
-          </div>
-        </section>
-
-        {/* 4. NOTIFICATION PREFERENCES */}
-        <section className="bg-white rounded-[3rem] p-10 border border-gray-100 shadow-xl shadow-gray-200/20">
-          <SectionHeader icon={<Bell />} title="Notifications" />
-          <div className="mt-10 space-y-6">
-            <ToggleItem label="Session Reminders" description="Notify me 15 minutes before my session starts." checked={profile.session_reminders} onChange={(v) => setProfile({...profile, session_reminders: v})} />
-            <ToggleItem label="Caretaker CC" description="Send a copy of all session reminders to my caretaker." checked={profile.caretaker_cc} onChange={(v) => setProfile({...profile, caretaker_cc: v})} />
-          </div>
-        </section>
+        {/* CLINICAL PROVIDER SECTION */}
+        {role === "patient" && (
+          <section className="bg-white rounded-[3.5rem] p-10 border border-gray-50 shadow-2xl shadow-gray-200/40">
+            <SectionHeader icon={<UserCog size={20} />} title="My Clinical Provider" />
+            {assignedTherapist ? (
+              <div className="mt-10 bg-gray-50 p-10 rounded-[3rem] border border-gray-100 flex flex-col md:flex-row gap-10 items-center">
+                <div className="w-24 h-24 bg-[#172554] text-white rounded-[2rem] flex items-center justify-center font-extrabold text-4xl shadow-2xl shadow-[#172554]/20">
+                  {assignedTherapist.full_name?.charAt(0)}
+                </div>
+                <div className="flex-1 space-y-4">
+                  <div>
+                    <h4 className="text-2xl font-extrabold text-gray-800 tracking-tight">{assignedTherapist.full_name}</h4>
+                    <p className="text-[10px] font-extrabold text-[#172554] uppercase tracking-[0.3em] mt-1 flex items-center gap-2">
+                      <Building2 size={14} /> {assignedTherapist.clinic_name || "Independent Specialist"}
+                    </p>
+                  </div>
+                  <div className="bg-white/80 p-6 rounded-2xl italic border border-white">
+                    <p className="text-sm font-semibold text-gray-600 leading-relaxed">"{assignedTherapist.introduction || "Your specialist is ready to begin your clinical journey."}"</p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-10 bg-gray-50 p-16 rounded-[3rem] border border-gray-100 text-center flex flex-col items-center">
+                <Shield className="w-12 h-12 text-gray-200 mb-4" />
+                <p className="text-[10px] font-extrabold text-gray-400 uppercase tracking-[0.3em]">Status: Awaiting Assignment</p>
+              </div>
+            )}
+          </section>
+        )}
 
         {/* SAVE BUTTON */}
         <div className="flex justify-end pt-4">
           <button
             type="submit"
             disabled={saving}
-            className="bg-[#4f6ef7] text-white px-12 py-5 rounded-[2.5rem] font-black shadow-xl shadow-blue-100 hover:bg-blue-600 active:scale-95 transition-all flex items-center gap-3 uppercase tracking-widest text-xs"
+            className="bg-[#172554] text-white px-14 py-6 rounded-[2.5rem] font-extrabold shadow-2xl shadow-[#172554]/20 hover:brightness-110 active:scale-95 transition-all flex items-center gap-4 uppercase tracking-[0.2em] text-[11px] disabled:opacity-50"
           >
             {saving ? "SYNCING..." : <><Save className="w-5 h-5" /> Confirm Account Updates</>}
           </button>
@@ -195,43 +248,24 @@ const Profile = () => {
   );
 };
 
-/* --- REUSABLE COMPONENTS --- */
-
+/* REUSABLE HELPERS */
 const SectionHeader = ({ icon, title }) => (
-  <div className="flex items-center gap-3">
-    <div className="p-3 bg-blue-50 rounded-2xl text-[#4f6ef7]">{icon}</div>
-    <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-[0.2em]">{title}</h3>
+  <div className="flex items-center gap-4">
+    <div className="p-4 bg-[#172554]/5 rounded-2xl text-[#172554]">{icon}</div>
+    <h3 className="text-[11px] font-extrabold text-gray-400 uppercase tracking-[0.3em]">{title}</h3>
   </div>
 );
 
-const InputField = ({ label, value, onChange, placeholder = "" }) => (
-  <div className="space-y-2">
-    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-4">{label}</label>
-    <input className="w-full bg-gray-50 rounded-2xl px-6 py-4 font-bold text-gray-700 outline-none focus:ring-2 focus:ring-blue-50 transition-all text-sm" value={value || ""} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />
-  </div>
-);
-
-const ToggleCard = ({ label, description, checked, onChange }) => (
-  <div onClick={() => onChange(!checked)} className={`p-8 rounded-[2.5rem] border-2 cursor-pointer transition-all flex flex-col items-center text-center space-y-3 ${checked ? 'border-[#4f6ef7] bg-blue-50/30' : 'border-gray-50 bg-gray-50/50 hover:bg-gray-50'}`}>
-    <div className={`w-12 h-6 rounded-full relative transition-all ${checked ? 'bg-[#4f6ef7]' : 'bg-gray-200'}`}>
-      <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${checked ? 'left-7' : 'left-1'}`} />
-    </div>
-    <div>
-      <p className="text-xs font-black uppercase tracking-wider text-gray-800">{label}</p>
-      <p className="text-[9px] text-gray-400 font-bold mt-1">{description}</p>
-    </div>
-  </div>
-);
-
-const ToggleItem = ({ label, description, checked, onChange }) => (
-  <div className="flex items-center justify-between p-8 bg-gray-50/50 rounded-[2.5rem] border border-gray-100">
-    <div>
-      <p className="text-xs font-black text-gray-800 uppercase tracking-wider">{label}</p>
-      <p className="text-[10px] text-gray-400 font-medium mt-1">{description}</p>
-    </div>
-    <button type="button" onClick={() => onChange(!checked)} className={`w-14 h-8 rounded-full transition-all relative ${checked ? 'bg-[#4f6ef7]' : 'bg-gray-200'}`}>
-      <div className={`absolute top-1 w-6 h-6 bg-white rounded-full transition-all ${checked ? 'left-7' : 'left-1'}`} />
-    </button>
+const InputField = ({ label, value, onChange, placeholder = "", type = "text" }) => (
+  <div className="space-y-3">
+    <label className="text-[10px] font-extrabold text-gray-400 uppercase tracking-[0.2em] ml-4">{label}</label>
+    <input
+      type={type}
+      className="w-full bg-gray-50 hover:bg-white border border-transparent focus:border-gray-100 rounded-2xl px-8 py-5 font-bold text-gray-800 outline-none focus:ring-4 focus:ring-[#172554]/5 transition-all text-sm shadow-sm"
+      value={value || ""}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+    />
   </div>
 );
 
