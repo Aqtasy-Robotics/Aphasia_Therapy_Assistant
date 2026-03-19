@@ -24,23 +24,32 @@ def check_transcription_quality(state: SpeechTherapyState) -> str:
       - "analyze_phonemes" → proceed with phoneme analysis
       - "therapist_review" → escalate to human after too many failed attempts
     """
-    confidence  = state.get("confidence_score", 0.0) or 0.0  # numeric confidence proxy from perception_node
-    retry_count = state.get("retry_count", 0)                # how many times the user has already re-recorded
-    transcript  = state.get("transcript", "") or ""         # transcribed text from Whisper
+    confidence      = state.get("confidence_score", 0.0) or 0.0  # numeric confidence proxy from perception_node
+    retry_count     = state.get("retry_count", 0)                # how many times the user has already re-recorded
+    transcript      = state.get("transcript", "") or ""         # transcribed text from Whisper
+    failure_reason  = state.get("perception_failure_reason", None)  # why the perception failed
 
     # If we already retried too many times, escalate to a human instead of forcing progress.
     if retry_count >= MAX_RECORD_RETRIES:
         print(f"[router] Max retries ({MAX_RECORD_RETRIES}) reached — escalating to therapist review.")
         return "therapist_review"  # new path that will go to therapist_review_node
 
-    # If we got nothing back, ask the user to speak again.
+    # If we got nothing back, ask the user to speak again with targeted guidance.
     if not transcript.strip():
-        print("[router] Empty transcript — re-recording...")
+        if failure_reason == "silence":
+            print("[router] Silence detected — asking patient to speak louder...")
+        elif failure_reason == "non_english":
+            print("[router] Non-English detected — re-explaining target word...")
+        else:
+            print("[router] Empty transcript — re-recording...")
         return "re_record"  # stay in the perception node
 
-    # If the confidence is below threshold, request another recording.
+    # If the confidence is below threshold, request another recording with targeted guidance.
     if confidence < CONFIDENCE_THRESHOLD:
-        print(f"[router] Low confidence ({confidence:.2f}) — re-recording...")
+        if failure_reason == "noise":
+            print(f"[router] Noise detected (confidence {confidence:.2f}) — suggesting quieter environment...")
+        else:
+            print(f"[router] Low confidence ({confidence:.2f}) — re-recording...")
         return "re_record"  # stay in the perception node
 
     # Otherwise, the transcript looks good enough to move forward.
