@@ -96,6 +96,26 @@ def _detect_failure_reason(audio_path: str, transcript: str, confidence: float) 
     except Exception as exc:
         print(f"[detection] Could not compute RMS energy: {exc}")
     
+    # ── Detect non-English: Empty or very short transcript despite good recording ─
+    # If we have a recording but got almost nothing back, likely non-English
+    # This is a heuristic: could also check if Whisper detected a different language
+    if not transcript.strip() or (len(transcript.strip()) < 2 and confidence > -2.0):
+        # Transcript is empty or too short, but confidence suggests audio was OK
+        # Likely non-English or gibberish
+        print("[detection] Possible non-English: empty/short transcript with marginal confidence.")
+        return "non_english"
+    
+    # ── Detect noise: Low confidence + some transcript ──────────────────
+    # Confidence < -1.2 suggests noisy recording, but transcript exists
+    NOISE_CONFIDENCE_THRESHOLD = -1.2
+    if confidence < NOISE_CONFIDENCE_THRESHOLD and transcript.strip():
+        print(f"[detection] Noise detected (confidence {confidence:.2f} below {NOISE_CONFIDENCE_THRESHOLD}).")
+        return "noise"
+    
+    # ── No failure detected ───────────────────────────────────────────────
+    return None
+
+
 # ── LangGraph node ───────────────────────────────────────────────────────────
 
 def perception_node(state: SpeechTherapyState) -> dict:
