@@ -183,9 +183,10 @@ def run_session() -> SpeechTherapyState:
         "current_target_index": 0,          # begin with the first array element
         "has_more_target_words": len(target_words) > 1,
         "patient_name":      patient_name,  # personalise feedback by name
-        "therapy_goals":     personalization["therapy_goals"],        # loaded from therapist_assignments
-        "phonemes_to_focus_on": personalization["phonemes_to_focus_on"],  # prioritized phonemes from therapist
-        "difficulty_level":  personalization["difficulty_level"],     # easy | medium | hard
+        # Therapist personalization when available; otherwise fallback to the latest public.sessions row.
+        "therapy_goals":     personalization.get("therapy_goals") or [],
+        "phonemes_to_focus_on": personalization.get("phonemes_to_focus_on") or [],
+        "difficulty_level":  personalization.get("difficulty_level") or "medium",
 
         # Session identity (Supabase linkage)
         # `patient_id` must correspond to an existing row in

@@ -9,6 +9,9 @@ from __future__ import annotations
 
 import os
 import time
+import csv
+import io
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from dotenv import load_dotenv
@@ -187,6 +190,91 @@ def _as_text_array(value: Any) -> list[str]:
     return [text] if text else []
 
 
+def fetch_session_personalization_config(patient_id: str) -> Dict[str, Any]:
+    """Fetch personalization from the latest ``public.sessions`` row.
+
+    This is the therapist-agnostic fallback when:
+    - ``assignment_id`` is missing/empty, or
+    - therapist-assignment personalization is effectively empty.
+
+    Normalization:
+    - ``difficulty_level``: take first element of the array; default ``medium``.
+    - ``phonemes_to_focus_on``: list[str]
+    - ``therapy_goal`` (string) -> ``therapy_goals`` (list[str], 0 or 1 element)
+    """
+
+    defaults: Dict[str, Any] = {
+        "therapy_goals": [],
+        "phonemes_to_focus_on": [],
+        "difficulty_level": "medium",
+    }
+
+    if not patient_id:
+        return defaults
+
+    client = _get_client()
+    if client is None:
+        return defaults
+
+    try:
+        response = (
+            client.table("sessions")
+            .select("therapy_goal, phonemes_to_focus_on, difficulty_level, session_date")
+            .eq("patient_id", patient_id)
+            .order("session_date", desc=True)
+            .limit(1)
+            .execute()
+        )
+    except Exception as exc:
+        print(f"[agentic-db] Error querying public.sessions for personalization: {exc}")
+        return defaults
+
+    data = getattr(response, "data", None) or []
+    if not data or not isinstance(data, list):
+        return defaults
+
+    row = data[0] or {}
+
+    # difficulty_level: stored as array on the portal ([difficultyLevel]).
+    raw_diff = row.get("difficulty_level")
+    if isinstance(raw_diff, list):
+        raw_diff_first = raw_diff[0] if raw_diff else None
+    else:
+        raw_diff_first = raw_diff
+    raw_difficulty = str(raw_diff_first or "").strip().lower()
+    difficulty_level = raw_difficulty if raw_difficulty in _VALID_DIFFICULTY_LEVELS else "medium"
+
+    # phonemes_to_focus_on: should be array of strings.
+    raw_phonemes = row.get("phonemes_to_focus_on") or []
+    if isinstance(raw_phonemes, str):
+        phonemes_to_focus_on = [p.strip() for p in raw_phonemes.split(",") if p.strip()]
+    elif isinstance(raw_phonemes, list):
+        phonemes_to_focus_on = [str(p).strip() for p in raw_phonemes if str(p).strip()]
+    else:
+        phonemes_to_focus_on = _as_text_array(raw_phonemes)
+
+    # therapy_goal -> therapy_goals (single element list).
+    raw_goal = row.get("therapy_goal")
+    if isinstance(raw_goal, list):
+        raw_goal = raw_goal[0] if raw_goal else ""
+    therapy_goal_str = str(raw_goal or "").strip()
+    therapy_goals = [therapy_goal_str] if therapy_goal_str else []
+
+    if therapy_goals or phonemes_to_focus_on or difficulty_level != "medium":
+        print(
+            "[agentic-db] Session personalization loaded: "
+            f"goals={therapy_goals}, phonemes={phonemes_to_focus_on}, difficulty={difficulty_level}"
+        )
+    else:
+        print("[agentic-db] No session personalization found; using defaults.")
+
+    return {
+        "therapy_goals": therapy_goals,
+        "phonemes_to_focus_on": phonemes_to_focus_on,
+        "difficulty_level": difficulty_level,
+    }
+
+
 def fetch_personalization_config(
     patient_id: str,
     assignment_id: Optional[str] = None,
@@ -215,13 +303,15 @@ def fetch_personalization_config(
 
     row: Dict[str, Any] = {}
 
-    if assignment_id:
+    assignment_id_clean = str(assignment_id or "").strip() if assignment_id else None
+
+    if assignment_id_clean:
         try:
             response = (
                 client
                 .table("therapist_assignments")
                 .select("therapy_goals, phonemes_to_focus_on, difficulty_level")
-                .eq("id", assignment_id)
+                .eq("id", assignment_id_clean)
                 .limit(1)
                 .execute()
             )
@@ -255,7 +345,16 @@ def fetch_personalization_config(
         "difficulty_level":     difficulty_level,
     }
 
-    if assignment_id and row:
+    therapist_config_effectively_empty = (
+        not therapy_goals and
+        not phonemes_to_focus_on and
+        difficulty_level == "medium"
+    )
+
+    if (not assignment_id_clean) or therapist_config_effectively_empty:
+        return fetch_session_personalization_config(patient_id)
+
+    if assignment_id_clean and row:
         print(
             f"[agentic-db] Personalization loaded: goals={therapy_goals}, "
             f"phonemes={phonemes_to_focus_on}, difficulty={difficulty_level}"
@@ -424,13 +523,105 @@ def persist_session_state(state: SpeechTherapyState) -> Optional[str]:
     # Drop keys whose value is None so we only send populated fields.
     clean_report = {key: value for key, value in report.items() if value is not None}
 
+    session_report_created_at: Optional[str] = None
+    report_id: Optional[str] = None
+
+    def _csv_cell(value: Any) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, list):
+            return ", ".join([str(v).strip() for v in value if str(v).strip()])
+        return str(value)
+
+    def _build_and_upload_csv(inserted_report_id: str, created_at: Optional[str]) -> None:
+        if not history:
+            return
+
+        # Therapist personalization for per-word analytics.
+        therapy_goals = state.get("therapy_goals") or []
+        phonemes_to_focus_on = state.get("phonemes_to_focus_on") or []
+        difficulty_level = state.get("difficulty_level") or "medium"
+
+        headers = [
+            "session_report_id",
+            "patient_id",
+            "assignment_id",
+            "created_at",
+            "difficulty_level",
+            "phonemes_to_focus_on",
+            "therapy_goals",
+            "word_index",
+            "target_word",
+            "transcript",
+            "accuracy",
+            "total_errors",
+            "substitutions",
+            "omissions",
+            "insertions",
+            "semantic_label",
+            "feedback_text",
+            "practice_exercise",
+            "model_used",
+        ]
+
+        created_at_str = created_at or datetime.now(timezone.utc).isoformat()
+
+        buffer = io.StringIO(newline="")
+        writer = csv.writer(buffer)
+        writer.writerow(headers)
+
+        for word_index, item in enumerate(history, start=1):
+            writer.writerow(
+                [
+                    inserted_report_id,
+                    patient_id,
+                    state.get("assignment_id"),
+                    created_at_str,
+                    difficulty_level,
+                    _csv_cell(phonemes_to_focus_on),
+                    _csv_cell(therapy_goals),
+                    word_index,
+                    str(item.get("target_word") or "").strip(),
+                    _csv_cell(item.get("transcript") or ""),
+                    _csv_cell(item.get("accuracy")),
+                    _csv_cell(item.get("total_errors")),
+                    _csv_cell(item.get("substitutions")),
+                    _csv_cell(item.get("omissions")),
+                    _csv_cell(item.get("insertions")),
+                    _csv_cell(item.get("semantic_label") or ""),
+                    _csv_cell(item.get("feedback_text") or ""),
+                    _csv_cell(item.get("practice_exercise") or ""),
+                    _csv_cell(item.get("model_used") or ""),
+                ]
+            )
+
+        csv_bytes = buffer.getvalue().encode("utf-8")
+
+        bucket_name = os.getenv("SESSION_REPORTS_CSV_BUCKET", "session-reports-csv")
+        csv_object_path = f"{patient_id}/{inserted_report_id}.csv"
+
+        # Upload CSV to Supabase storage and persist the pointer back to session_reports.
+        # This must not prevent the main session report insert if it fails.
+        try:
+            client.storage.from_(bucket_name).upload(csv_object_path, csv_bytes)
+        except Exception as upload_exc:
+            print(f"[agentic-db] CSV upload failed (bucket={bucket_name}, path={csv_object_path}): {upload_exc}")
+            return
+
+        try:
+            client.table(_SESSION_REPORTS_TABLE).update({"csv_path": csv_object_path}).eq("id", inserted_report_id).execute()
+        except Exception as update_exc:
+            print(f"[agentic-db] CSV path update failed (report_id={inserted_report_id}): {update_exc}")
+
     try:
         response = client.table(_SESSION_REPORTS_TABLE).insert(clean_report).execute()
         data = getattr(response, "data", None) or []
         if data and isinstance(data, list) and data[0].get("id"):
-            return str(data[0]["id"])
-        print("[agentic-db] Insert did not return an id; response=", data)
-        return None
+            report_id = str(data[0]["id"])
+            session_report_created_at = data[0].get("created_at")
+        else:
+            print("[agentic-db] Insert did not return an id; response=", data)
+            return None
     except Exception as exc:
         message = str(exc)
 
@@ -444,16 +635,29 @@ def persist_session_state(state: SpeechTherapyState) -> Optional[str]:
                 response = client.table(_SESSION_REPORTS_TABLE).insert(retry_report).execute()
                 data = getattr(response, "data", None) or []
                 if data and isinstance(data, list) and data[0].get("id"):
+                    report_id = str(data[0]["id"])
+                    session_report_created_at = data[0].get("created_at")
                     print("[agentic-db] Retried insert with array-formatted difficulty_level.")
-                    return str(data[0]["id"])
-                print("[agentic-db] Retry insert did not return an id; response=", data)
-                return None
+                else:
+                    print("[agentic-db] Retry insert did not return an id; response=", data)
+                    return None
             except Exception as retry_exc:
                 print(
                     f"[agentic-db] Error inserting session report into '{_SESSION_REPORTS_TABLE}' "
                     f"after array retry: {retry_exc}"
                 )
                 return None
+        else:
+            print(f"[agentic-db] Error inserting session report into '{_SESSION_REPORTS_TABLE}': {exc}")
+            return None
 
-        print(f"[agentic-db] Error inserting session report into '{_SESSION_REPORTS_TABLE}': {exc}")
-        return None
+    # Upload CSV after the report row exists.
+    if report_id:
+        try:
+            _build_and_upload_csv(report_id, session_report_created_at)
+        except Exception as csv_exc:
+            # Absolutely never fail the session persistence because CSV generation failed.
+            print(f"[agentic-db] Unexpected CSV generation/upload error: {csv_exc}")
+        return report_id
+
+    return None
