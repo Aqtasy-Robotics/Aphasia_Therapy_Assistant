@@ -68,6 +68,19 @@ def _get_failure_reason_message(failure_reason: str | None, target_word: str) ->
     """
     if not failure_reason:
         return ""
+    
+    if failure_reason == "silence":
+        return "I didn't hear you clearly. Please speak a bit louder and try again. "
+    elif failure_reason == "noise":
+        return "There's too much background noise. Can you move to a quieter place and try again? "
+    elif failure_reason == "non_english":
+        return f"Let's focus on the target word. The word is: {target_word}. Please say it clearly and try again. "
+    elif failure_reason == "error":
+        return "I had trouble recording. Please try again. "
+    else:
+        return ""
+
+
 def _speak(text: str) -> Optional[str]:
     """
     Convert feedback text to speech.
