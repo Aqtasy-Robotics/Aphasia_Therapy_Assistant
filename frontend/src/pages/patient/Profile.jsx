@@ -89,7 +89,7 @@ const Profile = () => {
         updated_at: new Date().toISOString(),
       };
 
-      const { data, error: dbError } = await supabase
+      const { _data, error: dbError } = await supabase
         .from("profiles")
         .upsert(updatePayload)
         .select();
