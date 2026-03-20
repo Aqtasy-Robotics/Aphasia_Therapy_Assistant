@@ -1,17 +1,21 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "../../supabaseClient";
 import { useNavigate, useLocation, Outlet } from "react-router-dom";
+import { Menu, X, LogOut } from "lucide-react"; // Added icons
 import logo from "../../assets/black_logo.svg";
 
 const PatientLayout = () => {
   const [userName, setUserName] = useState("User");
   const [loading, setLoading] = useState(true);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
 
   useEffect(() => {
     const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (session) {
         setUserName(session.user.user_metadata.full_name || "User");
         setLoading(false);
@@ -19,21 +23,18 @@ const PatientLayout = () => {
         navigate("/login");
       }
     };
-
     checkSession();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === "SIGNED_OUT") navigate("/login");
-    });
-
-    return () => subscription.unsubscribe();
   }, [navigate]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
   };
 
-  const handleNav = (path) => navigate(path);
+  const handleNav = (path) => {
+    navigate(path);
+    setIsMobileMenuOpen(false); // Close menu on navigation
+  };
+
   const isActive = (path) => location.pathname === path;
 
   if (loading)
@@ -44,30 +45,49 @@ const PatientLayout = () => {
     );
 
   return (
-    /* font-sans will now point to 'Inter' via your tailwind config */
-    <div className="flex h-screen w-full bg-[#f8fafc] relative overflow-hidden font-sans antialiased">
-      
-      {/* Dynamic Background Accents */}
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-[#172554]/5 rounded-full blur-[120px] pointer-events-none animate-pulse"></div>
-      <div className="absolute bottom-[-10%] right-[-10%] w-[30%] h-[30%] bg-[#064e3b]/5 rounded-full blur-[100px] pointer-events-none animate-bounce delay-1000 duration-[10s]"></div>
+    <div className="flex min-h-screen w-full bg-[#f8fafc] font-sans antialiased text-slate-900">
+      {/* MOBILE HEADER - Only visible on small screens */}
+      <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 z-[100] flex items-center justify-between px-6">
+        <img src={logo} alt="Logo" className="h-8" />
+        <button
+          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+          className="p-2 bg-[#172554] text-white rounded-xl shadow-lg"
+        >
+          {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+        </button>
+      </div>
 
-      {/* SIDEBAR */}
-      <aside className="w-64 bg-[#172554] flex flex-col p-8 h-full z-50 shadow-[10px_0_40px_rgba(0,0,0,0.2)] relative">
-        <div className="absolute inset-y-0 right-0 w-[1px] bg-white/10 pointer-events-none"></div>
+      {/* SIDEBAR BACKDROP - Blurs the content when menu is open on mobile */}
+      {isMobileMenuOpen && (
+        <div
+          className="fixed inset-0 bg-[#172554]/20 backdrop-blur-sm z-[110] lg:hidden"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
 
-        <div className="relative z-10 flex flex-col items-center mb-16 transition-transform duration-500 hover:scale-105">
-          <img 
-            src={logo} 
-            alt="Aqtasy Logo" 
-            className="h-16 mb-4 brightness-0 invert opacity-100 filter drop-shadow-md" 
+      {/* SIDEBAR - Fixed to prevent white space at bottom */}
+      <aside
+        className={`
+        fixed inset-y-0 left-0 z-[120] w-72 bg-[#172554] flex flex-col p-8 transition-transform duration-500 ease-in-out
+        lg:translate-x-0 lg:static lg:h-screen
+        ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"}
+      `}
+      >
+        {/* Sidebar Interior - Dynamic Accents inside sidebar */}
+        <div className="absolute bottom-0 left-0 w-full h-32 bg-gradient-to-t from-black/20 to-transparent pointer-events-none" />
+
+        <div className="relative z-10 flex flex-col items-center mb-12">
+          <img
+            src={logo}
+            alt="Aqtasy Logo"
+            className="h-16 mb-4 brightness-0 invert filter drop-shadow-md"
           />
-          {/* SIDEBAR SUB-HEADER: 10px */}
-          <span className="text-[10px] font-black text-white/60 uppercase tracking-[0.4em] text-center">
+          <span className="text-[10px] font-black text-white/40 uppercase tracking-[0.4em] text-center">
             Patient Portal
           </span>
         </div>
 
-        <nav className="relative z-10 flex-1 space-y-5">
+        <nav className="relative z-10 flex-1 space-y-3 overflow-y-auto no-scrollbar">
           <NavItem
             label="Home"
             active={isActive("/patient-dashboard")}
@@ -103,9 +123,9 @@ const PatientLayout = () => {
         <div className="relative z-10 pt-8 mt-auto border-t border-white/10">
           <button
             onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-3 text-white/60 hover:text-white transition-all duration-300 p-4 rounded-2xl hover:bg-white/5 group border border-transparent hover:border-white/20"
+            className="w-full flex items-center justify-center gap-3 text-white/50 hover:text-white transition-all duration-300 p-4 rounded-2xl hover:bg-red-500/10 group"
           >
-            {/* LOGOUT BUTTON: 10px */}
+            <LogOut size={16} />
             <span className="font-black text-[10px] uppercase tracking-[0.3em]">
               LOG OUT
             </span>
@@ -114,19 +134,29 @@ const PatientLayout = () => {
       </aside>
 
       {/* MAIN CONTENT AREA */}
-      <main className="flex-1 h-full overflow-y-auto p-12 relative z-10">
-        <header className="mb-12 flex justify-between items-center animate-in slide-in-from-top duration-700">
-          <div className="bg-white/80 backdrop-blur-xl px-8 py-4 rounded-2xl border border-white shadow-lg flex items-center gap-4">
-            <div className="w-2.5 h-2.5 rounded-full bg-[#172554] animate-pulse shadow-[0_0_8px_rgba(23,37,84,0.3)]"></div>
-            {/* ACTIVE USER BADGE: 10px */}
-            <h2 className="text-[10px] font-black text-[#172554] uppercase tracking-[0.3em]">
-              Active Clinical User: {userName}
-            </h2>
+      <main className="flex-1 flex flex-col h-screen relative overflow-hidden">
+        {/* Dynamic Background Accents */}
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-[#172554]/5 rounded-full blur-[120px] pointer-events-none" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[30%] h-[30%] bg-[#5cb338]/5 rounded-full blur-[100px] pointer-events-none" />
+
+        {/* Content Header - Pushed down on mobile to clear fixed mobile bar */}
+        <header className="px-6 lg:px-12 pt-20 lg:pt-12 mb-8 shrink-0 relative z-20">
+          <div className="flex justify-between items-center animate-in slide-in-from-top duration-700">
+            <div className="bg-white/70 backdrop-blur-xl px-6 py-3 rounded-2xl border border-white shadow-sm flex items-center gap-4">
+              <div className="w-2 h-2 rounded-full bg-[#5cb338] animate-pulse" />
+              <h2 className="text-[10px] font-black text-[#172554] uppercase tracking-[0.2em]">
+                Verified User:{" "}
+                <span className="text-slate-500 ml-1">{userName}</span>
+              </h2>
+            </div>
           </div>
         </header>
 
-        <div className="max-w-6xl mx-auto animate-in fade-in zoom-in-95 duration-700 pb-20">
-          <Outlet />
+        {/* Dynamic Page Content */}
+        <div className="flex-1 overflow-y-auto px-6 lg:px-12 pb-12 relative z-10 no-scrollbar">
+          <div className="max-w-6xl mx-auto">
+            <Outlet />
+          </div>
         </div>
       </main>
     </div>
@@ -136,17 +166,17 @@ const PatientLayout = () => {
 const NavItem = ({ label, active, onClick }) => (
   <div
     onClick={onClick}
-    className={`group px-6 py-4 rounded-[1.5rem] cursor-pointer transition-all duration-500 ease-out flex items-center gap-5
+    className={`group px-6 py-4 rounded-2xl cursor-pointer transition-all duration-300 flex items-center gap-4
       ${
         active
-          ? "bg-white/15 text-white font-black shadow-[0_12px_24px_rgba(0,0,0,0.3)] ring-1 ring-white/30 translate-x-2"
-          : "text-white/70 hover:bg-white/5 hover:text-white hover:translate-x-1"
+          ? "bg-white/10 text-white shadow-lg ring-1 ring-white/20"
+          : "text-white/50 hover:bg-white/5 hover:text-white"
       }`}
   >
-    <div className={`w-2 h-2 rounded-full transition-all duration-500 ${active ? 'bg-white shadow-[0_0_12px_white] scale-110' : 'bg-transparent scale-0'}`} />
-    
-    {/* MAIN NAVIGATION LINKS: 11px */}
-    <span className="text-[11px] uppercase tracking-[0.2em] font-black leading-none">
+    <div
+      className={`w-1.5 h-1.5 rounded-full transition-all duration-500 ${active ? "bg-[#5cb338] shadow-[0_0_10px_#5cb338]" : "bg-transparent"}`}
+    />
+    <span className="text-[10px] uppercase tracking-[0.2em] font-extrabold">
       {label}
     </span>
   </div>
