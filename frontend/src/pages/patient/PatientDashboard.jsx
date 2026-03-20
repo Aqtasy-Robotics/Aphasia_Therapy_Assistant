@@ -104,7 +104,7 @@ const PatientDashboard = () => {
       </header>
 
       {/* Stat Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
         <StatCard 
           title="Words Mastered" 
           value="0" 
@@ -120,15 +120,6 @@ const PatientDashboard = () => {
           icon={<Calendar className="w-5 h-5" />} 
           iconBg="bg-[#172554]" // Updated to Deep Navy
           textColor="text-gray-300"
-        />
-        <StatCard 
-          title="Practice Streak" 
-          value="0" 
-          subText="Days Active" 
-          icon={<Flame className="w-5 h-5" />} 
-          iconBg="bg-orange-600"
-          textColor="text-orange-600"
-          highlightBg="bg-orange-50/20"
         />
         <StatCard 
           title="Accuracy" 
