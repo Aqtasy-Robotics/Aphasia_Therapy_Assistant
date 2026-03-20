@@ -24,12 +24,7 @@ import time
 from pathlib import Path
 from typing import Optional
 
-try:
-    from loguru import logger
-except ImportError:  # fall back to stdlib logging if loguru isn't installed
-    import logging
-    logging.basicConfig(level=logging.INFO)
-    logger = logging.getLogger("execution_node")
+from loguru import logger
 
 from db.mem0_store import add_session_memory
 from state import SpeechTherapyState
@@ -98,35 +93,6 @@ def _speak(text: str) -> Optional[str]:
                 pass
 
 
-def _get_failure_reason_message(reason: Optional[str], target_word: str) -> str:
-    """Generate a patient-facing prompt based on why transcription failed."""
-    if not reason:
-        return ""
-
-    reason = str(reason).lower()
-
-    if reason == "silence":
-        return (
-            "I didn’t hear anything. Please speak a little louder and more clearly so I can understand "
-            "the word."
-        )
-
-    if reason == "noise":
-        return (
-            "There is a lot of background noise, so I couldn't hear you clearly. "
-            "Can you move to a quieter place and try saying the word again?"
-        )
-
-    if reason == "non_english":
-        word = target_word.strip() or "the target word"
-        return (
-            f"It sounds like you said something different. Let's try again — please say the target word: '{word}'."
-        )
-
-    # Fallback for unrecognized failure reasons.
-    return "I had trouble understanding that. Please try saying the word again clearly."
-
-
 # ── LangGraph node ───────────────────────────────────────────────────────────
 
 def execution_node(state: SpeechTherapyState) -> dict:
@@ -143,6 +109,8 @@ def execution_node(state: SpeechTherapyState) -> dict:
     error_report     = state.get("error_report") or {}
     error_summary    = error_report.get("error_summary") or {}
     semantic_label   = state.get("semantic_label", "N/A")
+    target_phonemes  = state.get("target_phonemes") or []
+    attempt_phonemes = state.get("attempt_phonemes") or []
     target_words     = state.get("target_words") or []
     current_index    = int(state.get("current_target_index", 0) or 0)
     transcript       = state.get("transcript", "")
@@ -183,6 +151,8 @@ def execution_node(state: SpeechTherapyState) -> dict:
             "omissions": error_summary.get("omissions", 0),
             "insertions": error_summary.get("insertions", 0),
             "semantic_label": semantic_label,
+            "target_phonemes": target_phonemes,
+            "attempt_phonemes": attempt_phonemes,
             "feedback_text": feedback_text,
             "practice_exercise": practice,
             "model_used": feedback.get("model_used"),
@@ -214,6 +184,31 @@ def execution_node(state: SpeechTherapyState) -> dict:
     else:
         mem0_error = "Mem0 session memory was not stored for this attempt."
         logger.warning(mem0_error)
+
+    # Conservative fatigue update after each completed word.
+    current_fatigue = int(state.get("fatigue_level", 0) or 0)
+    trend = str(state.get("patient_trend") or "").strip().lower()
+    retries = int(state.get("retry_count", 0) or 0)
+    try:
+        accuracy = float(error_report.get("accuracy", 0) or 0)
+    except (TypeError, ValueError):
+        accuracy = 0.0
+
+    fatigue_delta = 1
+    if accuracy < 70:
+        fatigue_delta += 2
+    if retries >= 2:
+        fatigue_delta += 1
+    if trend == "needs work":
+        fatigue_delta += 1
+    elif trend == "improving" and accuracy >= 90:
+        fatigue_delta -= 1
+
+    next_fatigue_level = max(0, min(10, current_fatigue + fatigue_delta))
+    print(
+        f"[execution] Fatigue update: {current_fatigue} -> {next_fatigue_level} "
+        f"(delta {fatigue_delta:+d}, accuracy={accuracy:.1f}, retries={retries}, trend='{trend or 'unknown'}')"
+    )
 
     next_index = current_index
     next_target_word = target_word
@@ -256,6 +251,7 @@ def execution_node(state: SpeechTherapyState) -> dict:
         "practice_exercise": None if has_more_target_words else state.get("practice_exercise"),
         "memory_context":    [] if has_more_target_words else state.get("memory_context", []),
         "session_history":   history,
+        "fatigue_level":     next_fatigue_level,
         "session_duration_secs": duration,
         "report_id":         state.get("report_id"),
         "current_error":     mem0_error,
