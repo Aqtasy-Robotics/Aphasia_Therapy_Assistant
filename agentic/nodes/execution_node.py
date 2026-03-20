@@ -40,6 +40,27 @@ except Exception:
 # ── Lazy settings load (original Settings infrastructure) ───────────────────
 _settings = None
 
+
+def _get_failure_reason_message(reason: str | None, target_word: str = "") -> str:
+    """Return a targeted prompt for the previous failed recording attempt."""
+    word = (target_word or "").strip()
+
+    if reason == "silence":
+        return "I could not hear you clearly. Please speak a bit louder and say the word clearly."
+
+    if reason == "noise":
+        return "There was too much background noise. Please move to a quiet place and try again."
+
+    if reason == "non_english":
+        if word:
+            return f"Please say the target word '{word}' in English. Let us try again."
+        return "Please say the target word in English. Let us try again."
+
+    if reason == "error":
+        return "There was a recording issue. Please try speaking again."
+
+    return ""
+
 def _get_settings():
     """Load settings once; silently skip if src.settings is unavailable."""
     global _settings
