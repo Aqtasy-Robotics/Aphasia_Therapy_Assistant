@@ -177,7 +177,6 @@ const MyPatients = () => {
     }
   };
 
-  // ONLY CALL THIS WHEN "SYNC EDITS" IS CLICKED
   const handleManualSync = async (patientId) => {
     if (wordTags.length < 3) {
       alert("Waabi requires at least 3 target words for an effective session.");
@@ -246,11 +245,7 @@ const MyPatients = () => {
     ) {
       try {
         setUpdatingId(patientId);
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
 
-        // Use local state directly for archiving so we don't miss unsynced edits!
         const phonemesArray = phonemes
           .split(",")
           .map((p) => p.trim())
@@ -258,11 +253,9 @@ const MyPatients = () => {
 
         const archivePayload = {
           patient_id: patientId,
-          therapist_id: user.id,
-          session_date: sessionDate,
-          session_time: sessionTime,
           target_word: wordTags,
-          target_sentence: currentSentence,
+          target_sentence: currentSentence, // This is sending correctly!
+          transcript: "Manual Archive",
           difficulty_level: [difficultyLevel],
           therapy_goals: therapyGoal,
           phonemes_to_focus_on: phonemesArray,
@@ -277,7 +270,6 @@ const MyPatients = () => {
 
         if (insertError) throw insertError;
 
-        // Delete from active sessions table
         const { error: deleteError } = await supabase
           .from("sessions")
           .delete()
@@ -285,7 +277,6 @@ const MyPatients = () => {
 
         if (deleteError) throw deleteError;
 
-        // Update UI
         setSessionReports([newReport, ...sessionReports]);
         setActiveSessionId(null);
         setWordTags([]);
@@ -308,7 +299,7 @@ const MyPatients = () => {
     }
   };
 
-  // --- CSV DOWNLOAD GENERATOR ---
+  // --- CSV DOWNLOAD GENERATOR (PER-WORD MAPPING) ---
   const downloadCSV = (patient) => {
     if (sessionReports.length === 0) {
       alert("No reports available to download for this patient.");
@@ -317,50 +308,97 @@ const MyPatients = () => {
 
     const headers = [
       "Patient Name",
-      "Scheduled Date",
-      "Scheduled Time",
-      "Target Word(s)",
-      "Target Sentence",
+      "Target Word",
+      "Target Phonemes",
+      "Attempted Phonemes",
+      "Transcript (Attempts)",
+      "Feedback Given",
+      "Practice Exercise",
+      "Semantic Label",
       "Difficulty Level",
-      "Phonemes",
-      "Therapy Goal",
-      "Transcript",
+      "Phonemes To Focus On",
       "Accuracy (%)",
       "Total Errors",
       "Substitutions",
       "Omissions",
       "Insertions",
-      "Feedback Given",
-      "Practice Exercise",
       "Session Duration (s)",
+      "Target Sentence",
+      "Therapy Goals",
       "Date Completed",
     ];
 
-    const csvRows = sessionReports.map((report) => {
-      return [
-        patient.full_name || "Unknown Patient",
-        report.session_date || "N/A",
-        report.session_time || "N/A",
-        report.target_word?.join(", ") || "",
-        report.target_sentence || "",
-        report.difficulty_level?.join(", ") || "",
-        report.phonemes_to_focus_on?.join(", ") || "",
-        report.therapy_goals || report.therapy_goal || "",
-        report.transcript || "Manual Archive",
-        report.accuracy !== null ? report.accuracy : "",
-        report.total_errors !== null ? report.total_errors : "",
-        report.substitutions !== null ? report.substitutions : "",
-        report.omissions !== null ? report.omissions : "",
-        report.insertions !== null ? report.insertions : "",
-        report.feedback_given || "",
-        report.practice_exercise || "",
-        report.session_duration_secs !== null
-          ? report.session_duration_secs
-          : "",
-        new Date(report.created_at).toLocaleString(),
-      ]
-        .map((value) => `"${String(value).replace(/"/g, '""')}"`)
-        .join(",");
+    const csvRows = [];
+
+    sessionReports.forEach((report) => {
+      // Helper: Safely parses Supabase arrays into JS arrays
+      const parseArray = (arr) => {
+        if (!arr) return [];
+        if (Array.isArray(arr)) return arr;
+        if (typeof arr === "string") {
+          if (arr.startsWith("{") && arr.endsWith("}")) {
+            return arr
+              .slice(1, -1)
+              .split(",")
+              .map((s) => s.replace(/(^"|"$)/g, "").trim());
+          }
+          return arr.split(",").map((s) => s.trim());
+        }
+        return [String(arr)];
+      };
+
+      const targetWords = parseArray(report.target_word);
+      const targetPhons = parseArray(report.target_phonemes);
+      const attemptedPhons = parseArray(report.attempted_phonemes);
+      const diffLevels = parseArray(report.difficulty_level);
+      const focusPhons = parseArray(report.phonemes_to_focus_on);
+
+      // Split text blocks by line so we can search them per-word
+      const allTranscriptLines = (report.transcript || "").split("\n");
+      const allFeedbackLines = (report.feedback_given || "").split("\n");
+      const allPracticeLines = (report.practice_exercise || "").split("\n");
+
+      const wordsToIterate = targetWords.length > 0 ? targetWords : [""];
+
+      // Unpivot: Loop through each word and grab ITS specific data using the Index (idx)
+      wordsToIterate.forEach((word, idx) => {
+        // Filter multi-line strings to only show the line starting with the current word
+        const extractForWord = (linesArray) => {
+          const match = linesArray.filter((line) =>
+            line.toLowerCase().startsWith(word.toLowerCase()),
+          );
+          return match.length > 0 ? match.join("\n") : "";
+        };
+
+        const rowData = [
+          patient.full_name || "Unknown Patient",
+          word,
+          targetPhons[idx] || "", // Pulls phoneme for THIS specific word
+          attemptedPhons[idx] || "", // Pulls attempt for THIS specific word
+          extractForWord(allTranscriptLines) || report.transcript || "",
+          extractForWord(allFeedbackLines) || report.feedback_given || "",
+          extractForWord(allPracticeLines) || report.practice_exercise || "",
+          report.semantic_label || "",
+          diffLevels[idx] || diffLevels[0] || "",
+          focusPhons[idx] || focusPhons[0] || "",
+          report.accuracy ?? "",
+          report.total_errors ?? "",
+          report.substitutions ?? "",
+          report.omissions ?? "",
+          report.insertions ?? "",
+          report.session_duration_secs ?? "",
+          report.target_sentence || "",
+          report.therapy_goals || report.therapy_goal || "",
+          report.created_at ? new Date(report.created_at).toLocaleString() : "",
+        ];
+
+        // Wrap everything in double quotes so commas and newlines don't break Excel
+        csvRows.push(
+          rowData
+            .map((value) => `"${String(value).replace(/"/g, '""')}"`)
+            .join(","),
+        );
+      });
     });
 
     const csvString = [headers.join(","), ...csvRows].join("\n");
@@ -415,12 +453,10 @@ const MyPatients = () => {
       .toISOString()
       .split("T")[0];
 
-    // Local state only
     setSessionDate(formattedDate);
     setShowDatePicker(false);
   };
 
-  // --- Time Picker Logic ---
   const generateTimeSlots = () => {
     const slots = [];
     for (let i = 8; i <= 18; i++) {
@@ -433,7 +469,6 @@ const MyPatients = () => {
   };
 
   const handleCustomTimeSelect = (time) => {
-    // Local state only
     setSessionTime(time);
     setShowTimePicker(false);
   };
@@ -443,7 +478,6 @@ const MyPatients = () => {
       e.preventDefault();
       const value = e.target.value.trim().replace(",", "");
       if (value && !wordTags.includes(value)) {
-        // Local state only
         setWordTags([...wordTags, value]);
         e.target.value = "";
       }
@@ -451,7 +485,6 @@ const MyPatients = () => {
   };
 
   const removeTag = (indexToRemove) => {
-    // Local state only
     setWordTags(wordTags.filter((_, index) => index !== indexToRemove));
   };
 
@@ -587,7 +620,6 @@ const MyPatients = () => {
                     </td>
                   </tr>
 
-                  {/* Expanded Area: Builder + History */}
                   {expandedId === patient.id && (
                     <tr className="bg-[#f0fff4]/10">
                       <td colSpan="4" className="px-12 py-10">
@@ -605,9 +637,7 @@ const MyPatients = () => {
                           )}
                         </div>
 
-                        {/* ACTIVE SESSION BUILDER */}
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 animate-in slide-in-from-top duration-500">
-                          {/* LEFT COLUMN: Practice Setup */}
                           <div className="space-y-8">
                             <div className="grid grid-cols-2 gap-4">
                               <div className="space-y-2 relative">
@@ -850,7 +880,6 @@ const MyPatients = () => {
                             </div>
                           </div>
 
-                          {/* RIGHT COLUMN: Sentences & Actions */}
                           <div className="space-y-2 flex flex-col h-full">
                             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 flex items-center gap-2">
                               <MessageSquare className="w-3.5 h-3.5 text-blue-500" />{" "}
@@ -895,7 +924,6 @@ const MyPatients = () => {
                           </div>
                         </div>
 
-                        {/* --- EXPORT CSV ONLY --- */}
                         <div className="mt-12 pt-8 border-t border-gray-200/50 animate-in slide-in-from-bottom duration-700">
                           <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-3xl border border-blue-100 flex flex-col md:flex-row justify-between items-center gap-6 shadow-sm">
                             <div>
