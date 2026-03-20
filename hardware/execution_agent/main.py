@@ -16,7 +16,7 @@ from src.services.ear import listen
 from src.services.face import show_face, shutdown_face
 from src.services.head import move_head, shutdown_head
 from src.services.mouth import speak
-from src.ui.body_app import show_ui
+from src.ui.body_app import dequeue_ui_events, maybe_start_ui_from_env, show_ui
 from src.settings import load_settings_or_exit
 
 # Global state
@@ -80,6 +80,7 @@ async def main():
 
     # Setup logging with loaded log level
     setup_logging(settings.log_level, project_root)
+    maybe_start_ui_from_env(project_root)
 
     # Print startup banner
     banner = f"""
@@ -140,6 +141,10 @@ Log Level: {settings.log_level}
                     ack = await dispatcher.execute(cmd)
                     await api_client.send_ack(ack)
 
+                # Non-blocking drain of local UI events.
+                for ui_event in dequeue_ui_events():
+                    logger.info("UI event: {}", ui_event)
+
                 await asyncio.sleep(settings.polling.interval_seconds)
             except Exception as e:  # noqa: BLE001
                 logger.exception("Error in polling loop: {}", e)
@@ -153,7 +158,8 @@ Log Level: {settings.log_level}
             return_exceptions=True,
         )
         logger.info("Shutdown complete")
-        
+
+
 if __name__ == "__main__":
     # Register signal handlers for graceful shutdown
     signal.signal(signal.SIGINT, handle_shutdown)

@@ -125,23 +125,30 @@ def execution_node(state: SpeechTherapyState) -> dict:
     feedback         = state.get("feedback") or {}
     feedback_text    = feedback.get("feedback_text", "No feedback generated.")
     practice         = state.get("practice_exercise", "")
+    session_type     = str(state.get("session_type") or "word_level").strip().lower()
+    target_label     = "sentence" if session_type == "sentence_level" else "word"
     patient_name     = state.get("patient_name", "friend")
-    target_word      = state.get("target_word", "")
+    target_word      = state.get("target_word") or state.get("target_sentence") or ""
     error_report     = state.get("error_report") or {}
     error_summary    = error_report.get("error_summary") or {}
     semantic_label   = state.get("semantic_label", "N/A")
     target_phonemes  = state.get("target_phonemes") or []
     attempt_phonemes = state.get("attempt_phonemes") or []
-    target_words     = state.get("target_words") or []
+    target_items     = state.get("target_items") or state.get("target_words") or []
     current_index    = int(state.get("current_target_index", 0) or 0)
     transcript       = state.get("transcript", "")
+    failure_reason   = str(state.get("failure_reason") or "").strip().lower() or None
+    failure_hint     = _get_failure_reason_message(failure_reason, target_word)
+    if failure_hint:
+        feedback_text = f"{failure_hint} {feedback_text}".strip()
 
     # ── Terminal summary ─────────────────────────────────────────
     print("\n" + "█" * 55)
     print("  SESSION SUMMARY")
     print("█" * 55)
     print(f"  Patient    : {patient_name}")
-    print(f"  Target word: {target_word}")
+    print(f"  Session type: {session_type}")
+    print(f"  Target {target_label}: {target_word}")
     print(f"  Accuracy   : {error_report.get('accuracy', 'N/A')}%")
     print(f"  Errors     : {error_report.get('total_errors', 'N/A')}")
     print(f"  Semantic   : {semantic_label}")
@@ -164,8 +171,11 @@ def execution_node(state: SpeechTherapyState) -> dict:
     history = list(state.get("session_history") or [])
     history.append(
         {
+            "session_type": session_type,
+            "target_text": target_word,
             "target_word": target_word,
             "transcript": transcript,
+            "failure_reason": failure_reason,
             "accuracy": error_report.get("accuracy", 0),
             "total_errors": error_report.get("total_errors", 0),
             "substitutions": error_summary.get("substitutions", 0),
@@ -184,6 +194,8 @@ def execution_node(state: SpeechTherapyState) -> dict:
         patient_id=state.get("patient_id"),
         payload={
             "patient_name": patient_name,
+            "session_type": session_type,
+            "target_text": target_word,
             "target_word": target_word,
             "transcript": transcript,
             "accuracy": error_report.get("accuracy", 0),
@@ -201,7 +213,12 @@ def execution_node(state: SpeechTherapyState) -> dict:
     )
     mem0_error: Optional[str] = None
     if stored_in_mem0:
-        logger.info("Stored session memory in Mem0 for patient {} and word '{}'", patient_name, target_word)
+        logger.info(
+            "Stored session memory in Mem0 for patient {} and {} '{}'",
+            patient_name,
+            target_label,
+            target_word,
+        )
     else:
         mem0_error = "Mem0 session memory was not stored for this attempt."
         logger.warning(mem0_error)
@@ -233,19 +250,21 @@ def execution_node(state: SpeechTherapyState) -> dict:
 
     next_index = current_index
     next_target_word = target_word
+    next_target_sentence = state.get("target_sentence")
     has_more_target_words = False
     next_retry_count = state.get("retry_count", 0)
     next_feedback_attempts = state.get("feedback_attempts", 0)
 
-    if isinstance(target_words, list) and target_words and current_index + 1 < len(target_words):
+    if isinstance(target_items, list) and target_items and current_index + 1 < len(target_items):
         next_index = current_index + 1
-        next_target_word = str(target_words[next_index]).strip()
+        next_target_word = str(target_items[next_index]).strip()
+        next_target_sentence = next_target_word if session_type == "sentence_level" else None
         has_more_target_words = True
         next_retry_count = 0
         next_feedback_attempts = 0
-        print(f"➡️ Next target word: '{next_target_word}'")
+        print(f"➡️ Next target {target_label}: '{next_target_word}'")
     else:
-        print("✅ All target words completed.")
+        print(f"✅ All target {target_label}s completed.")
 
     duration = state.get("session_duration_secs")
     if duration is None and state.get("session_start") is not None:
@@ -258,10 +277,13 @@ def execution_node(state: SpeechTherapyState) -> dict:
         "audio_output_path": audio_path,
         "session_complete":  not has_more_target_words,
         "target_word":       next_target_word,
+        "target_sentence":   next_target_sentence if has_more_target_words else state.get("target_sentence"),
+        "target_items":      target_items,
         "current_target_index": next_index,
         "has_more_target_words": has_more_target_words,
         "retry_count":       next_retry_count,
         "feedback_attempts": next_feedback_attempts,
+        "failure_reason":    None if has_more_target_words else failure_reason,
         "transcript":        None if has_more_target_words else transcript,
         "confidence_score":  None if has_more_target_words else state.get("confidence_score"),
         "target_phonemes":   None if has_more_target_words else state.get("target_phonemes"),

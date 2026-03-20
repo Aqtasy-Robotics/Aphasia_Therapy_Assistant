@@ -2,6 +2,8 @@
 
 A Python-based execution agent that runs on a **Raspberry Pi 4**, communicates with a FastAPI backend over HTTP, and controls local hardware to deliver interactive aphasia therapy sessions.
 
+> 📋 **For detailed implementation phases and development roadmap, see [`implementation_plan.md`](implementation_plan.md).**
+
 | Component | Technology |
 |-----------|-----------|
 | TTS | Piper TTS (local ONNX) |
@@ -323,7 +325,8 @@ sudo journalctl -u robot.service -f
 | `audio` | `channels` | `1` | Mono |
 | `audio` | `volume` | `0.8` | Playback gain (0.0–1.0) |
 | `gpio` | `servo_pan_pin` | `17` | BCM pin for pan servo |
-| `gpio` | `servo_tilt_pin` | `27` | BCM pin for tilt servo |
+| `gpio` | `servo_min_pulse_width` | `0.0005` | Pan servo minimum pulse width |
+| `gpio` | `servo_max_pulse_width` | `0.0025` | Pan servo maximum pulse width |
 | `oled` | `i2c_address` | `0x3C` | OLED I2C address |
 | `oled` | `width` / `height` | `128` / `128` | OLED resolution |
 | `display` | `width` / `height` | `800` / `480` | Kivy display resolution |

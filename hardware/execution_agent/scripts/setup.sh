@@ -22,4 +22,3 @@ pip install -r "${PROJECT_ROOT}/requirements.txt"
 echo "Virtual environment created at: ${VENV_DIR}"
 echo "Activate with:"
 echo "  source \"${VENV_DIR}/bin/activate\""
-
