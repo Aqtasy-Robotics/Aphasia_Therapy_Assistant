@@ -29,6 +29,7 @@ from PIL import Image, ImageDraw
 
 try:
     from luma.core.interface.serial import i2c
+    from luma.core.interface.serial import spi
     from luma.oled.device import ssd1351
 
     import luma.oled.device as oled_device_mod
@@ -36,6 +37,7 @@ try:
     LUMA_AVAILABLE = True
 except Exception:  # noqa: BLE001
     i2c = None
+    spi = None
     ssd1351 = None
     oled_device_mod = None
     LUMA_AVAILABLE = False
@@ -260,8 +262,14 @@ def _draw_frame(
 
 def _init_oled(cfg: Dict[str, Any]) -> Any:
     oled_cfg = cfg.get("oled", {})
+    interface = str(oled_cfg.get("interface", "i2c")).lower()
     port = int(oled_cfg.get("i2c_port", 1))
     addr = int(str(oled_cfg.get("i2c_address", "0x3C")), 16)
+    spi_port = int(oled_cfg.get("spi_port", 0))
+    spi_device = int(oled_cfg.get("spi_device", 0))
+    spi_gpio_dc = int(oled_cfg.get("spi_gpio_dc", 24))
+    spi_gpio_rst = int(oled_cfg.get("spi_gpio_rst", 25))
+    spi_bus_speed_hz = int(oled_cfg.get("spi_bus_speed_hz", 8_000_000))
     width = int(oled_cfg.get("width", 128))
     height = int(oled_cfg.get("height", 128))
     rotate = int(oled_cfg.get("rotate", 0))
@@ -276,7 +284,7 @@ def _init_oled(cfg: Dict[str, Any]) -> Any:
     cmd_control = int(str(oled_cfg.get("cmd_control", "0x00")), 16)
     data_control = int(str(oled_cfg.get("data_control", "0x40")), 16)
 
-    if driver == "sh1107":
+    if driver == "sh1107" and interface == "i2c":
         return Sh1107NativeI2C(
             i2c_port=port,
             address=addr,
@@ -291,14 +299,28 @@ def _init_oled(cfg: Dict[str, Any]) -> Any:
             cmd_control=cmd_control,
             data_control=data_control,
         )
+    if driver == "sh1107" and interface == "spi":
+        raise RuntimeError(
+            "Invalid config: oled_driver='sh1107' is I2C-only in this test script. "
+            "For SPI displays, use oled_driver='ssd1351' or 'sh1106'."
+        )
 
     if not LUMA_AVAILABLE:
         raise RuntimeError("luma.oled not available")
 
-    serial = i2c(port=port, address=addr)
+    if interface == "spi":
+        serial = spi(
+            port=spi_port,
+            device=spi_device,
+            gpio_DC=spi_gpio_dc,
+            gpio_RST=spi_gpio_rst,
+            bus_speed_hz=spi_bus_speed_hz,
+        )
+    else:
+        serial = i2c(port=port, address=addr)
     safe_i2c = bool(oled_cfg.get("safe_i2c", True))
 
-    if safe_i2c:
+    if interface == "i2c" and safe_i2c:
         bus_fd = serial._bus.fd
         addr7 = int(serial._addr)
 
@@ -320,16 +342,17 @@ def _init_oled(cfg: Dict[str, Any]) -> Any:
         serial.command = _safe_command
         serial.data = _safe_data
 
-    # Support a couple common controllers for physical testing.
+    # For SPI/I2C via luma: allow any driver class that exists in luma.oled.device.
     if driver == "ssd1351":
         return ssd1351(serial_interface=serial, width=width, height=height, rotate=rotate)
-    if driver == "sh1106":
-        sh1106_cls = getattr(oled_device_mod, "sh1106", None)
-        if sh1106_cls is None:
-            raise RuntimeError("luma.oled sh1106 driver not available in this environment")
-        return sh1106_cls(serial_interface=serial, width=width, height=height, rotate=rotate)
 
-    raise RuntimeError(f"Unsupported oled_driver={driver!r}")
+    driver_cls = getattr(oled_device_mod, driver, None)
+    if driver_cls is None:
+        raise RuntimeError(
+            f"Unsupported oled_driver={driver!r}. "
+            "Try one of: ssd1351, ssd1327, ssd1331, sh1106."
+        )
+    return driver_cls(serial_interface=serial, width=width, height=height, rotate=rotate)
 
 
 async def main() -> int:
@@ -339,9 +362,23 @@ async def main() -> int:
     parser.add_argument("--expression", default="auto", help="neutral|happy|sad|thinking|surprised|listening|auto")
     parser.add_argument("--gaze_x", type=float, default=0.0)
     parser.add_argument("--gaze_y", type=float, default=0.0)
+    parser.add_argument("--driver", default=None, help="Optional driver override (e.g. ssd1351|ssd1327|ssd1331|sh1106)")
     args = parser.parse_args()
 
     cfg = _load_config(Path(args.config))
+    if args.driver:
+        cfg.setdefault("oled", {})["oled_driver"] = str(args.driver).lower()
+    oled_cfg = cfg.get("oled", {})
+    print(
+        "OLED config: interface={} driver={} spi_port={} spi_device={} dc={} rst={}".format(
+            str(oled_cfg.get("interface", "i2c")).lower(),
+            str(oled_cfg.get("oled_driver", "ssd1351")).lower(),
+            oled_cfg.get("spi_port", 0),
+            oled_cfg.get("spi_device", 0),
+            oled_cfg.get("spi_gpio_dc", 24),
+            oled_cfg.get("spi_gpio_rst", 25),
+        )
+    )
     drv = str(cfg.get("oled", {}).get("oled_driver", "ssd1351")).lower()
     if not LUMA_AVAILABLE and drv != "sh1107":
         print("ERROR: luma.oled not available. Install deps or use oled_driver \"sh1107\".")

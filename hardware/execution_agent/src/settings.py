@@ -25,6 +25,10 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 class PollingConfig(BaseModel):
     """HTTP polling behaviour for the FastAPI backend."""
 
+    enabled: bool = Field(
+        default=True,
+        description="Enable backend polling loop. Set false for fully local runtime.",
+    )
     interval_seconds: float = Field(gt=0.0)
     timeout_seconds: float = Field(gt=0.0)
     max_retries: int = Field(ge=0)
@@ -49,13 +53,36 @@ class GPIOConfig(BaseModel):
 
 
 class OledConfig(BaseModel):
-    """I2C OLED display configuration."""
+    """OLED display configuration (I2C or SPI)."""
 
+    interface: str = Field(
+        default="i2c",
+        description="Display bus interface: i2c or spi",
+    )
+    oled_driver: str = Field(
+        default="ssd1351",
+        description="Controller driver name (e.g., ssd1351, ssd1331, sh1106, sh1107)",
+    )
     i2c_port: int = Field(default=1, ge=0, description="I2C port number (typically 1 on Raspberry Pi)")
     i2c_address: str = Field(default="0x3C", description="I2C address of OLED display")
+    spi_port: int = Field(default=0, ge=0, description="SPI port number (typically 0 on Raspberry Pi)")
+    spi_device: int = Field(default=0, ge=0, description="SPI device/CS number (typically 0 or 1)")
+    spi_gpio_dc: int = Field(default=24, ge=0, le=27, description="BCM pin for OLED D/C line")
+    spi_gpio_rst: int = Field(default=25, ge=0, le=27, description="BCM pin for OLED RESET line")
+    spi_bus_speed_hz: int = Field(default=8_000_000, ge=100_000, description="SPI bus speed in Hz")
     width: int = Field(gt=0)
     height: int = Field(gt=0)
     rotate: int = Field(default=0, ge=0, le=3, description="Display rotation (0, 90, 180, 270 degrees)")
+    standalone_math_eyes: bool = Field(
+        default=False,
+        description="Run continuous local math-generated eyes without backend commands.",
+    )
+    default_expression: str = Field(default="neutral")
+    frame_delay_seconds: float = Field(
+        default=0.05,
+        gt=0.0,
+        description="Frame delay for local eye animation loop.",
+    )
 
     @field_validator("i2c_address")
     @classmethod
@@ -68,6 +95,14 @@ class OledConfig(BaseModel):
         except ValueError as exc:
             raise ValueError(f"Invalid I2C address format: {v}") from exc
         return v
+
+    @field_validator("interface")
+    @classmethod
+    def validate_interface(cls, v: str) -> str:
+        normalized = v.lower().strip()
+        if normalized not in {"i2c", "spi"}:
+            raise ValueError("oled.interface must be 'i2c' or 'spi'")
+        return normalized
 
 
 class DisplayConfig(BaseModel):
