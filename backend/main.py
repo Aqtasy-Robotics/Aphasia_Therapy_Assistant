@@ -32,8 +32,8 @@ app = FastAPI(
     description="Backend bridge between Waabi hardware and Aqtasy Supabase DB"
 )
 
-url: str = os.getenv("SUPABASE_URL")
-key: str = os.getenv("SUPABASE_SERVICE_KEY")
+url: str = os.getenv("SUPABASE_URL", "")
+key: str = os.getenv("SUPABASE_SERVICE_KEY", "")
 
 if not url or not key:
     raise ValueError("Missing SUPABASE credentials. Check your root .env file.")
