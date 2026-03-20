@@ -11,7 +11,7 @@ from pipecat.runner.types import RunnerArguments
 from pipecat.runner.utils import create_transport
 from pipecat.services.cartesia.tts import CartesiaTTSService
 from pipecat.services.deepgram.stt import DeepgramSTTService
-from pipecat.services.openai.llm import OpenAILLMService
+from pipecat.services.groq.llm import GroqLLMService
 from pipecat.transports.base_transport import BaseTransport, TransportParams
 from pipecat.transports.daily.transport import DailyParams
 
@@ -85,10 +85,10 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
             voice=_env("CARTESIA_VOICE_ID", "71a7ad14-091c-4e8e-a314-022ece01c121"),
         ),
     )
-    llm = OpenAILLMService(
-        api_key=_env("OPENAI_API_KEY"),
-        settings=OpenAILLMService.Settings(
-            model=_env("OPENAI_MODEL", "gpt-4.1-mini"),
+    llm = GroqLLMService(
+        api_key=_env("GROQ_API_KEY"),
+        settings=GroqLLMService.Settings(
+            model=_env("GROQ_MODEL", "llama-3.3-70b-versatile"),
             system_instruction=build_system_instruction(),
         ),
     )

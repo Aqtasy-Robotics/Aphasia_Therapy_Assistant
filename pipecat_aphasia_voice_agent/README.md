@@ -12,7 +12,7 @@ It is intentionally tuned for:
 ## What this bot does
 
 - Listens to patient speech (Deepgram STT)
-- Generates supportive responses (OpenAI LLM)
+- Generates supportive responses (Groq LLM)
 - Speaks back naturally (Cartesia TTS)
 - Runs over Pipecat WebRTC transport for low-latency voice interaction
 
@@ -46,7 +46,7 @@ Copy-Item .env.example .env
 Open `.env` and set:
 
 - `DEEPGRAM_API_KEY`
-- `OPENAI_API_KEY`
+- `GROQ_API_KEY`
 - `CARTESIA_API_KEY`
 
 Then run:
@@ -61,6 +61,7 @@ You should see a local WebRTC URL in logs (typically `http://localhost:7860/clie
 
 Use environment variables to tailor behavior:
 
+- `GROQ_MODEL` - e.g. "llama-3.3-70b-versatile"
 - `THERAPY_FOCUS` - e.g. "word retrieval and sentence initiation"
 - `ASSISTANT_LANGUAGE_HINT` - e.g. "Use simple Spanish and short phrases"
 - `ASSISTANT_NAME` - custom assistant name for familiarity
