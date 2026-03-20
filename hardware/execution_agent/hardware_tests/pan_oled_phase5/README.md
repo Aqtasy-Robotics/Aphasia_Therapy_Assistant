@@ -42,7 +42,9 @@ Defaults match the repo `execution_agent/config.json`.
 If your wiring differs, update:
 - `gpio.servo_pan_pin`
 - `gpio.servo_min_pulse_width` / `gpio.servo_max_pulse_width`
+- `oled.interface` (`i2c` or `spi`)
 - `oled.i2c_address` / `oled.rotate` / `oled_driver` (if needed)
+- SPI modules: `oled.spi_port`, `oled.spi_device`, `oled.spi_gpio_dc`, `oled.spi_gpio_rst`
 
 4) Test the pan servo
 ----------------------
