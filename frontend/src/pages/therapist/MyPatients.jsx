@@ -15,9 +15,6 @@ import {
   CheckCircle,
   Calendar,
   Clock,
-  History,
-  ChevronLeft,
-  ChevronRight,
   Download,
 } from "lucide-react";
 
@@ -30,6 +27,7 @@ const MyPatients = () => {
   const [updatingId, setUpdatingId] = useState(null);
 
   // Local state for managing session data
+  const [practiceMode, setPracticeMode] = useState("words"); // Modern Choice Card State
   const [wordTags, setWordTags] = useState([]);
   const [currentSentence, setCurrentSentence] = useState("");
   const [difficultyLevel, setDifficultyLevel] = useState("Medium");
@@ -120,6 +118,7 @@ const MyPatients = () => {
     }
 
     setExpandedId(patientId);
+    setPracticeMode("words");
     setWordTags([]);
     setCurrentSentence("");
     setDifficultyLevel("Medium");
@@ -150,8 +149,21 @@ const MyPatients = () => {
 
       if (activeData) {
         setActiveSessionId(activeData.id);
-        setWordTags(activeData.target_words || []);
-        setCurrentSentence(activeData.target_sentence || "");
+
+        const loadedWords = activeData.target_words || [];
+        const loadedSentence = activeData.target_sentence || "";
+
+        // Smart Card initialization based on what was saved
+        if (loadedSentence.trim().length > 0 && loadedWords.length === 0) {
+          setPracticeMode("sentence");
+          setCurrentSentence(loadedSentence);
+          setWordTags([]);
+        } else {
+          setPracticeMode("words");
+          setWordTags(loadedWords);
+          setCurrentSentence("");
+        }
+
         setDifficultyLevel(activeData.difficulty_level?.[0] || "Medium");
         setTherapyGoal(activeData.therapy_goal || "");
         setPhonemes(activeData.phonemes_to_focus_on?.join(", ") || "");
@@ -177,9 +189,20 @@ const MyPatients = () => {
     }
   };
 
+  // Modern Card Selection Handler: Preserves drafts!
+  const handleModeChange = (mode) => {
+    if (practiceMode === mode) return; // Already selected
+    setPracticeMode(mode);
+    // We removed the code that erases your drafts, so you can freely flip back and forth!
+  };
+
   const handleManualSync = async (patientId) => {
-    if (wordTags.length < 3) {
+    if (practiceMode === "words" && wordTags.length < 3) {
       alert("Waabi requires at least 3 target words for an effective session.");
+      return;
+    }
+    if (practiceMode === "sentence" && currentSentence.trim().length === 0) {
+      alert("Please enter a practice phrase for Waabi.");
       return;
     }
 
@@ -197,8 +220,8 @@ const MyPatients = () => {
       const sessionPayload = {
         patient_id: patientId,
         therapist_id: user.id,
-        target_words: wordTags,
-        target_sentence: currentSentence,
+        target_words: practiceMode === "words" ? wordTags : [],
+        target_sentence: practiceMode === "sentence" ? currentSentence : "",
         difficulty_level: [difficultyLevel],
         therapy_goal: therapyGoal,
         phonemes_to_focus_on: phonemesArray,
@@ -253,8 +276,8 @@ const MyPatients = () => {
 
         const archivePayload = {
           patient_id: patientId,
-          target_word: wordTags,
-          target_sentence: currentSentence, // This is sending correctly!
+          target_word: practiceMode === "words" ? wordTags : [],
+          target_sentence: practiceMode === "sentence" ? currentSentence : "",
           transcript: "Manual Archive",
           difficulty_level: [difficultyLevel],
           therapy_goals: therapyGoal,
@@ -299,7 +322,6 @@ const MyPatients = () => {
     }
   };
 
-  // --- CSV DOWNLOAD GENERATOR (PER-WORD MAPPING) ---
   const downloadCSV = (patient) => {
     if (sessionReports.length === 0) {
       alert("No reports available to download for this patient.");
@@ -331,7 +353,6 @@ const MyPatients = () => {
     const csvRows = [];
 
     sessionReports.forEach((report) => {
-      // Helper: Safely parses Supabase arrays into JS arrays
       const parseArray = (arr) => {
         if (!arr) return [];
         if (Array.isArray(arr)) return arr;
@@ -353,17 +374,21 @@ const MyPatients = () => {
       const diffLevels = parseArray(report.difficulty_level);
       const focusPhons = parseArray(report.phonemes_to_focus_on);
 
-      // Split text blocks by line so we can search them per-word
       const allTranscriptLines = (report.transcript || "").split("\n");
       const allFeedbackLines = (report.feedback_given || "").split("\n");
       const allPracticeLines = (report.practice_exercise || "").split("\n");
 
-      const wordsToIterate = targetWords.length > 0 ? targetWords : [""];
+      const isSentenceSession =
+        targetWords.length === 0 && (report.target_sentence || "").length > 0;
+      const wordsToIterate = isSentenceSession
+        ? ["(Sentence Session)"]
+        : targetWords.length > 0
+          ? targetWords
+          : [""];
 
-      // Unpivot: Loop through each word and grab ITS specific data using the Index (idx)
       wordsToIterate.forEach((word, idx) => {
-        // Filter multi-line strings to only show the line starting with the current word
         const extractForWord = (linesArray) => {
+          if (isSentenceSession) return linesArray.join("\n");
           const match = linesArray.filter((line) =>
             line.toLowerCase().startsWith(word.toLowerCase()),
           );
@@ -373,8 +398,8 @@ const MyPatients = () => {
         const rowData = [
           patient.full_name || "Unknown Patient",
           word,
-          targetPhons[idx] || "", // Pulls phoneme for THIS specific word
-          attemptedPhons[idx] || "", // Pulls attempt for THIS specific word
+          targetPhons[idx] || targetPhons[0] || "",
+          attemptedPhons[idx] || attemptedPhons[0] || "",
           extractForWord(allTranscriptLines) || report.transcript || "",
           extractForWord(allFeedbackLines) || report.feedback_given || "",
           extractForWord(allPracticeLines) || report.practice_exercise || "",
@@ -392,7 +417,6 @@ const MyPatients = () => {
           report.created_at ? new Date(report.created_at).toLocaleString() : "",
         ];
 
-        // Wrap everything in double quotes so commas and newlines don't break Excel
         csvRows.push(
           rowData
             .map((value) => `"${String(value).replace(/"/g, '""')}"`)
@@ -416,7 +440,6 @@ const MyPatients = () => {
     document.body.removeChild(link);
   };
 
-  // --- Date Picker Logic ---
   const daysInMonth = new Date(
     pickerMonth.getFullYear(),
     pickerMonth.getMonth() + 1,
@@ -638,6 +661,7 @@ const MyPatients = () => {
                         </div>
 
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 animate-in slide-in-from-top duration-500">
+                          {/* LEFT COLUMN: Setup Settings */}
                           <div className="space-y-8">
                             <div className="grid grid-cols-2 gap-4">
                               <div className="space-y-2 relative">
@@ -847,58 +871,147 @@ const MyPatients = () => {
                                 onChange={(e) => setTherapyGoal(e.target.value)}
                               />
                             </div>
-
-                            <div className="space-y-2">
-                              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 flex items-center gap-2">
-                                <Target className="w-3.5 h-3.5 text-[#5cb338]" />{" "}
-                                Target Vocabulary
-                              </label>
-                              <div className="w-full bg-white border border-gray-200 rounded-[1.5rem] p-4 min-h-[100px] focus-within:ring-4 focus-within:ring-[#5cb338]/10 transition-all flex flex-wrap gap-2 content-start shadow-sm hover:bg-gray-50 focus-within:bg-white">
-                                {wordTags.map((tag, index) => (
-                                  <span
-                                    key={index}
-                                    className="bg-green-50 text-[#5cb338] px-3 py-1.5 rounded-full text-[10px] font-black flex items-center gap-2 border border-green-100"
-                                  >
-                                    {tag}
-                                    <X
-                                      size={12}
-                                      className="cursor-pointer hover:text-red-500 transition-colors"
-                                      onClick={() => removeTag(index)}
-                                    />
-                                  </span>
-                                ))}
-                                <input
-                                  className="flex-1 min-w-[120px] bg-transparent outline-none text-xs font-bold text-gray-700 py-1.5"
-                                  placeholder={
-                                    wordTags.length === 0
-                                      ? "Add words individually..."
-                                      : ""
-                                  }
-                                  onKeyDown={(e) => addTag(e)}
-                                />
-                              </div>
-                            </div>
                           </div>
 
-                          <div className="space-y-2 flex flex-col h-full">
-                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 flex items-center gap-2">
-                              <MessageSquare className="w-3.5 h-3.5 text-blue-500" />{" "}
-                              Practice Phrases
+                          {/* RIGHT COLUMN: MODERN CHOICE CARDS */}
+                          <div className="flex flex-col h-full">
+                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-4">
+                              Practice Target (Choose One)
                             </label>
-                            <textarea
-                              className="flex-1 bg-white border border-gray-200 rounded-[1.5rem] p-6 text-xs font-bold text-gray-700 outline-none focus:ring-4 focus:ring-blue-100/50 transition-all resize-none min-h-[220px] shadow-sm placeholder:font-medium placeholder:text-gray-400 hover:bg-gray-50 focus:bg-white"
-                              placeholder="e.g. Can you pass the water? I feel better today."
-                              value={currentSentence}
-                              onChange={(e) =>
-                                setCurrentSentence(e.target.value)
-                              }
-                            />
 
-                            <div className="flex gap-4 mt-6">
+                            <div className="space-y-4 flex-1">
+                              {/* CHOICE 1: WORDS */}
+                              <div
+                                onClick={() => handleModeChange("words")}
+                                className={`relative p-5 rounded-[2rem] border-2 cursor-pointer transition-all duration-300 ${
+                                  practiceMode === "words"
+                                    ? "border-[#5cb338] bg-white shadow-xl shadow-green-900/5 ring-4 ring-[#5cb338]/10"
+                                    : "border-gray-100 bg-gray-50/50 hover:bg-white hover:border-gray-200"
+                                }`}
+                              >
+                                <div className="flex items-center justify-between mb-2">
+                                  <div className="flex items-center gap-3">
+                                    <div
+                                      className={`p-2.5 rounded-xl transition-colors ${practiceMode === "words" ? "bg-[#5cb338] text-white" : "bg-gray-200 text-gray-500"}`}
+                                    >
+                                      <Target size={18} />
+                                    </div>
+                                    <span
+                                      className={`font-black ${practiceMode === "words" ? "text-gray-800" : "text-gray-500"}`}
+                                    >
+                                      Target Vocabulary
+                                    </span>
+                                  </div>
+                                  <div
+                                    className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${practiceMode === "words" ? "border-[#5cb338] bg-[#5cb338]" : "border-gray-300"}`}
+                                  >
+                                    {practiceMode === "words" && (
+                                      <CheckCircle
+                                        size={12}
+                                        className="text-white"
+                                        strokeWidth={4}
+                                      />
+                                    )}
+                                  </div>
+                                </div>
+                                <p className="text-xs text-gray-500 font-medium ml-[3.25rem] mb-4">
+                                  Practice individual target words.
+                                </p>
+
+                                {/* Expanding Input Area */}
+                                <div
+                                  className={`ml-[3.25rem] overflow-hidden transition-all duration-300 ease-in-out ${practiceMode === "words" ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0"}`}
+                                >
+                                  <div className="w-full bg-gray-50 border border-gray-200 rounded-[1.25rem] p-3 min-h-[100px] focus-within:ring-4 focus-within:ring-[#5cb338]/10 transition-all flex flex-wrap gap-2 content-start">
+                                    {wordTags.map((tag, index) => (
+                                      <span
+                                        key={index}
+                                        className="bg-white text-[#5cb338] px-3 py-1.5 rounded-full text-[10px] font-black flex items-center gap-2 border border-green-100 shadow-sm"
+                                      >
+                                        {tag}
+                                        <X
+                                          size={12}
+                                          className="cursor-pointer hover:text-red-500 transition-colors"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            removeTag(index);
+                                          }}
+                                        />
+                                      </span>
+                                    ))}
+                                    <input
+                                      className="flex-1 min-w-[120px] bg-transparent outline-none text-xs font-bold text-gray-700 py-1.5"
+                                      placeholder={
+                                        wordTags.length === 0
+                                          ? "Type a word and press Enter..."
+                                          : "Add another word..."
+                                      }
+                                      onKeyDown={(e) => addTag(e)}
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* CHOICE 2: SENTENCE */}
+                              <div
+                                onClick={() => handleModeChange("sentence")}
+                                className={`relative p-5 rounded-[2rem] border-2 cursor-pointer transition-all duration-300 ${
+                                  practiceMode === "sentence"
+                                    ? "border-blue-500 bg-white shadow-xl shadow-blue-900/5 ring-4 ring-blue-500/10"
+                                    : "border-gray-100 bg-gray-50/50 hover:bg-white hover:border-gray-200"
+                                }`}
+                              >
+                                <div className="flex items-center justify-between mb-2">
+                                  <div className="flex items-center gap-3">
+                                    <div
+                                      className={`p-2.5 rounded-xl transition-colors ${practiceMode === "sentence" ? "bg-blue-500 text-white" : "bg-gray-200 text-gray-500"}`}
+                                    >
+                                      <MessageSquare size={18} />
+                                    </div>
+                                    <span
+                                      className={`font-black ${practiceMode === "sentence" ? "text-gray-800" : "text-gray-500"}`}
+                                    >
+                                      Practice Phrase
+                                    </span>
+                                  </div>
+                                  <div
+                                    className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${practiceMode === "sentence" ? "border-blue-500 bg-blue-500" : "border-gray-300"}`}
+                                  >
+                                    {practiceMode === "sentence" && (
+                                      <CheckCircle
+                                        size={12}
+                                        className="text-white"
+                                        strokeWidth={4}
+                                      />
+                                    )}
+                                  </div>
+                                </div>
+                                <p className="text-xs text-gray-500 font-medium ml-[3.25rem] mb-4">
+                                  Practice a complete sentence.
+                                </p>
+
+                                {/* Expanding Input Area */}
+                                <div
+                                  className={`ml-[3.25rem] overflow-hidden transition-all duration-300 ease-in-out ${practiceMode === "sentence" ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0"}`}
+                                >
+                                  <textarea
+                                    className="w-full bg-gray-50 border border-gray-200 rounded-[1.25rem] p-4 text-xs font-bold text-gray-700 outline-none focus:ring-4 focus:ring-blue-100/50 transition-all resize-none min-h-[100px]"
+                                    placeholder="e.g. Can you pass the water?"
+                                    value={currentSentence}
+                                    onChange={(e) =>
+                                      setCurrentSentence(e.target.value)
+                                    }
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Actions Footer */}
+                            <div className="flex gap-4 mt-8 pt-6 border-t border-gray-100">
                               <button
                                 onClick={() => handleManualSync(patient.id)}
                                 disabled={updatingId === patient.id}
-                                className="flex-1 bg-white border border-gray-200 text-gray-700 py-5 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:border-gray-300 hover:bg-gray-50 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+                                className="flex-1 bg-white border border-gray-200 text-gray-700 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:border-gray-300 hover:bg-gray-50 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
                               >
                                 {updatingId === patient.id ? (
                                   <Loader2 className="animate-spin w-4 h-4" />
@@ -914,7 +1027,7 @@ const MyPatients = () => {
                                     markSessionComplete(patient.id)
                                   }
                                   disabled={updatingId === patient.id}
-                                  className="flex-1 bg-[#5cb338] text-white py-5 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-green-100 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                                  className="flex-1 bg-[#5cb338] text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-green-100 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                                 >
                                   <CheckCircle className="w-4 h-4" /> Mark
                                   Complete
@@ -924,6 +1037,7 @@ const MyPatients = () => {
                           </div>
                         </div>
 
+                        {/* --- EXPORT CSV --- */}
                         <div className="mt-12 pt-8 border-t border-gray-200/50 animate-in slide-in-from-bottom duration-700">
                           <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-3xl border border-blue-100 flex flex-col md:flex-row justify-between items-center gap-6 shadow-sm">
                             <div>
