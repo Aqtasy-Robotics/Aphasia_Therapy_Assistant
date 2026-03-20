@@ -16,6 +16,9 @@ import {
   Calendar,
   Clock,
   Download,
+  ShieldCheck,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
 
 const MyPatients = () => {
@@ -27,7 +30,7 @@ const MyPatients = () => {
   const [updatingId, setUpdatingId] = useState(null);
 
   // Local state for managing session data
-  const [practiceMode, setPracticeMode] = useState("words"); // Modern Choice Card State
+  const [practiceMode, setPracticeMode] = useState("words");
   const [wordTags, setWordTags] = useState([]);
   const [currentSentence, setCurrentSentence] = useState("");
   const [difficultyLevel, setDifficultyLevel] = useState("Medium");
@@ -37,10 +40,8 @@ const MyPatients = () => {
   const [sessionTime, setSessionTime] = useState("");
   const [activeSessionId, setActiveSessionId] = useState(null);
 
-  // Holds 'session_reports' data for the CSV Export
   const [sessionReports, setSessionReports] = useState([]);
 
-  // Custom Picker States
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [pickerMonth, setPickerMonth] = useState(new Date());
@@ -49,9 +50,7 @@ const MyPatients = () => {
     const fetchClinicalData = async () => {
       try {
         setLoading(true);
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
+        const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
         const { data: patientData, error: patientError } = await supabase
@@ -84,7 +83,6 @@ const MyPatients = () => {
     try {
       setUpdatingId(patientId);
       const valueToSet = newTherapistId === "" ? null : newTherapistId;
-
       const { data, error } = await supabase
         .from("profiles")
         .update({ selected_therapist_id: valueToSet })
@@ -92,17 +90,9 @@ const MyPatients = () => {
         .select();
 
       if (error) throw error;
-      if (!data || data.length === 0)
-        throw new Error("Update blocked by Supabase RLS.");
-
-      setPatients((prev) =>
-        prev.map((p) =>
-          p.id === patientId ? { ...p, selected_therapist_id: valueToSet } : p,
-        ),
-      );
+      setPatients((prev) => prev.map((p) => p.id === patientId ? { ...p, selected_therapist_id: valueToSet } : p));
       alert("Therapist successfully assigned! ✅");
     } catch (error) {
-      console.error(error);
       alert("Failed to update therapist: " + error.message);
     } finally {
       setUpdatingId(null);
@@ -135,7 +125,6 @@ const MyPatients = () => {
     setSessionTime("10:00 AM");
 
     try {
-      // 1. Fetch active session
       const { data: activeData, error: activeError } = await supabase
         .from("sessions")
         .select("*")
@@ -146,14 +135,10 @@ const MyPatients = () => {
         .single();
 
       if (activeError && activeError.code !== "PGRST116") throw activeError;
-
       if (activeData) {
         setActiveSessionId(activeData.id);
-
         const loadedWords = activeData.target_words || [];
         const loadedSentence = activeData.target_sentence || "";
-
-        // Smart Card initialization based on what was saved
         if (loadedSentence.trim().length > 0 && loadedWords.length === 0) {
           setPracticeMode("sentence");
           setCurrentSentence(loadedSentence);
@@ -163,17 +148,12 @@ const MyPatients = () => {
           setWordTags(loadedWords);
           setCurrentSentence("");
         }
-
         setDifficultyLevel(activeData.difficulty_level?.[0] || "Medium");
         setTherapyGoal(activeData.therapy_goal || "");
         setPhonemes(activeData.phonemes_to_focus_on?.join(", ") || "");
-        setSessionDate(
-          activeData.session_date || today.toISOString().split("T")[0],
-        );
+        setSessionDate(activeData.session_date || today.toISOString().split("T")[0]);
         setSessionTime(activeData.session_time || "10:00 AM");
       }
-
-      // 2. Fetch completed session history
       const { data: reportData, error: reportError } = await supabase
         .from("session_reports")
         .select("*, profiles:patient_id(full_name)")
@@ -189,11 +169,9 @@ const MyPatients = () => {
     }
   };
 
-  // Modern Card Selection Handler: Preserves drafts!
   const handleModeChange = (mode) => {
-    if (practiceMode === mode) return; // Already selected
+    if (practiceMode === mode) return;
     setPracticeMode(mode);
-    // We removed the code that erases your drafts, so you can freely flip back and forth!
   };
 
   const handleManualSync = async (patientId) => {
@@ -205,18 +183,10 @@ const MyPatients = () => {
       alert("Please enter a practice phrase for Waabi.");
       return;
     }
-
     try {
       setUpdatingId(patientId);
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      const phonemesArray = phonemes
-        .split(",")
-        .map((p) => p.trim())
-        .filter((p) => p !== "");
-
+      const { data: { user } } = await supabase.auth.getUser();
+      const phonemesArray = phonemes.split(",").map((p) => p.trim()).filter((p) => p !== "");
       const sessionPayload = {
         patient_id: patientId,
         therapist_id: user.id,
@@ -229,26 +199,16 @@ const MyPatients = () => {
         session_time: sessionTime,
         status: "upcoming",
       };
-
       if (activeSessionId) {
-        const { error } = await supabase
-          .from("sessions")
-          .update(sessionPayload)
-          .eq("id", activeSessionId);
+        const { error } = await supabase.from("sessions").update(sessionPayload).eq("id", activeSessionId);
         if (error) throw error;
       } else {
-        const { data, error } = await supabase
-          .from("sessions")
-          .insert(sessionPayload)
-          .select()
-          .single();
+        const { data, error } = await supabase.from("sessions").insert(sessionPayload).select().single();
         if (error) throw error;
         setActiveSessionId(data.id);
       }
-
       alert("Clinical plan synced! Waabi is now updated.");
     } catch (error) {
-      console.error("Supabase Error:", error);
       alert("Failed to sync: " + error.message);
     } finally {
       setUpdatingId(null);
@@ -257,23 +217,13 @@ const MyPatients = () => {
 
   const markSessionComplete = async (patientId) => {
     if (!activeSessionId) {
-      alert("No active session to complete! Please add some targets first.");
+      alert("No active session to complete!");
       return;
     }
-
-    if (
-      window.confirm(
-        "Are you sure you want to mark this session as complete? It will be archived into the reports table.",
-      )
-    ) {
+    if (window.confirm("Archive this session into clinical reports?")) {
       try {
         setUpdatingId(patientId);
-
-        const phonemesArray = phonemes
-          .split(",")
-          .map((p) => p.trim())
-          .filter((p) => p !== "");
-
+        const phonemesArray = phonemes.split(",").map((p) => p.trim()).filter((p) => p !== "");
         const archivePayload = {
           patient_id: patientId,
           target_word: practiceMode === "words" ? wordTags : [],
@@ -284,22 +234,9 @@ const MyPatients = () => {
           phonemes_to_focus_on: phonemesArray,
           created_at: new Date().toISOString(),
         };
-
-        const { data: newReport, error: insertError } = await supabase
-          .from("session_reports")
-          .insert(archivePayload)
-          .select()
-          .single();
-
+        const { data: newReport, error: insertError } = await supabase.from("session_reports").insert(archivePayload).select().single();
         if (insertError) throw insertError;
-
-        const { error: deleteError } = await supabase
-          .from("sessions")
-          .delete()
-          .eq("id", activeSessionId);
-
-        if (deleteError) throw deleteError;
-
+        await supabase.from("sessions").delete().eq("id", activeSessionId);
         setSessionReports([newReport, ...sessionReports]);
         setActiveSessionId(null);
         setWordTags([]);
@@ -307,15 +244,9 @@ const MyPatients = () => {
         setDifficultyLevel("Medium");
         setTherapyGoal("");
         setPhonemes("");
-
-        const today = new Date();
-        setSessionDate(today.toISOString().split("T")[0]);
-        setSessionTime("10:00 AM");
-
-        alert("Session successfully archived into reports! 📁");
+        alert("Session successfully archived! 📁");
       } catch (error) {
-        console.error("Error archiving session:", error);
-        alert("Failed to archive session: " + error.message);
+        alert("Failed to archive: " + error.message);
       } finally {
         setUpdatingId(null);
       }
@@ -323,161 +254,33 @@ const MyPatients = () => {
   };
 
   const downloadCSV = (patient) => {
-    if (sessionReports.length === 0) {
-      alert("No reports available to download for this patient.");
-      return;
-    }
-
-    const headers = [
-      "Patient Name",
-      "Target Word",
-      "Target Phonemes",
-      "Attempted Phonemes",
-      "Transcript (Attempts)",
-      "Feedback Given",
-      "Practice Exercise",
-      "Semantic Label",
-      "Difficulty Level",
-      "Phonemes To Focus On",
-      "Accuracy (%)",
-      "Total Errors",
-      "Substitutions",
-      "Omissions",
-      "Insertions",
-      "Session Duration (s)",
-      "Target Sentence",
-      "Therapy Goals",
-      "Date Completed",
-    ];
-
+    if (sessionReports.length === 0) return;
+    const headers = ["Patient Name", "Target Word", "Target Phonemes", "Accuracy (%)", "Date Completed"];
     const csvRows = [];
-
     sessionReports.forEach((report) => {
-      const parseArray = (arr) => {
-        if (!arr) return [];
-        if (Array.isArray(arr)) return arr;
-        if (typeof arr === "string") {
-          if (arr.startsWith("{") && arr.endsWith("}")) {
-            return arr
-              .slice(1, -1)
-              .split(",")
-              .map((s) => s.replace(/(^"|"$)/g, "").trim());
-          }
-          return arr.split(",").map((s) => s.trim());
-        }
-        return [String(arr)];
-      };
-
-      const targetWords = parseArray(report.target_word);
-      const targetPhons = parseArray(report.target_phonemes);
-      const attemptedPhons = parseArray(report.attempted_phonemes);
-      const diffLevels = parseArray(report.difficulty_level);
-      const focusPhons = parseArray(report.phonemes_to_focus_on);
-
-      const allTranscriptLines = (report.transcript || "").split("\n");
-      const allFeedbackLines = (report.feedback_given || "").split("\n");
-      const allPracticeLines = (report.practice_exercise || "").split("\n");
-
-      const isSentenceSession =
-        targetWords.length === 0 && (report.target_sentence || "").length > 0;
-      const wordsToIterate = isSentenceSession
-        ? ["(Sentence Session)"]
-        : targetWords.length > 0
-          ? targetWords
-          : [""];
-
-      wordsToIterate.forEach((word, idx) => {
-        const extractForWord = (linesArray) => {
-          if (isSentenceSession) return linesArray.join("\n");
-          const match = linesArray.filter((line) =>
-            line.toLowerCase().startsWith(word.toLowerCase()),
-          );
-          return match.length > 0 ? match.join("\n") : "";
-        };
-
-        const rowData = [
-          patient.full_name || "Unknown Patient",
-          word,
-          targetPhons[idx] || targetPhons[0] || "",
-          attemptedPhons[idx] || attemptedPhons[0] || "",
-          extractForWord(allTranscriptLines) || report.transcript || "",
-          extractForWord(allFeedbackLines) || report.feedback_given || "",
-          extractForWord(allPracticeLines) || report.practice_exercise || "",
-          report.semantic_label || "",
-          diffLevels[idx] || diffLevels[0] || "",
-          focusPhons[idx] || focusPhons[0] || "",
-          report.accuracy ?? "",
-          report.total_errors ?? "",
-          report.substitutions ?? "",
-          report.omissions ?? "",
-          report.insertions ?? "",
-          report.session_duration_secs ?? "",
-          report.target_sentence || "",
-          report.therapy_goals || report.therapy_goal || "",
-          report.created_at ? new Date(report.created_at).toLocaleString() : "",
-        ];
-
-        csvRows.push(
-          rowData
-            .map((value) => `"${String(value).replace(/"/g, '""')}"`)
-            .join(","),
-        );
+      const targetWords = Array.isArray(report.target_word) ? report.target_word : [];
+      targetWords.forEach((word) => {
+        csvRows.push([patient.full_name, word, "", report.accuracy ?? "", new Date(report.created_at).toLocaleString()].map(v => `"${String(v).replace(/"/g, '""')}"`).join(","));
       });
     });
-
-    const csvString = [headers.join(","), ...csvRows].join("\n");
-    const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" });
-    const url = window.URL.createObjectURL(blob);
-
+    const blob = new Blob([[headers.join(","), ...csvRows].join("\n")], { type: "text/csv;charset=utf-8;" });
     const link = document.createElement("a");
-    link.href = url;
-    link.setAttribute(
-      "download",
-      `${patient.full_name.replace(/\s+/g, "_")}_Clinical_Reports.csv`,
-    );
-    document.body.appendChild(link);
+    link.href = window.URL.createObjectURL(blob);
+    link.setAttribute("download", `${patient.full_name}_Reports.csv`);
     link.click();
-    document.body.removeChild(link);
   };
 
-  const daysInMonth = new Date(
-    pickerMonth.getFullYear(),
-    pickerMonth.getMonth() + 1,
-    0,
-  ).getDate();
-  const firstDayOfMonth = new Date(
-    pickerMonth.getFullYear(),
-    pickerMonth.getMonth(),
-    1,
-  ).getDay();
-  const monthNames = [
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
-  ];
-
   const handleCustomDateSelect = (day) => {
-    const newDate = new Date(
-      pickerMonth.getFullYear(),
-      pickerMonth.getMonth(),
-      day,
-    );
+    const newDate = new Date(pickerMonth.getFullYear(), pickerMonth.getMonth(), day);
     const offset = newDate.getTimezoneOffset();
-    const formattedDate = new Date(newDate.getTime() - offset * 60 * 1000)
-      .toISOString()
-      .split("T")[0];
-
+    const formattedDate = new Date(newDate.getTime() - offset * 60 * 1000).toISOString().split("T")[0];
     setSessionDate(formattedDate);
     setShowDatePicker(false);
+  };
+
+  const handleCustomTimeSelect = (time) => {
+    setSessionTime(time);
+    setShowTimePicker(false);
   };
 
   const generateTimeSlots = () => {
@@ -491,11 +294,6 @@ const MyPatients = () => {
     return slots;
   };
 
-  const handleCustomTimeSelect = (time) => {
-    setSessionTime(time);
-    setShowTimePicker(false);
-  };
-
   const addTag = (e) => {
     if (e.key === "Enter" || e.key === ",") {
       e.preventDefault();
@@ -507,562 +305,193 @@ const MyPatients = () => {
     }
   };
 
-  const removeTag = (indexToRemove) => {
-    setWordTags(wordTags.filter((_, index) => index !== indexToRemove));
-  };
+  const removeTag = (indexToRemove) => setWordTags(wordTags.filter((_, index) => index !== indexToRemove));
 
   const filteredPatients = patients.filter((patient) =>
     patient.full_name?.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
+  const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  const daysInMonth = new Date(pickerMonth.getFullYear(), pickerMonth.getMonth() + 1, 0).getDate();
+  const firstDayOfMonth = new Date(pickerMonth.getFullYear(), pickerMonth.getMonth(), 1).getDay();
+
   if (loading)
     return (
-      <div className="flex h-screen items-center justify-center flex-col gap-4">
-        <Loader2 className="w-12 h-12 text-[#5cb338] animate-spin" />
-        <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">
-          Syncing Clinical Database...
-        </p>
+      <div className="flex h-screen items-center justify-center flex-col gap-6">
+        <Loader2 className="w-12 h-12 text-[#012b1d] animate-spin" />
+        <p className="text-[10px] font-extrabold text-gray-400 uppercase tracking-[0.3em]">Syncing Clinical Database...</p>
       </div>
     );
 
   return (
-    <div className="space-y-10 animate-in fade-in duration-700 pb-20">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+    <div className="animate-in fade-in duration-700 font-sans antialiased pb-20">
+      
+      {/* OPEN HEADER SECTION */}
+      <header className="mb-12 flex justify-between items-end">
         <div>
-          <h1 className="text-4xl font-black text-gray-800 tracking-tight">
-            Clinical Directory
-          </h1>
-          <p className="text-gray-500 font-medium mt-1 italic">
-            Global view of all patients, therapy assignments, and practice
-            targets
-          </p>
+          <h1 className="text-4xl font-extrabold text-[#012b1d] tracking-tight">Clinical Directory</h1>
+          <div className="flex items-center gap-3 mt-2">
+             <ShieldCheck size={16} className="text-[#064e3b]" />
+             <p className="text-gray-400 font-semibold text-sm italic">Global oversight and therapy configuration</p>
+          </div>
         </div>
+      </header>
+
+      {/* SEARCH INTERFACE */}
+      <div className="relative group max-w-xl mb-12">
+        <div className="absolute inset-y-0 left-0 pl-6 flex items-center pointer-events-none text-gray-300"><Search size={20} /></div>
+        <input type="text" placeholder="Search patient roster..." className="block w-full pl-14 pr-6 py-5 bg-white border border-gray-50 rounded-[1.5rem] shadow-2xl shadow-gray-200/40 focus:ring-4 focus:ring-[#012b1d]/5 outline-none transition-all text-gray-700 font-bold text-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
       </div>
 
-      <div className="relative group max-w-xl">
-        <div className="absolute inset-y-0 left-0 pl-6 flex items-center pointer-events-none text-gray-400">
-          <Search size={20} />
-        </div>
-        <input
-          type="text"
-          placeholder="Search patient..."
-          className="block w-full pl-14 pr-6 py-4 bg-white border border-gray-100 rounded-2xl shadow-xl shadow-gray-200/20 focus:ring-4 focus:ring-[#5cb338]/10 outline-none transition-all text-gray-700 font-bold text-sm"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
-      </div>
-
-      <div className="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/40 border border-gray-50 overflow-hidden">
+      <div className="bg-white rounded-[3.5rem] shadow-2xl shadow-gray-200/40 border border-gray-50 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-gray-50/50 border-b border-gray-100">
-                <th className="px-8 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                  Patient
-                </th>
-                <th className="px-8 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                  Assigned Therapist
-                </th>
-                <th className="px-8 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                  Target Status
-                </th>
-                <th className="px-8 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">
-                  Action
-                </th>
+                <th className="px-10 py-8 text-[10px] font-extrabold text-gray-400 uppercase tracking-[0.3em]">Patient</th>
+                <th className="px-10 py-8 text-[10px] font-extrabold text-gray-400 uppercase tracking-[0.3em]">Assigned Therapist</th>
+                <th className="px-10 py-8 text-[10px] font-extrabold text-gray-400 uppercase tracking-[0.3em]">Target Status</th>
+                <th className="px-10 py-8 text-[10px] font-extrabold text-gray-400 uppercase tracking-[0.3em] text-right">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {filteredPatients.map((patient) => (
                 <React.Fragment key={patient.id}>
-                  <tr
-                    className={`group hover:bg-[#f0fff4]/30 transition-all cursor-pointer ${
-                      expandedId === patient.id ? "bg-[#f0fff4]/20" : ""
-                    }`}
-                    onClick={() => handleExpandPatient(patient.id)}
-                  >
-                    <td className="px-8 py-6">
-                      <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 bg-[#f0fff4] text-[#5cb338] rounded-xl flex items-center justify-center font-black text-sm border border-green-50 shadow-inner">
+                  <tr className={`group hover:bg-[#064e3b]/5 transition-all cursor-pointer ${expandedId === patient.id ? "bg-[#064e3b]/5" : ""}`} onClick={() => handleExpandPatient(patient.id)}>
+                    <td className="px-10 py-8">
+                      <div className="flex items-center gap-5">
+                        <div className="w-12 h-12 bg-[#064e3b]/10 text-[#064e3b] rounded-2xl flex items-center justify-center font-extrabold text-base border border-[#064e3b]/5 shadow-inner">
                           {patient.full_name?.charAt(0) || "?"}
                         </div>
-                        <span className="text-sm font-black text-gray-800">
-                          {patient.full_name || "Unknown Patient"}
-                        </span>
+                        <span className="text-base font-extrabold text-gray-800 tracking-tight">{patient.full_name || "Unknown Patient"}</span>
                       </div>
                     </td>
-
-                    <td className="px-8 py-6">
-                      <div className="flex items-center gap-2">
-                        <UserCog
-                          size={14}
-                          className={
-                            patient.selected_therapist_id
-                              ? "text-blue-500"
-                              : "text-amber-500"
-                          }
-                        />
-                        <select
-                          className={`text-xs font-bold outline-none rounded-lg px-2 py-1.5 cursor-pointer transition-colors ${
-                            patient.selected_therapist_id
-                              ? "bg-blue-50 text-blue-700 border border-blue-100 hover:bg-blue-100"
-                              : "bg-amber-50 text-amber-700 border border-amber-100 hover:bg-amber-100"
-                          }`}
-                          value={patient.selected_therapist_id || ""}
-                          onChange={(e) =>
-                            handleAssignTherapist(patient.id, e.target.value)
-                          }
-                          onClick={(e) => e.stopPropagation()}
-                          disabled={updatingId === patient.id}
-                        >
+                    <td className="px-10 py-8">
+                      <div className="flex items-center gap-3">
+                        <UserCog size={16} className={patient.selected_therapist_id ? "text-[#172554]" : "text-orange-500"} />
+                        <select className={`text-[10px] font-extrabold outline-none rounded-xl px-4 py-2.5 cursor-pointer transition-all border ${patient.selected_therapist_id ? "bg-[#172554]/5 text-[#172554] border-[#172554]/10" : "bg-orange-50 text-orange-700 border-orange-100"}`} value={patient.selected_therapist_id || ""} onChange={(e) => handleAssignTherapist(patient.id, e.target.value)} onClick={(e) => e.stopPropagation()} disabled={updatingId === patient.id}>
                           <option value="">-- Unassigned --</option>
-                          {therapists.map((t) => (
-                            <option key={t.id} value={t.id}>
-                              {t.full_name}
-                            </option>
-                          ))}
+                          {therapists.map((t) => <option key={t.id} value={t.id}>{t.full_name}</option>)}
                         </select>
                       </div>
                     </td>
-
-                    <td className="px-8 py-6">
-                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                        {expandedId === patient.id && activeSessionId
-                          ? "Active Session"
-                          : "Configure Next Session"}
-                      </span>
+                    <td className="px-10 py-8 text-[10px] font-extrabold text-gray-400 uppercase tracking-[0.2em]">
+                      {expandedId === patient.id && activeSessionId ? "Active Session" : "Configure Next"}
                     </td>
-
-                    <td className="px-8 py-6 text-right">
-                      <div className="p-2 rounded-lg bg-gray-50 text-gray-400 inline-block group-hover:bg-white group-hover:shadow-sm transition-all">
-                        {expandedId === patient.id ? (
-                          <ChevronUp size={18} />
-                        ) : (
-                          <ChevronDown size={18} />
-                        )}
+                    <td className="px-10 py-8 text-right">
+                      <div className="p-3 rounded-xl bg-gray-50 text-gray-400 inline-block group-hover:bg-white group-hover:shadow-md transition-all">
+                        {expandedId === patient.id ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
                       </div>
                     </td>
                   </tr>
 
                   {expandedId === patient.id && (
-                    <tr className="bg-[#f0fff4]/10">
-                      <td colSpan="4" className="px-12 py-10">
-                        <div className="mb-6 pb-6 border-b border-green-500/10 flex justify-between items-center">
-                          <h3 className="text-sm font-black text-gray-700 uppercase tracking-widest">
-                            {activeSessionId
-                              ? "Current Session Profile"
-                              : "Create New Session"}
-                          </h3>
-                          {activeSessionId && (
-                            <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-1">
-                              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>{" "}
-                              Active
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 animate-in slide-in-from-top duration-500">
-                          {/* LEFT COLUMN: Setup Settings */}
-                          <div className="space-y-8">
-                            <div className="grid grid-cols-2 gap-4">
-                              <div className="space-y-2 relative">
-                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">
-                                  Session Date
-                                </label>
-                                <div
-                                  onClick={() => {
-                                    setShowDatePicker(!showDatePicker);
-                                    setShowTimePicker(false);
-                                  }}
-                                  className="w-full bg-white hover:bg-gray-50 border border-gray-200 rounded-[1.25rem] pl-11 pr-4 py-4 text-xs font-black text-gray-700 shadow-sm transition-all cursor-pointer flex items-center relative"
-                                >
-                                  <Calendar className="w-4 h-4 text-blue-500 absolute left-4" />
-                                  {sessionDate || "Select Date"}
+                    <tr className="bg-[#064e3b]/[0.02]">
+                      <td colSpan="4" className="px-16 py-12">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 animate-in slide-in-from-top duration-500">
+                          {/* LEFT COLUMN */}
+                          <div className="space-y-10">
+                            <div className="grid grid-cols-2 gap-6">
+                              <div className="space-y-3 relative">
+                                <label className="text-[10px] font-extrabold text-gray-400 uppercase tracking-[0.3em] ml-6">Session Date</label>
+                                <div onClick={() => { setShowDatePicker(!showDatePicker); setShowTimePicker(false); }} className="w-full bg-white border border-gray-100 rounded-[1.25rem] pl-12 py-5 text-[11px] font-extrabold text-gray-700 shadow-sm transition-all cursor-pointer flex items-center relative">
+                                  <Calendar className="w-4 h-4 text-[#172554] absolute left-5" /> {sessionDate}
                                 </div>
-
                                 {showDatePicker && (
-                                  <div className="absolute top-[80px] left-0 w-72 bg-white border border-gray-100 shadow-2xl rounded-3xl p-5 z-50 animate-in zoom-in-95 fade-in duration-200">
-                                    <div className="flex justify-between items-center mb-4">
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setPickerMonth(
-                                            new Date(
-                                              pickerMonth.getFullYear(),
-                                              pickerMonth.getMonth() - 1,
-                                              1,
-                                            ),
-                                          );
-                                        }}
-                                        className="p-2 hover:bg-gray-100 rounded-xl transition-all"
-                                      >
-                                        <ChevronLeft size={16} />
-                                      </button>
-                                      <span className="text-xs font-black text-gray-800">
-                                        {monthNames[pickerMonth.getMonth()]}{" "}
-                                        {pickerMonth.getFullYear()}
-                                      </span>
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setPickerMonth(
-                                            new Date(
-                                              pickerMonth.getFullYear(),
-                                              pickerMonth.getMonth() + 1,
-                                              1,
-                                            ),
-                                          );
-                                        }}
-                                        className="p-2 hover:bg-gray-100 rounded-xl transition-all"
-                                      >
-                                        <ChevronRight size={16} />
-                                      </button>
+                                  <div className="absolute top-[90px] left-0 w-80 bg-white border border-gray-50 shadow-2xl rounded-[2.5rem] p-6 z-50">
+                                    <div className="flex justify-between items-center mb-6">
+                                      <button onClick={(e) => { e.stopPropagation(); setPickerMonth(new Date(pickerMonth.getFullYear(), pickerMonth.getMonth() - 1, 1)); }} className="p-2 hover:bg-gray-50 rounded-xl"><ChevronLeft size={18} /></button>
+                                      <span className="text-[11px] font-extrabold text-gray-800 uppercase tracking-widest">{monthNames[pickerMonth.getMonth()]} {pickerMonth.getFullYear()}</span>
+                                      <button onClick={(e) => { e.stopPropagation(); setPickerMonth(new Date(pickerMonth.getFullYear(), pickerMonth.getMonth() + 1, 1)); }} className="p-2 hover:bg-gray-50 rounded-xl"><ChevronRight size={18} /></button>
                                     </div>
-                                    <div className="grid grid-cols-7 gap-1 text-center mb-2">
-                                      {[
-                                        "Su",
-                                        "Mo",
-                                        "Tu",
-                                        "We",
-                                        "Th",
-                                        "Fr",
-                                        "Sa",
-                                      ].map((d) => (
-                                        <span
-                                          key={d}
-                                          className="text-[9px] font-black text-gray-400"
-                                        >
-                                          {d}
-                                        </span>
-                                      ))}
-                                    </div>
+                                    <div className="grid grid-cols-7 gap-1 text-[10px] font-extrabold text-gray-400 mb-4">{["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map(d => <span key={d}>{d}</span>)}</div>
                                     <div className="grid grid-cols-7 gap-1">
-                                      {[...Array(firstDayOfMonth)].map(
-                                        (_, i) => (
-                                          <div key={`empty-${i}`} />
-                                        ),
-                                      )}
+                                      {[...Array(firstDayOfMonth)].map((_, i) => <div key={i} />)}
                                       {[...Array(daysInMonth)].map((_, i) => {
                                         const day = i + 1;
-                                        const isSelected =
-                                          sessionDate ===
-                                          new Date(
-                                            pickerMonth.getFullYear(),
-                                            pickerMonth.getMonth(),
-                                            day,
-                                          )
-                                            .toISOString()
-                                            .split("T")[0];
-                                        return (
-                                          <button
-                                            key={day}
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              handleCustomDateSelect(day);
-                                            }}
-                                            className={`p-2 text-xs font-bold rounded-xl transition-all ${
-                                              isSelected
-                                                ? "bg-blue-500 text-white shadow-md"
-                                                : "text-gray-700 hover:bg-blue-50"
-                                            }`}
-                                          >
-                                            {day}
-                                          </button>
-                                        );
+                                        return <button key={day} onClick={(e) => { e.stopPropagation(); handleCustomDateSelect(day); }} className={`p-2.5 text-xs font-bold rounded-xl hover:bg-[#064e3b]/5 text-gray-700`}>{day}</button>;
                                       })}
                                     </div>
                                   </div>
                                 )}
                               </div>
-
-                              <div className="space-y-2 relative">
-                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">
-                                  Session Time
-                                </label>
-                                <div
-                                  onClick={() => {
-                                    setShowTimePicker(!showTimePicker);
-                                    setShowDatePicker(false);
-                                  }}
-                                  className="w-full bg-white hover:bg-gray-50 border border-gray-200 rounded-[1.25rem] pl-11 pr-4 py-4 text-xs font-black text-gray-700 shadow-sm transition-all cursor-pointer flex items-center relative"
-                                >
-                                  <Clock className="w-4 h-4 text-blue-500 absolute left-4" />
-                                  {sessionTime || "Select Time"}
-                                  <ChevronDown className="w-4 h-4 text-gray-400 absolute right-4" />
+                              <div className="space-y-3 relative">
+                                <label className="text-[10px] font-extrabold text-gray-400 uppercase tracking-[0.3em] ml-6">Session Time</label>
+                                <div onClick={() => { setShowTimePicker(!showTimePicker); setShowDatePicker(false); }} className="w-full bg-white border border-gray-100 rounded-[1.25rem] pl-12 py-5 text-[11px] font-extrabold text-gray-700 shadow-sm transition-all cursor-pointer flex items-center relative">
+                                  <Clock className="w-4 h-4 text-[#172554] absolute left-5" /> {sessionTime}
                                 </div>
-
                                 {showTimePicker && (
-                                  <div className="absolute top-[80px] left-0 w-full bg-white border border-gray-100 shadow-2xl rounded-3xl p-2 z-50 animate-in zoom-in-95 fade-in duration-200 max-h-60 overflow-y-auto custom-scrollbar">
-                                    {generateTimeSlots().map((time) => (
-                                      <button
-                                        key={time}
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleCustomTimeSelect(time);
-                                        }}
-                                        className={`w-full text-left px-4 py-3 rounded-2xl text-xs font-bold transition-all ${
-                                          sessionTime === time
-                                            ? "bg-blue-500 text-white"
-                                            : "hover:bg-blue-50 text-gray-700"
-                                        }`}
-                                      >
-                                        {time}
-                                      </button>
-                                    ))}
+                                  <div className="absolute top-[90px] left-0 w-full bg-white border border-gray-50 shadow-2xl rounded-[2.5rem] p-3 z-50 max-h-60 overflow-y-auto">
+                                    {generateTimeSlots().map(time => <button key={time} onClick={(e) => { e.stopPropagation(); handleCustomTimeSelect(time); }} className={`w-full text-left px-5 py-4 rounded-2xl text-[11px] font-extrabold tracking-widest hover:bg-[#064e3b]/5 text-gray-700`}>{time}</button>)}
                                   </div>
                                 )}
                               </div>
                             </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                              <div className="space-y-2 relative">
-                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">
-                                  Difficulty Level
-                                </label>
-                                <div className="relative group">
-                                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                    <Settings2 className="w-4 h-4 text-orange-400" />
-                                  </div>
-                                  <select
-                                    className="w-full bg-white hover:bg-gray-50 border border-gray-200 rounded-[1.25rem] pl-11 pr-10 py-4 text-xs font-black text-gray-700 outline-none focus:ring-4 focus:ring-orange-100/50 shadow-sm transition-all cursor-pointer appearance-none"
-                                    value={difficultyLevel}
-                                    onChange={(e) =>
-                                      setDifficultyLevel(e.target.value)
-                                    }
-                                  >
-                                    <option value="Easy">Easy</option>
-                                    <option value="Medium">Medium</option>
-                                    <option value="Hard">Hard</option>
-                                  </select>
-                                  <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
-                                    <ChevronDown className="w-4 h-4 text-gray-400" />
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="space-y-2">
-                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">
-                                  Phonemes to Focus
-                                </label>
-                                <div className="relative group">
-                                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                    <BrainCircuit className="w-4 h-4 text-purple-400" />
-                                  </div>
-                                  <input
-                                    className="w-full bg-white hover:bg-gray-50 border border-gray-200 rounded-[1.25rem] pl-11 pr-4 py-4 text-xs font-black text-gray-700 outline-none focus:ring-4 focus:ring-purple-100/50 shadow-sm transition-all placeholder:font-medium placeholder:text-gray-400"
-                                    placeholder="e.g. /p/, /b/, /m/"
-                                    value={phonemes}
-                                    onChange={(e) =>
-                                      setPhonemes(e.target.value)
-                                    }
-                                  />
-                                </div>
-                              </div>
+                            <div className="grid grid-cols-2 gap-6">
+                              <div className="space-y-3 relative"><label className="text-[10px] font-extrabold text-gray-400 uppercase tracking-[0.3em] ml-6">Difficulty</label>
+                                <select className="w-full bg-white border border-gray-100 rounded-[1.25rem] px-8 py-5 text-[11px] font-extrabold text-gray-700 outline-none focus:ring-4 focus:ring-[#012b1d]/5 shadow-sm appearance-none" value={difficultyLevel} onChange={e => setDifficultyLevel(e.target.value)}><option value="Easy">Easy</option><option value="Medium">Medium</option><option value="Hard">Hard</option></select></div>
+                              <div className="space-y-3"><label className="text-[10px] font-extrabold text-gray-400 uppercase tracking-[0.3em] ml-6">Focus Phonemes</label><input className="w-full bg-white border border-gray-100 rounded-[1.25rem] px-8 py-5 text-[11px] font-extrabold text-gray-700 outline-none focus:ring-4 focus:ring-[#012b1d]/5 shadow-sm" placeholder="e.g. /p/, /b/" value={phonemes} onChange={e => setPhonemes(e.target.value)} /></div>
                             </div>
-
-                            <div className="space-y-2">
-                              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">
-                                Therapy Goal
-                              </label>
-                              <textarea
-                                rows="2"
-                                className="w-full bg-white border border-gray-200 rounded-[1.5rem] px-6 py-5 text-xs font-black text-gray-700 outline-none focus:ring-4 focus:ring-gray-100/50 resize-none shadow-sm transition-all placeholder:font-medium placeholder:text-gray-400 hover:bg-gray-50 focus:bg-white"
-                                placeholder="Describe the primary clinical goal..."
-                                value={therapyGoal}
-                                onChange={(e) => setTherapyGoal(e.target.value)}
-                              />
-                            </div>
+                            <div className="space-y-3"><label className="text-[10px] font-extrabold text-gray-400 uppercase tracking-[0.3em] ml-6">Therapy Goal</label><textarea rows="2" className="w-full bg-white border border-gray-100 rounded-[1.5rem] px-6 py-5 text-[11px] font-semibold text-gray-700 outline-none focus:ring-4 focus:ring-[#012b1d]/5 shadow-sm resize-none" value={therapyGoal} onChange={e => setTherapyGoal(e.target.value)} /></div>
                           </div>
 
                           {/* RIGHT COLUMN: MODERN CHOICE CARDS */}
-                          <div className="flex flex-col h-full">
-                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-4">
-                              Practice Target (Choose One)
-                            </label>
-
-                            <div className="space-y-4 flex-1">
-                              {/* CHOICE 1: WORDS */}
-                              <div
-                                onClick={() => handleModeChange("words")}
-                                className={`relative p-5 rounded-[2rem] border-2 cursor-pointer transition-all duration-300 ${
-                                  practiceMode === "words"
-                                    ? "border-[#5cb338] bg-white shadow-xl shadow-green-900/5 ring-4 ring-[#5cb338]/10"
-                                    : "border-gray-100 bg-gray-50/50 hover:bg-white hover:border-gray-200"
-                                }`}
-                              >
-                                <div className="flex items-center justify-between mb-2">
-                                  <div className="flex items-center gap-3">
-                                    <div
-                                      className={`p-2.5 rounded-xl transition-colors ${practiceMode === "words" ? "bg-[#5cb338] text-white" : "bg-gray-200 text-gray-500"}`}
-                                    >
-                                      <Target size={18} />
-                                    </div>
-                                    <span
-                                      className={`font-black ${practiceMode === "words" ? "text-gray-800" : "text-gray-500"}`}
-                                    >
-                                      Target Vocabulary
-                                    </span>
-                                  </div>
-                                  <div
-                                    className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${practiceMode === "words" ? "border-[#5cb338] bg-[#5cb338]" : "border-gray-300"}`}
-                                  >
-                                    {practiceMode === "words" && (
-                                      <CheckCircle
-                                        size={12}
-                                        className="text-white"
-                                        strokeWidth={4}
-                                      />
-                                    )}
-                                  </div>
+                          <div className="flex flex-col h-full space-y-4">
+                            <label className="text-[10px] font-extrabold text-gray-400 uppercase tracking-[0.3em] ml-6 mb-2">Practice Target (Choose One)</label>
+                            
+                            {/* WORDS MODE */}
+                            <div onClick={() => handleModeChange("words")} className={`relative p-8 rounded-[2.5rem] border-2 cursor-pointer transition-all duration-300 ${practiceMode === "words" ? "border-[#012b1d] bg-white shadow-2xl shadow-[#012b1d]/5 ring-4 ring-[#012b1d]/5" : "border-gray-50 bg-gray-50/50 hover:bg-white hover:border-gray-200"}`}>
+                              <div className="flex items-center justify-between mb-4">
+                                <div className="flex items-center gap-4">
+                                  <div className={`p-3 rounded-2xl transition-all ${practiceMode === "words" ? "bg-[#012b1d] text-white" : "bg-white text-gray-300 shadow-sm"}`}><Target size={20} /></div>
+                                  <span className={`font-extrabold text-sm ${practiceMode === "words" ? "text-gray-800" : "text-gray-400"}`}>Target Vocabulary</span>
                                 </div>
-                                <p className="text-xs text-gray-500 font-medium ml-[3.25rem] mb-4">
-                                  Practice individual target words.
-                                </p>
-
-                                {/* Expanding Input Area */}
-                                <div
-                                  className={`ml-[3.25rem] overflow-hidden transition-all duration-300 ease-in-out ${practiceMode === "words" ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0"}`}
-                                >
-                                  <div className="w-full bg-gray-50 border border-gray-200 rounded-[1.25rem] p-3 min-h-[100px] focus-within:ring-4 focus-within:ring-[#5cb338]/10 transition-all flex flex-wrap gap-2 content-start">
-                                    {wordTags.map((tag, index) => (
-                                      <span
-                                        key={index}
-                                        className="bg-white text-[#5cb338] px-3 py-1.5 rounded-full text-[10px] font-black flex items-center gap-2 border border-green-100 shadow-sm"
-                                      >
-                                        {tag}
-                                        <X
-                                          size={12}
-                                          className="cursor-pointer hover:text-red-500 transition-colors"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            removeTag(index);
-                                          }}
-                                        />
-                                      </span>
-                                    ))}
-                                    <input
-                                      className="flex-1 min-w-[120px] bg-transparent outline-none text-xs font-bold text-gray-700 py-1.5"
-                                      placeholder={
-                                        wordTags.length === 0
-                                          ? "Type a word and press Enter..."
-                                          : "Add another word..."
-                                      }
-                                      onKeyDown={(e) => addTag(e)}
-                                    />
-                                  </div>
-                                </div>
+                                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${practiceMode === "words" ? "border-[#012b1d] bg-[#012b1d]" : "border-gray-200"}`}>{practiceMode === "words" && <CheckCircle size={14} className="text-white" strokeWidth={4} />}</div>
                               </div>
-
-                              {/* CHOICE 2: SENTENCE */}
-                              <div
-                                onClick={() => handleModeChange("sentence")}
-                                className={`relative p-5 rounded-[2rem] border-2 cursor-pointer transition-all duration-300 ${
-                                  practiceMode === "sentence"
-                                    ? "border-blue-500 bg-white shadow-xl shadow-blue-900/5 ring-4 ring-blue-500/10"
-                                    : "border-gray-100 bg-gray-50/50 hover:bg-white hover:border-gray-200"
-                                }`}
-                              >
-                                <div className="flex items-center justify-between mb-2">
-                                  <div className="flex items-center gap-3">
-                                    <div
-                                      className={`p-2.5 rounded-xl transition-colors ${practiceMode === "sentence" ? "bg-blue-500 text-white" : "bg-gray-200 text-gray-500"}`}
-                                    >
-                                      <MessageSquare size={18} />
-                                    </div>
-                                    <span
-                                      className={`font-black ${practiceMode === "sentence" ? "text-gray-800" : "text-gray-500"}`}
-                                    >
-                                      Practice Phrase
-                                    </span>
-                                  </div>
-                                  <div
-                                    className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${practiceMode === "sentence" ? "border-blue-500 bg-blue-500" : "border-gray-300"}`}
-                                  >
-                                    {practiceMode === "sentence" && (
-                                      <CheckCircle
-                                        size={12}
-                                        className="text-white"
-                                        strokeWidth={4}
-                                      />
-                                    )}
-                                  </div>
-                                </div>
-                                <p className="text-xs text-gray-500 font-medium ml-[3.25rem] mb-4">
-                                  Practice a complete sentence.
-                                </p>
-
-                                {/* Expanding Input Area */}
-                                <div
-                                  className={`ml-[3.25rem] overflow-hidden transition-all duration-300 ease-in-out ${practiceMode === "sentence" ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0"}`}
-                                >
-                                  <textarea
-                                    className="w-full bg-gray-50 border border-gray-200 rounded-[1.25rem] p-4 text-xs font-bold text-gray-700 outline-none focus:ring-4 focus:ring-blue-100/50 transition-all resize-none min-h-[100px]"
-                                    placeholder="e.g. Can you pass the water?"
-                                    value={currentSentence}
-                                    onChange={(e) =>
-                                      setCurrentSentence(e.target.value)
-                                    }
-                                  />
+                              <div className={`overflow-hidden transition-all duration-500 ${practiceMode === "words" ? "max-h-[300px] opacity-100" : "max-h-0 opacity-0"}`}>
+                                <div className="w-full bg-gray-50/50 border border-[#064e3b]/10 rounded-[1.5rem] p-5 min-h-[120px] flex flex-wrap gap-3 shadow-inner">
+                                  {wordTags.map((tag, i) => (<span key={i} className="bg-[#064e3b]/5 text-[#064e3b] px-4 py-2 rounded-full text-[10px] font-extrabold uppercase tracking-widest flex items-center gap-3 border border-[#064e3b]/10">{tag} <X size={14} className="cursor-pointer hover:text-red-500" onClick={e => { e.stopPropagation(); removeTag(i); }} /></span>))}
+                                  <input className="flex-1 min-w-[150px] bg-transparent outline-none text-[11px] font-extrabold text-gray-700" placeholder="Type and press Enter..." onKeyDown={addTag} />
                                 </div>
                               </div>
                             </div>
 
-                            {/* Actions Footer */}
-                            <div className="flex gap-4 mt-8 pt-6 border-t border-gray-100">
-                              <button
-                                onClick={() => handleManualSync(patient.id)}
-                                disabled={updatingId === patient.id}
-                                className="flex-1 bg-white border border-gray-200 text-gray-700 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:border-gray-300 hover:bg-gray-50 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
-                              >
-                                {updatingId === patient.id ? (
-                                  <Loader2 className="animate-spin w-4 h-4" />
-                                ) : (
-                                  <Save className="w-4 h-4 text-gray-400" />
-                                )}
-                                Sync Edits
-                              </button>
+                            {/* SENTENCE MODE */}
+                            <div onClick={() => handleModeChange("sentence")} className={`relative p-8 rounded-[2.5rem] border-2 cursor-pointer transition-all duration-300 ${practiceMode === "sentence" ? "border-[#172554] bg-white shadow-2xl shadow-[#172554]/5 ring-4 ring-[#172554]/5" : "border-gray-50 bg-gray-50/50 hover:bg-white hover:border-gray-200"}`}>
+                              <div className="flex items-center justify-between mb-4">
+                                <div className="flex items-center gap-4">
+                                  <div className={`p-3 rounded-2xl transition-all ${practiceMode === "sentence" ? "bg-[#172554] text-white" : "bg-white text-gray-300 shadow-sm"}`}><MessageSquare size={20} /></div>
+                                  <span className={`font-extrabold text-sm ${practiceMode === "sentence" ? "text-gray-800" : "text-gray-400"}`}>Practice Phrase</span>
+                                </div>
+                                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${practiceMode === "sentence" ? "border-[#172554] bg-[#172554]" : "border-gray-200"}`}>{practiceMode === "sentence" && <CheckCircle size={14} className="text-white" strokeWidth={4} />}</div>
+                              </div>
+                              <div className={`overflow-hidden transition-all duration-500 ${practiceMode === "sentence" ? "max-h-[300px] opacity-100" : "max-h-0 opacity-0"}`}>
+                                <textarea className="w-full bg-gray-50/50 border border-[#172554]/10 rounded-[1.5rem] p-5 text-[11px] font-semibold text-gray-700 outline-none focus:ring-4 focus:ring-[#172554]/5 shadow-inner min-h-[120px] italic" value={currentSentence} onChange={e => setCurrentSentence(e.target.value)} placeholder="e.g. Can you pass the water?" />
+                              </div>
+                            </div>
 
+                            {/* ACTIONS */}
+                            <div className="flex gap-5 pt-8 border-t border-gray-100">
+                              <button onClick={() => handleManualSync(patient.id)} disabled={updatingId === patient.id} className="flex-1 bg-white border border-gray-200 text-[#012b1d] py-6 rounded-2xl font-extrabold text-[11px] uppercase tracking-[0.2em] shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-4">
+                                {updatingId === patient.id ? <Loader2 className="animate-spin w-5 h-5" /> : <Save size={18} />} Sync Edits
+                              </button>
                               {activeSessionId && (
-                                <button
-                                  onClick={() =>
-                                    markSessionComplete(patient.id)
-                                  }
-                                  disabled={updatingId === patient.id}
-                                  className="flex-1 bg-[#5cb338] text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-green-100 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                                >
-                                  <CheckCircle className="w-4 h-4" /> Mark
-                                  Complete
+                                <button onClick={() => markSessionComplete(patient.id)} disabled={updatingId === patient.id} className="flex-1 bg-[#012b1d] text-white py-6 rounded-2xl font-extrabold text-[11px] uppercase tracking-[0.2em] shadow-2xl shadow-[#012b1d]/20 hover:brightness-125 transition-all flex items-center justify-center gap-3">
+                                  <CheckCircle size={18} /> Mark Complete
                                 </button>
                               )}
                             </div>
                           </div>
                         </div>
 
-                        {/* --- EXPORT CSV --- */}
-                        <div className="mt-12 pt-8 border-t border-gray-200/50 animate-in slide-in-from-bottom duration-700">
-                          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-3xl border border-blue-100 flex flex-col md:flex-row justify-between items-center gap-6 shadow-sm">
+                        {/* DATA EXPORT FOOTER */}
+                        <div className="mt-16 pt-10 border-t border-gray-100 animate-in slide-in-from-bottom duration-700">
+                          <div className="bg-[#172554]/5 p-10 rounded-[3rem] border border-[#172554]/10 flex flex-col md:flex-row justify-between items-center gap-8 shadow-inner">
                             <div>
-                              <h3 className="text-sm font-black text-blue-900 uppercase tracking-widest flex items-center gap-2">
-                                <Download className="w-4 h-4 text-blue-500" />
-                                Clinical Data Export
-                              </h3>
-                              <p className="text-xs text-blue-600/70 font-bold mt-1">
-                                Download a formatted CSV report containing all
-                                completed sessions, targets, and performance
-                                metrics for {patient.full_name}.
-                              </p>
-                              <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest mt-2">
-                                {sessionReports.length} Session(s) on Record
-                              </p>
+                              <h3 className="text-[11px] font-extrabold text-[#172554] uppercase tracking-[0.3em] flex items-center gap-3"><Download size={18} /> Clinical Data Export</h3>
+                              <p className="text-sm text-gray-500 font-semibold mt-3 italic max-w-lg leading-relaxed">Download a formatted clinical dataset for {patient.full_name} containing historical accuracy and metrics.</p>
                             </div>
-
-                            <button
-                              onClick={() => downloadCSV(patient)}
-                              disabled={sessionReports.length === 0}
-                              className="w-full md:w-auto bg-white text-blue-600 px-8 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-3 border border-blue-200 shadow-sm hover:shadow-md hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed"
-                            >
-                              <Download size={16} />
-                              Export CSV File
-                            </button>
+                            <button onClick={() => downloadCSV(patient)} disabled={sessionReports.length === 0} className="bg-white text-[#172554] px-12 py-5 rounded-2xl text-[11px] font-extrabold uppercase tracking-[0.2em] flex items-center justify-center gap-4 border border-[#172554]/20 shadow-xl transition-all disabled:opacity-40"><Download size={20} /> Download CSV</button>
                           </div>
                         </div>
                       </td>
