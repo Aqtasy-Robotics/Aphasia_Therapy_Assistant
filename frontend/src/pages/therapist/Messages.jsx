@@ -18,7 +18,7 @@ const TherapistMessages = () => {
   const [showNewChatModal, setShowNewChatModal] = useState(false);
   
   // Realtime Chat State
-  const [activeChat, setActiveChat] = useState(null); // Holds the selected patient object
+  const [activeChat, setActiveChat] = useState(null); 
   const [messages, setMessages] = useState([]);
   const [messageInput, setMessageInput] = useState("");
   const [myId, setMyId] = useState(null);
@@ -26,7 +26,7 @@ const TherapistMessages = () => {
 
   const messagesEndRef = useRef(null);
 
-  // 1. Fetch Assigned Patients & Current User ID
+  // 1. Fetch Assigned Patients (FIXED: Removed 'aphasia_type' to match schema)
   useEffect(() => {
     const fetchInitialData = async () => {
       setLoading(true);
@@ -35,17 +35,22 @@ const TherapistMessages = () => {
         setMyId(user.id);
         const { data, error } = await supabase
           .from("profiles")
-          .select("id, full_name, aphasia_type")
+          .select("id, full_name") // <-- Fixed Query
           .eq("selected_therapist_id", user.id)
           .eq("role", "patient");
-        if (!error) setAssignedPatients(data);
+          
+        if (error) {
+          console.error("Error fetching patients:", error);
+        } else {
+          setAssignedPatients(data || []);
+        }
       }
       setLoading(false);
     };
     fetchInitialData();
   }, []);
 
-  // 2. Fetch Message History when activeChat changes
+  // 2. Fetch Message History (FIXED: Upgraded to a safer .in() array filter)
   useEffect(() => {
     if (!activeChat || !myId) return;
 
@@ -53,7 +58,8 @@ const TherapistMessages = () => {
       const { data, error } = await supabase
         .from('messages')
         .select('*')
-        .or(`and(sender_id.eq.${myId},receiver_id.eq.${activeChat.id}),and(sender_id.eq.${activeChat.id},receiver_id.eq.${myId})`)
+        .in('sender_id', [myId, activeChat.id])
+        .in('receiver_id', [myId, activeChat.id])
         .order('created_at', { ascending: true });
 
       if (!error && data) setMessages(data);
@@ -62,7 +68,7 @@ const TherapistMessages = () => {
     fetchHistory();
   }, [activeChat, myId]);
 
-  // 3. Set up Realtime Subscription for incoming messages
+  // 3. Set up Realtime Subscription
   useEffect(() => {
     if (!activeChat || !myId) return;
 
@@ -74,7 +80,6 @@ const TherapistMessages = () => {
         table: 'messages' 
       }, (payload) => {
         const newMessage = payload.new;
-        // Check if the new message belongs to the currently open conversation
         if (
           (newMessage.sender_id === activeChat.id && newMessage.receiver_id === myId) ||
           (newMessage.sender_id === myId && newMessage.receiver_id === activeChat.id)
@@ -89,7 +94,7 @@ const TherapistMessages = () => {
     };
   }, [activeChat, myId]);
 
-  // 4. Auto-Scroll to bottom when new messages arrive
+  // 4. Auto-Scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -100,7 +105,7 @@ const TherapistMessages = () => {
     if (!messageInput.trim() || !activeChat || !myId) return;
 
     const textToSend = messageInput;
-    setMessageInput(""); // Optimistically clear input
+    setMessageInput(""); 
 
     const { error } = await supabase
       .from('messages')
@@ -126,7 +131,7 @@ const TherapistMessages = () => {
   return (
     <div className="animate-in fade-in duration-700 font-sans antialiased pb-2">
       
-      {/* --- HEADER SECTION --- */}
+      {/* HEADER */}
       <header className="mb-6 flex justify-between items-end">
         <div>
           <h1 className="text-3xl font-extrabold text-[#012b1d] tracking-tight">
@@ -141,10 +146,10 @@ const TherapistMessages = () => {
         </div>
       </header>
 
-      {/* --- MAXIMIZED CONTAINER --- */}
+      {/* MAIN CONTAINER */}
       <div className="h-[calc(100vh-110px)] flex bg-white rounded-[2.5rem] overflow-hidden border border-gray-50 shadow-2xl shadow-gray-200/40">
         
-        {/* LEFT: ROSTER ASIDE */}
+        {/* ROSTER SIDEBAR */}
         <aside className="w-80 bg-gray-50/50 border-r border-gray-100 flex flex-col shrink-0">
           <div className="p-8 pb-4">
             <div className="flex justify-between items-center mb-6">
@@ -184,7 +189,7 @@ const TherapistMessages = () => {
                 <div className="flex-1 min-w-0">
                   <p className="font-extrabold text-xs truncate">{patient.full_name}</p>
                   <p className={`text-[9px] font-bold uppercase tracking-widest truncate mt-0.5 ${activeChat?.id === patient.id ? "text-white/70" : "text-gray-400"}`}>
-                    {patient.aphasia_type}
+                    Active Patient
                   </p>
                 </div>
               </div>
@@ -197,11 +202,10 @@ const TherapistMessages = () => {
           </div>
         </aside>
 
-        {/* RIGHT: CHAT INTERFACE */}
+        {/* CHAT INTERFACE */}
         <main className="flex-1 flex flex-col bg-white relative">
           
           {!activeChat ? (
-            /* EMPTY STATE */
             <div className="flex-1 flex flex-col items-center justify-center p-8 text-center relative">
               <div className="absolute top-0 right-0 w-80 h-80 bg-[#012b1d]/5 rounded-full blur-[80px] -mr-40 -mt-40 pointer-events-none"></div>
               <div className="relative mb-8 group">
@@ -224,9 +228,7 @@ const TherapistMessages = () => {
               </button>
             </div>
           ) : (
-            /* ACTIVE CHAT VIEW */
             <>
-              {/* Chat Header */}
               <div className="p-6 border-b border-gray-50 bg-white/80 backdrop-blur-md flex justify-between items-center z-10">
                 <div className="flex items-center gap-4">
                   <div className="w-10 h-10 bg-gray-50 text-[#012b1d] rounded-xl flex items-center justify-center font-extrabold text-xs shadow-inner border border-gray-100">
@@ -239,7 +241,6 @@ const TherapistMessages = () => {
                 </div>
               </div>
 
-              {/* Chat Messages Area */}
               <div className="flex-1 overflow-y-auto p-8 space-y-6 bg-gray-50/10 custom-scrollbar">
                 {messages.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center text-center opacity-50">
@@ -266,10 +267,9 @@ const TherapistMessages = () => {
                     );
                   })
                 )}
-                <div ref={messagesEndRef} /> {/* Auto-scroll target */}
+                <div ref={messagesEndRef} />
               </div>
 
-              {/* Input Area */}
               <div className="p-6 border-t border-gray-50 bg-white">
                 <form onSubmit={handleSendMessage} className="max-w-4xl mx-auto flex items-center gap-4 bg-gray-50 p-2.5 rounded-2xl border border-gray-100 focus-within:ring-4 focus-within:ring-[#012b1d]/5 transition-all">
                   <button type="button" className="p-2 text-gray-400 hover:text-gray-600 transition-colors">
@@ -299,7 +299,7 @@ const TherapistMessages = () => {
         </main>
       </div>
 
-      {/* --- NEW CONVERSATION MODAL --- */}
+      {/* NEW CONVERSATION MODAL */}
       {showNewChatModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
           <div className="absolute inset-0 bg-[#012b1d]/40 backdrop-blur-md" onClick={() => setShowNewChatModal(false)}></div>
@@ -330,7 +330,7 @@ const TherapistMessages = () => {
                         </div>
                         <div>
                           <p className="font-extrabold text-gray-800 text-sm group-hover:text-[#012b1d] transition-colors">{patient.full_name}</p>
-                          <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">{patient.aphasia_type}</p>
+                          <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Active Patient</p>
                         </div>
                       </div>
                       <MessageCircle size={18} className="text-gray-200 group-hover:text-[#012b1d]" />
