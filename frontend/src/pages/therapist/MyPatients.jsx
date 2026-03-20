@@ -18,7 +18,7 @@ import {
   Download,
   ShieldCheck,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
 } from "lucide-react";
 
 const MyPatients = () => {
@@ -50,7 +50,9 @@ const MyPatients = () => {
     const fetchClinicalData = async () => {
       try {
         setLoading(true);
-        const { data: { user } } = await supabase.auth.getUser();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
         if (!user) return;
 
         const { data: patientData, error: patientError } = await supabase
@@ -90,7 +92,11 @@ const MyPatients = () => {
         .select();
 
       if (error) throw error;
-      setPatients((prev) => prev.map((p) => p.id === patientId ? { ...p, selected_therapist_id: valueToSet } : p));
+      setPatients((prev) =>
+        prev.map((p) =>
+          p.id === patientId ? { ...p, selected_therapist_id: valueToSet } : p,
+        ),
+      );
       alert("Therapist successfully assigned! ✅");
     } catch (error) {
       alert("Failed to update therapist: " + error.message);
@@ -151,7 +157,9 @@ const MyPatients = () => {
         setDifficultyLevel(activeData.difficulty_level?.[0] || "Medium");
         setTherapyGoal(activeData.therapy_goal || "");
         setPhonemes(activeData.phonemes_to_focus_on?.join(", ") || "");
-        setSessionDate(activeData.session_date || today.toISOString().split("T")[0]);
+        setSessionDate(
+          activeData.session_date || today.toISOString().split("T")[0],
+        );
         setSessionTime(activeData.session_time || "10:00 AM");
       }
       const { data: reportData, error: reportError } = await supabase
@@ -185,8 +193,13 @@ const MyPatients = () => {
     }
     try {
       setUpdatingId(patientId);
-      const { data: { user } } = await supabase.auth.getUser();
-      const phonemesArray = phonemes.split(",").map((p) => p.trim()).filter((p) => p !== "");
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      const phonemesArray = phonemes
+        .split(",")
+        .map((p) => p.trim())
+        .filter((p) => p !== "");
       const sessionPayload = {
         patient_id: patientId,
         therapist_id: user.id,
@@ -200,10 +213,17 @@ const MyPatients = () => {
         status: "upcoming",
       };
       if (activeSessionId) {
-        const { error } = await supabase.from("sessions").update(sessionPayload).eq("id", activeSessionId);
+        const { error } = await supabase
+          .from("sessions")
+          .update(sessionPayload)
+          .eq("id", activeSessionId);
         if (error) throw error;
       } else {
-        const { data, error } = await supabase.from("sessions").insert(sessionPayload).select().single();
+        const { data, error } = await supabase
+          .from("sessions")
+          .insert(sessionPayload)
+          .select()
+          .single();
         if (error) throw error;
         setActiveSessionId(data.id);
       }
@@ -223,7 +243,10 @@ const MyPatients = () => {
     if (window.confirm("Archive this session into clinical reports?")) {
       try {
         setUpdatingId(patientId);
-        const phonemesArray = phonemes.split(",").map((p) => p.trim()).filter((p) => p !== "");
+        const phonemesArray = phonemes
+          .split(",")
+          .map((p) => p.trim())
+          .filter((p) => p !== "");
         const archivePayload = {
           patient_id: patientId,
           target_word: practiceMode === "words" ? wordTags : [],
@@ -234,7 +257,11 @@ const MyPatients = () => {
           phonemes_to_focus_on: phonemesArray,
           created_at: new Date().toISOString(),
         };
-        const { data: newReport, error: insertError } = await supabase.from("session_reports").insert(archivePayload).select().single();
+        const { data: newReport, error: insertError } = await supabase
+          .from("session_reports")
+          .insert(archivePayload)
+          .select()
+          .single();
         if (insertError) throw insertError;
         await supabase.from("sessions").delete().eq("id", activeSessionId);
         setSessionReports([newReport, ...sessionReports]);
@@ -253,27 +280,115 @@ const MyPatients = () => {
     }
   };
 
+  // --- UPDATED CSV GENERATOR (1 ROW PER SESSION, | DELIMITED) ---
   const downloadCSV = (patient) => {
-    if (sessionReports.length === 0) return;
-    const headers = ["Patient Name", "Target Word", "Target Phonemes", "Accuracy (%)", "Date Completed"];
+    if (sessionReports.length === 0) {
+      alert("No reports available to download for this patient.");
+      return;
+    }
+
+    // Lookup the assigned therapist's name
+    const assignedTherapist = therapists.find(
+      (t) => t.id === patient.selected_therapist_id,
+    );
+    const therapistName = assignedTherapist
+      ? assignedTherapist.full_name
+      : "Unassigned";
+
+    const headers = [
+      "Patient Name",
+      "Speech Therapist Name",
+      "Target Words / Sentence",
+      "Transcript",
+      "Feedback Given",
+      "Accuracy (%)",
+      "Therapy Goals",
+      "Target Phonemes",
+      "Attempted Phonemes",
+    ];
+
     const csvRows = [];
+
     sessionReports.forEach((report) => {
-      const targetWords = Array.isArray(report.target_word) ? report.target_word : [];
-      targetWords.forEach((word) => {
-        csvRows.push([patient.full_name, word, "", report.accuracy ?? "", new Date(report.created_at).toLocaleString()].map(v => `"${String(v).replace(/"/g, '""')}"`).join(","));
-      });
+      // Helper to safely parse arrays from Supabase
+      const parseArray = (arr) => {
+        if (!arr) return [];
+        if (Array.isArray(arr)) return arr;
+        if (typeof arr === "string") {
+          if (arr.startsWith("{") && arr.endsWith("}")) {
+            return arr
+              .slice(1, -1)
+              .split(",")
+              .map((s) => s.replace(/(^"|"$)/g, "").trim());
+          }
+          return arr.split(",").map((s) => s.trim());
+        }
+        return [String(arr)];
+      };
+
+      // Helper to replace newlines with a pipe " | "
+      const formatText = (text) => (text || "").replace(/\n/g, " | ");
+
+      // Extract and format data
+      const targetWordsArr = parseArray(report.target_word);
+      const targetSentence = report.target_sentence || "";
+
+      // Use Sentence if it exists, otherwise join Words with |
+      const targetPractice =
+        targetSentence.trim().length > 0
+          ? targetSentence
+          : targetWordsArr.join(" | ");
+
+      const targetPhons = parseArray(report.target_phonemes).join(" | ");
+      const attemptedPhons = parseArray(report.attempted_phonemes).join(" | ");
+
+      const accuracyStr = Array.isArray(report.accuracy)
+        ? report.accuracy.join(" | ")
+        : String(report.accuracy ?? "");
+
+      const rowData = [
+        patient.full_name || "Unknown Patient",
+        therapistName,
+        targetPractice,
+        formatText(report.transcript),
+        formatText(report.feedback_given),
+        accuracyStr,
+        report.therapy_goals || report.therapy_goal || "",
+        targetPhons,
+        attemptedPhons,
+      ];
+
+      // Wrap in double quotes to prevent internal commas from breaking the CSV layout
+      csvRows.push(
+        rowData
+          .map((value) => `"${String(value).replace(/"/g, '""')}"`)
+          .join(","),
+      );
     });
-    const blob = new Blob([[headers.join(","), ...csvRows].join("\n")], { type: "text/csv;charset=utf-8;" });
+
+    const csvString = [headers.join(","), ...csvRows].join("\n");
+    const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" });
     const link = document.createElement("a");
     link.href = window.URL.createObjectURL(blob);
-    link.setAttribute("download", `${patient.full_name}_Reports.csv`);
+    link.setAttribute(
+      "download",
+      `${patient.full_name.replace(/\s+/g, "_")}_Clinical_Reports.csv`,
+    );
+    document.body.appendChild(link);
     link.click();
+    document.body.removeChild(link);
   };
 
   const handleCustomDateSelect = (day) => {
-    const newDate = new Date(pickerMonth.getFullYear(), pickerMonth.getMonth(), day);
+    const newDate = new Date(
+      pickerMonth.getFullYear(),
+      pickerMonth.getMonth(),
+      day,
+    );
     const offset = newDate.getTimezoneOffset();
-    const formattedDate = new Date(newDate.getTime() - offset * 60 * 1000).toISOString().split("T")[0];
+    const formattedDate = new Date(newDate.getTime() - offset * 60 * 1000)
+      .toISOString()
+      .split("T")[0];
     setSessionDate(formattedDate);
     setShowDatePicker(false);
   };
@@ -305,42 +420,77 @@ const MyPatients = () => {
     }
   };
 
-  const removeTag = (indexToRemove) => setWordTags(wordTags.filter((_, index) => index !== indexToRemove));
+  const removeTag = (indexToRemove) =>
+    setWordTags(wordTags.filter((_, index) => index !== indexToRemove));
 
   const filteredPatients = patients.filter((patient) =>
     patient.full_name?.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
-  const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-  const daysInMonth = new Date(pickerMonth.getFullYear(), pickerMonth.getMonth() + 1, 0).getDate();
-  const firstDayOfMonth = new Date(pickerMonth.getFullYear(), pickerMonth.getMonth(), 1).getDay();
+  const monthNames = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+  ];
+  const daysInMonth = new Date(
+    pickerMonth.getFullYear(),
+    pickerMonth.getMonth() + 1,
+    0,
+  ).getDate();
+  const firstDayOfMonth = new Date(
+    pickerMonth.getFullYear(),
+    pickerMonth.getMonth(),
+    1,
+  ).getDay();
 
   if (loading)
     return (
       <div className="flex h-screen items-center justify-center flex-col gap-6">
         <Loader2 className="w-12 h-12 text-[#012b1d] animate-spin" />
-        <p className="text-[10px] font-extrabold text-gray-400 uppercase tracking-[0.3em]">Syncing Clinical Database...</p>
+        <p className="text-[10px] font-extrabold text-gray-400 uppercase tracking-[0.3em]">
+          Syncing Clinical Database...
+        </p>
       </div>
     );
 
   return (
     <div className="animate-in fade-in duration-700 font-sans antialiased pb-20">
-      
       {/* OPEN HEADER SECTION */}
       <header className="mb-12 flex justify-between items-end">
         <div>
-          <h1 className="text-4xl font-extrabold text-[#012b1d] tracking-tight">Clinical Directory</h1>
+          <h1 className="text-4xl font-extrabold text-[#012b1d] tracking-tight">
+            Clinical Directory
+          </h1>
           <div className="flex items-center gap-3 mt-2">
-             <ShieldCheck size={16} className="text-[#064e3b]" />
-             <p className="text-gray-400 font-semibold text-sm italic">Global oversight and therapy configuration</p>
+            <ShieldCheck size={16} className="text-[#064e3b]" />
+            <p className="text-gray-400 font-semibold text-sm italic">
+              Global oversight and therapy configuration
+            </p>
           </div>
         </div>
       </header>
 
       {/* SEARCH INTERFACE */}
       <div className="relative group max-w-xl mb-12">
-        <div className="absolute inset-y-0 left-0 pl-6 flex items-center pointer-events-none text-gray-300"><Search size={20} /></div>
-        <input type="text" placeholder="Search patient roster..." className="block w-full pl-14 pr-6 py-5 bg-white border border-gray-50 rounded-[1.5rem] shadow-2xl shadow-gray-200/40 focus:ring-4 focus:ring-[#012b1d]/5 outline-none transition-all text-gray-700 font-bold text-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+        <div className="absolute inset-y-0 left-0 pl-6 flex items-center pointer-events-none text-gray-300">
+          <Search size={20} />
+        </div>
+        <input
+          type="text"
+          placeholder="Search patient roster..."
+          className="block w-full pl-14 pr-6 py-5 bg-white border border-gray-50 rounded-[1.5rem] shadow-2xl shadow-gray-200/40 focus:ring-4 focus:ring-[#012b1d]/5 outline-none transition-all text-gray-700 font-bold text-sm"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+        />
       </div>
 
       <div className="bg-white rounded-[3.5rem] shadow-2xl shadow-gray-200/40 border border-gray-50 overflow-hidden">
@@ -348,39 +498,77 @@ const MyPatients = () => {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-gray-50/50 border-b border-gray-100">
-                <th className="px-10 py-8 text-[10px] font-extrabold text-gray-400 uppercase tracking-[0.3em]">Patient</th>
-                <th className="px-10 py-8 text-[10px] font-extrabold text-gray-400 uppercase tracking-[0.3em]">Assigned Therapist</th>
-                <th className="px-10 py-8 text-[10px] font-extrabold text-gray-400 uppercase tracking-[0.3em]">Target Status</th>
-                <th className="px-10 py-8 text-[10px] font-extrabold text-gray-400 uppercase tracking-[0.3em] text-right">Action</th>
+                <th className="px-10 py-8 text-[10px] font-extrabold text-gray-400 uppercase tracking-[0.3em]">
+                  Patient
+                </th>
+                <th className="px-10 py-8 text-[10px] font-extrabold text-gray-400 uppercase tracking-[0.3em]">
+                  Assigned Therapist
+                </th>
+                <th className="px-10 py-8 text-[10px] font-extrabold text-gray-400 uppercase tracking-[0.3em]">
+                  Target Status
+                </th>
+                <th className="px-10 py-8 text-[10px] font-extrabold text-gray-400 uppercase tracking-[0.3em] text-right">
+                  Action
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {filteredPatients.map((patient) => (
                 <React.Fragment key={patient.id}>
-                  <tr className={`group hover:bg-[#064e3b]/5 transition-all cursor-pointer ${expandedId === patient.id ? "bg-[#064e3b]/5" : ""}`} onClick={() => handleExpandPatient(patient.id)}>
+                  <tr
+                    className={`group hover:bg-[#064e3b]/5 transition-all cursor-pointer ${expandedId === patient.id ? "bg-[#064e3b]/5" : ""}`}
+                    onClick={() => handleExpandPatient(patient.id)}
+                  >
                     <td className="px-10 py-8">
                       <div className="flex items-center gap-5">
                         <div className="w-12 h-12 bg-[#064e3b]/10 text-[#064e3b] rounded-2xl flex items-center justify-center font-extrabold text-base border border-[#064e3b]/5 shadow-inner">
                           {patient.full_name?.charAt(0) || "?"}
                         </div>
-                        <span className="text-base font-extrabold text-gray-800 tracking-tight">{patient.full_name || "Unknown Patient"}</span>
+                        <span className="text-base font-extrabold text-gray-800 tracking-tight">
+                          {patient.full_name || "Unknown Patient"}
+                        </span>
                       </div>
                     </td>
                     <td className="px-10 py-8">
                       <div className="flex items-center gap-3">
-                        <UserCog size={16} className={patient.selected_therapist_id ? "text-[#172554]" : "text-orange-500"} />
-                        <select className={`text-[10px] font-extrabold outline-none rounded-xl px-4 py-2.5 cursor-pointer transition-all border ${patient.selected_therapist_id ? "bg-[#172554]/5 text-[#172554] border-[#172554]/10" : "bg-orange-50 text-orange-700 border-orange-100"}`} value={patient.selected_therapist_id || ""} onChange={(e) => handleAssignTherapist(patient.id, e.target.value)} onClick={(e) => e.stopPropagation()} disabled={updatingId === patient.id}>
+                        <UserCog
+                          size={16}
+                          className={
+                            patient.selected_therapist_id
+                              ? "text-[#172554]"
+                              : "text-orange-500"
+                          }
+                        />
+                        <select
+                          className={`text-[10px] font-extrabold outline-none rounded-xl px-4 py-2.5 cursor-pointer transition-all border ${patient.selected_therapist_id ? "bg-[#172554]/5 text-[#172554] border-[#172554]/10" : "bg-orange-50 text-orange-700 border-orange-100"}`}
+                          value={patient.selected_therapist_id || ""}
+                          onChange={(e) =>
+                            handleAssignTherapist(patient.id, e.target.value)
+                          }
+                          onClick={(e) => e.stopPropagation()}
+                          disabled={updatingId === patient.id}
+                        >
                           <option value="">-- Unassigned --</option>
-                          {therapists.map((t) => <option key={t.id} value={t.id}>{t.full_name}</option>)}
+                          {therapists.map((t) => (
+                            <option key={t.id} value={t.id}>
+                              {t.full_name}
+                            </option>
+                          ))}
                         </select>
                       </div>
                     </td>
                     <td className="px-10 py-8 text-[10px] font-extrabold text-gray-400 uppercase tracking-[0.2em]">
-                      {expandedId === patient.id && activeSessionId ? "Active Session" : "Configure Next"}
+                      {expandedId === patient.id && activeSessionId
+                        ? "Active Session"
+                        : "Configure Next"}
                     </td>
                     <td className="px-10 py-8 text-right">
                       <div className="p-3 rounded-xl bg-gray-50 text-gray-400 inline-block group-hover:bg-white group-hover:shadow-md transition-all">
-                        {expandedId === patient.id ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                        {expandedId === patient.id ? (
+                          <ChevronUp size={20} />
+                        ) : (
+                          <ChevronDown size={20} />
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -393,90 +581,300 @@ const MyPatients = () => {
                           <div className="space-y-10">
                             <div className="grid grid-cols-2 gap-6">
                               <div className="space-y-3 relative">
-                                <label className="text-[10px] font-extrabold text-gray-400 uppercase tracking-[0.3em] ml-6">Session Date</label>
-                                <div onClick={() => { setShowDatePicker(!showDatePicker); setShowTimePicker(false); }} className="w-full bg-white border border-gray-100 rounded-[1.25rem] pl-12 py-5 text-[11px] font-extrabold text-gray-700 shadow-sm transition-all cursor-pointer flex items-center relative">
-                                  <Calendar className="w-4 h-4 text-[#172554] absolute left-5" /> {sessionDate}
+                                <label className="text-[10px] font-extrabold text-gray-400 uppercase tracking-[0.3em] ml-6">
+                                  Session Date
+                                </label>
+                                <div
+                                  onClick={() => {
+                                    setShowDatePicker(!showDatePicker);
+                                    setShowTimePicker(false);
+                                  }}
+                                  className="w-full bg-white border border-gray-100 rounded-[1.25rem] pl-12 py-5 text-[11px] font-extrabold text-gray-700 shadow-sm transition-all cursor-pointer flex items-center relative"
+                                >
+                                  <Calendar className="w-4 h-4 text-[#172554] absolute left-5" />{" "}
+                                  {sessionDate}
                                 </div>
                                 {showDatePicker && (
                                   <div className="absolute top-[90px] left-0 w-80 bg-white border border-gray-50 shadow-2xl rounded-[2.5rem] p-6 z-50">
                                     <div className="flex justify-between items-center mb-6">
-                                      <button onClick={(e) => { e.stopPropagation(); setPickerMonth(new Date(pickerMonth.getFullYear(), pickerMonth.getMonth() - 1, 1)); }} className="p-2 hover:bg-gray-50 rounded-xl"><ChevronLeft size={18} /></button>
-                                      <span className="text-[11px] font-extrabold text-gray-800 uppercase tracking-widest">{monthNames[pickerMonth.getMonth()]} {pickerMonth.getFullYear()}</span>
-                                      <button onClick={(e) => { e.stopPropagation(); setPickerMonth(new Date(pickerMonth.getFullYear(), pickerMonth.getMonth() + 1, 1)); }} className="p-2 hover:bg-gray-50 rounded-xl"><ChevronRight size={18} /></button>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setPickerMonth(
+                                            new Date(
+                                              pickerMonth.getFullYear(),
+                                              pickerMonth.getMonth() - 1,
+                                              1,
+                                            ),
+                                          );
+                                        }}
+                                        className="p-2 hover:bg-gray-50 rounded-xl"
+                                      >
+                                        <ChevronLeft size={18} />
+                                      </button>
+                                      <span className="text-[11px] font-extrabold text-gray-800 uppercase tracking-widest">
+                                        {monthNames[pickerMonth.getMonth()]}{" "}
+                                        {pickerMonth.getFullYear()}
+                                      </span>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setPickerMonth(
+                                            new Date(
+                                              pickerMonth.getFullYear(),
+                                              pickerMonth.getMonth() + 1,
+                                              1,
+                                            ),
+                                          );
+                                        }}
+                                        className="p-2 hover:bg-gray-50 rounded-xl"
+                                      >
+                                        <ChevronRight size={18} />
+                                      </button>
                                     </div>
-                                    <div className="grid grid-cols-7 gap-1 text-[10px] font-extrabold text-gray-400 mb-4">{["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map(d => <span key={d}>{d}</span>)}</div>
+                                    <div className="grid grid-cols-7 gap-1 text-[10px] font-extrabold text-gray-400 mb-4">
+                                      {[
+                                        "Su",
+                                        "Mo",
+                                        "Tu",
+                                        "We",
+                                        "Th",
+                                        "Fr",
+                                        "Sa",
+                                      ].map((d) => (
+                                        <span key={d}>{d}</span>
+                                      ))}
+                                    </div>
                                     <div className="grid grid-cols-7 gap-1">
-                                      {[...Array(firstDayOfMonth)].map((_, i) => <div key={i} />)}
+                                      {[...Array(firstDayOfMonth)].map(
+                                        (_, i) => (
+                                          <div key={i} />
+                                        ),
+                                      )}
                                       {[...Array(daysInMonth)].map((_, i) => {
                                         const day = i + 1;
-                                        return <button key={day} onClick={(e) => { e.stopPropagation(); handleCustomDateSelect(day); }} className={`p-2.5 text-xs font-bold rounded-xl hover:bg-[#064e3b]/5 text-gray-700`}>{day}</button>;
+                                        return (
+                                          <button
+                                            key={day}
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleCustomDateSelect(day);
+                                            }}
+                                            className={`p-2.5 text-xs font-bold rounded-xl hover:bg-[#064e3b]/5 text-gray-700`}
+                                          >
+                                            {day}
+                                          </button>
+                                        );
                                       })}
                                     </div>
                                   </div>
                                 )}
                               </div>
                               <div className="space-y-3 relative">
-                                <label className="text-[10px] font-extrabold text-gray-400 uppercase tracking-[0.3em] ml-6">Session Time</label>
-                                <div onClick={() => { setShowTimePicker(!showTimePicker); setShowDatePicker(false); }} className="w-full bg-white border border-gray-100 rounded-[1.25rem] pl-12 py-5 text-[11px] font-extrabold text-gray-700 shadow-sm transition-all cursor-pointer flex items-center relative">
-                                  <Clock className="w-4 h-4 text-[#172554] absolute left-5" /> {sessionTime}
+                                <label className="text-[10px] font-extrabold text-gray-400 uppercase tracking-[0.3em] ml-6">
+                                  Session Time
+                                </label>
+                                <div
+                                  onClick={() => {
+                                    setShowTimePicker(!showTimePicker);
+                                    setShowDatePicker(false);
+                                  }}
+                                  className="w-full bg-white border border-gray-100 rounded-[1.25rem] pl-12 py-5 text-[11px] font-extrabold text-gray-700 shadow-sm transition-all cursor-pointer flex items-center relative"
+                                >
+                                  <Clock className="w-4 h-4 text-[#172554] absolute left-5" />{" "}
+                                  {sessionTime}
                                 </div>
                                 {showTimePicker && (
                                   <div className="absolute top-[90px] left-0 w-full bg-white border border-gray-50 shadow-2xl rounded-[2.5rem] p-3 z-50 max-h-60 overflow-y-auto">
-                                    {generateTimeSlots().map(time => <button key={time} onClick={(e) => { e.stopPropagation(); handleCustomTimeSelect(time); }} className={`w-full text-left px-5 py-4 rounded-2xl text-[11px] font-extrabold tracking-widest hover:bg-[#064e3b]/5 text-gray-700`}>{time}</button>)}
+                                    {generateTimeSlots().map((time) => (
+                                      <button
+                                        key={time}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleCustomTimeSelect(time);
+                                        }}
+                                        className={`w-full text-left px-5 py-4 rounded-2xl text-[11px] font-extrabold tracking-widest hover:bg-[#064e3b]/5 text-gray-700`}
+                                      >
+                                        {time}
+                                      </button>
+                                    ))}
                                   </div>
                                 )}
                               </div>
                             </div>
                             <div className="grid grid-cols-2 gap-6">
-                              <div className="space-y-3 relative"><label className="text-[10px] font-extrabold text-gray-400 uppercase tracking-[0.3em] ml-6">Difficulty</label>
-                                <select className="w-full bg-white border border-gray-100 rounded-[1.25rem] px-8 py-5 text-[11px] font-extrabold text-gray-700 outline-none focus:ring-4 focus:ring-[#012b1d]/5 shadow-sm appearance-none" value={difficultyLevel} onChange={e => setDifficultyLevel(e.target.value)}><option value="Easy">Easy</option><option value="Medium">Medium</option><option value="Hard">Hard</option></select></div>
-                              <div className="space-y-3"><label className="text-[10px] font-extrabold text-gray-400 uppercase tracking-[0.3em] ml-6">Focus Phonemes</label><input className="w-full bg-white border border-gray-100 rounded-[1.25rem] px-8 py-5 text-[11px] font-extrabold text-gray-700 outline-none focus:ring-4 focus:ring-[#012b1d]/5 shadow-sm" placeholder="e.g. /p/, /b/" value={phonemes} onChange={e => setPhonemes(e.target.value)} /></div>
+                              <div className="space-y-3 relative">
+                                <label className="text-[10px] font-extrabold text-gray-400 uppercase tracking-[0.3em] ml-6">
+                                  Difficulty
+                                </label>
+                                <select
+                                  className="w-full bg-white border border-gray-100 rounded-[1.25rem] px-8 py-5 text-[11px] font-extrabold text-gray-700 outline-none focus:ring-4 focus:ring-[#012b1d]/5 shadow-sm appearance-none"
+                                  value={difficultyLevel}
+                                  onChange={(e) =>
+                                    setDifficultyLevel(e.target.value)
+                                  }
+                                >
+                                  <option value="Easy">Easy</option>
+                                  <option value="Medium">Medium</option>
+                                  <option value="Hard">Hard</option>
+                                </select>
+                              </div>
+                              <div className="space-y-3">
+                                <label className="text-[10px] font-extrabold text-gray-400 uppercase tracking-[0.3em] ml-6">
+                                  Focus Phonemes
+                                </label>
+                                <input
+                                  className="w-full bg-white border border-gray-100 rounded-[1.25rem] px-8 py-5 text-[11px] font-extrabold text-gray-700 outline-none focus:ring-4 focus:ring-[#012b1d]/5 shadow-sm"
+                                  placeholder="e.g. /p/, /b/"
+                                  value={phonemes}
+                                  onChange={(e) => setPhonemes(e.target.value)}
+                                />
+                              </div>
                             </div>
-                            <div className="space-y-3"><label className="text-[10px] font-extrabold text-gray-400 uppercase tracking-[0.3em] ml-6">Therapy Goal</label><textarea rows="2" className="w-full bg-white border border-gray-100 rounded-[1.5rem] px-6 py-5 text-[11px] font-semibold text-gray-700 outline-none focus:ring-4 focus:ring-[#012b1d]/5 shadow-sm resize-none" value={therapyGoal} onChange={e => setTherapyGoal(e.target.value)} /></div>
+                            <div className="space-y-3">
+                              <label className="text-[10px] font-extrabold text-gray-400 uppercase tracking-[0.3em] ml-6">
+                                Therapy Goal
+                              </label>
+                              <textarea
+                                rows="2"
+                                className="w-full bg-white border border-gray-100 rounded-[1.5rem] px-6 py-5 text-[11px] font-semibold text-gray-700 outline-none focus:ring-4 focus:ring-[#012b1d]/5 shadow-sm resize-none"
+                                value={therapyGoal}
+                                onChange={(e) => setTherapyGoal(e.target.value)}
+                              />
+                            </div>
                           </div>
 
                           {/* RIGHT COLUMN: MODERN CHOICE CARDS */}
                           <div className="flex flex-col h-full space-y-4">
-                            <label className="text-[10px] font-extrabold text-gray-400 uppercase tracking-[0.3em] ml-6 mb-2">Practice Target (Choose One)</label>
-                            
+                            <label className="text-[10px] font-extrabold text-gray-400 uppercase tracking-[0.3em] ml-6 mb-2">
+                              Practice Target (Choose One)
+                            </label>
+
                             {/* WORDS MODE */}
-                            <div onClick={() => handleModeChange("words")} className={`relative p-8 rounded-[2.5rem] border-2 cursor-pointer transition-all duration-300 ${practiceMode === "words" ? "border-[#012b1d] bg-white shadow-2xl shadow-[#012b1d]/5 ring-4 ring-[#012b1d]/5" : "border-gray-50 bg-gray-50/50 hover:bg-white hover:border-gray-200"}`}>
+                            <div
+                              onClick={() => handleModeChange("words")}
+                              className={`relative p-8 rounded-[2.5rem] border-2 cursor-pointer transition-all duration-300 ${practiceMode === "words" ? "border-[#012b1d] bg-white shadow-2xl shadow-[#012b1d]/5 ring-4 ring-[#012b1d]/5" : "border-gray-50 bg-gray-50/50 hover:bg-white hover:border-gray-200"}`}
+                            >
                               <div className="flex items-center justify-between mb-4">
                                 <div className="flex items-center gap-4">
-                                  <div className={`p-3 rounded-2xl transition-all ${practiceMode === "words" ? "bg-[#012b1d] text-white" : "bg-white text-gray-300 shadow-sm"}`}><Target size={20} /></div>
-                                  <span className={`font-extrabold text-sm ${practiceMode === "words" ? "text-gray-800" : "text-gray-400"}`}>Target Vocabulary</span>
+                                  <div
+                                    className={`p-3 rounded-2xl transition-all ${practiceMode === "words" ? "bg-[#012b1d] text-white" : "bg-white text-gray-300 shadow-sm"}`}
+                                  >
+                                    <Target size={20} />
+                                  </div>
+                                  <span
+                                    className={`font-extrabold text-sm ${practiceMode === "words" ? "text-gray-800" : "text-gray-400"}`}
+                                  >
+                                    Target Vocabulary
+                                  </span>
                                 </div>
-                                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${practiceMode === "words" ? "border-[#012b1d] bg-[#012b1d]" : "border-gray-200"}`}>{practiceMode === "words" && <CheckCircle size={14} className="text-white" strokeWidth={4} />}</div>
+                                <div
+                                  className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${practiceMode === "words" ? "border-[#012b1d] bg-[#012b1d]" : "border-gray-200"}`}
+                                >
+                                  {practiceMode === "words" && (
+                                    <CheckCircle
+                                      size={14}
+                                      className="text-white"
+                                      strokeWidth={4}
+                                    />
+                                  )}
+                                </div>
                               </div>
-                              <div className={`overflow-hidden transition-all duration-500 ${practiceMode === "words" ? "max-h-[300px] opacity-100" : "max-h-0 opacity-0"}`}>
+                              <div
+                                className={`overflow-hidden transition-all duration-500 ${practiceMode === "words" ? "max-h-[300px] opacity-100" : "max-h-0 opacity-0"}`}
+                              >
                                 <div className="w-full bg-gray-50/50 border border-[#064e3b]/10 rounded-[1.5rem] p-5 min-h-[120px] flex flex-wrap gap-3 shadow-inner">
-                                  {wordTags.map((tag, i) => (<span key={i} className="bg-[#064e3b]/5 text-[#064e3b] px-4 py-2 rounded-full text-[10px] font-extrabold uppercase tracking-widest flex items-center gap-3 border border-[#064e3b]/10">{tag} <X size={14} className="cursor-pointer hover:text-red-500" onClick={e => { e.stopPropagation(); removeTag(i); }} /></span>))}
-                                  <input className="flex-1 min-w-[150px] bg-transparent outline-none text-[11px] font-extrabold text-gray-700" placeholder="Type and press Enter..." onKeyDown={addTag} />
+                                  {wordTags.map((tag, i) => (
+                                    <span
+                                      key={i}
+                                      className="bg-[#064e3b]/5 text-[#064e3b] px-4 py-2 rounded-full text-[10px] font-extrabold uppercase tracking-widest flex items-center gap-3 border border-[#064e3b]/10"
+                                    >
+                                      {tag}{" "}
+                                      <X
+                                        size={14}
+                                        className="cursor-pointer hover:text-red-500"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          removeTag(i);
+                                        }}
+                                      />
+                                    </span>
+                                  ))}
+                                  <input
+                                    className="flex-1 min-w-[150px] bg-transparent outline-none text-[11px] font-extrabold text-gray-700"
+                                    placeholder="Type and press Enter..."
+                                    onKeyDown={addTag}
+                                  />
                                 </div>
                               </div>
                             </div>
 
                             {/* SENTENCE MODE */}
-                            <div onClick={() => handleModeChange("sentence")} className={`relative p-8 rounded-[2.5rem] border-2 cursor-pointer transition-all duration-300 ${practiceMode === "sentence" ? "border-[#172554] bg-white shadow-2xl shadow-[#172554]/5 ring-4 ring-[#172554]/5" : "border-gray-50 bg-gray-50/50 hover:bg-white hover:border-gray-200"}`}>
+                            <div
+                              onClick={() => handleModeChange("sentence")}
+                              className={`relative p-8 rounded-[2.5rem] border-2 cursor-pointer transition-all duration-300 ${practiceMode === "sentence" ? "border-[#172554] bg-white shadow-2xl shadow-[#172554]/5 ring-4 ring-[#172554]/5" : "border-gray-50 bg-gray-50/50 hover:bg-white hover:border-gray-200"}`}
+                            >
                               <div className="flex items-center justify-between mb-4">
                                 <div className="flex items-center gap-4">
-                                  <div className={`p-3 rounded-2xl transition-all ${practiceMode === "sentence" ? "bg-[#172554] text-white" : "bg-white text-gray-300 shadow-sm"}`}><MessageSquare size={20} /></div>
-                                  <span className={`font-extrabold text-sm ${practiceMode === "sentence" ? "text-gray-800" : "text-gray-400"}`}>Practice Phrase</span>
+                                  <div
+                                    className={`p-3 rounded-2xl transition-all ${practiceMode === "sentence" ? "bg-[#172554] text-white" : "bg-white text-gray-300 shadow-sm"}`}
+                                  >
+                                    <MessageSquare size={20} />
+                                  </div>
+                                  <span
+                                    className={`font-extrabold text-sm ${practiceMode === "sentence" ? "text-gray-800" : "text-gray-400"}`}
+                                  >
+                                    Practice Phrase
+                                  </span>
                                 </div>
-                                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${practiceMode === "sentence" ? "border-[#172554] bg-[#172554]" : "border-gray-200"}`}>{practiceMode === "sentence" && <CheckCircle size={14} className="text-white" strokeWidth={4} />}</div>
+                                <div
+                                  className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${practiceMode === "sentence" ? "border-[#172554] bg-[#172554]" : "border-gray-200"}`}
+                                >
+                                  {practiceMode === "sentence" && (
+                                    <CheckCircle
+                                      size={14}
+                                      className="text-white"
+                                      strokeWidth={4}
+                                    />
+                                  )}
+                                </div>
                               </div>
-                              <div className={`overflow-hidden transition-all duration-500 ${practiceMode === "sentence" ? "max-h-[300px] opacity-100" : "max-h-0 opacity-0"}`}>
-                                <textarea className="w-full bg-gray-50/50 border border-[#172554]/10 rounded-[1.5rem] p-5 text-[11px] font-semibold text-gray-700 outline-none focus:ring-4 focus:ring-[#172554]/5 shadow-inner min-h-[120px] italic" value={currentSentence} onChange={e => setCurrentSentence(e.target.value)} placeholder="e.g. Can you pass the water?" />
+                              <div
+                                className={`overflow-hidden transition-all duration-500 ${practiceMode === "sentence" ? "max-h-[300px] opacity-100" : "max-h-0 opacity-0"}`}
+                              >
+                                <textarea
+                                  className="w-full bg-gray-50/50 border border-[#172554]/10 rounded-[1.5rem] p-5 text-[11px] font-semibold text-gray-700 outline-none focus:ring-4 focus:ring-[#172554]/5 shadow-inner min-h-[120px] italic"
+                                  value={currentSentence}
+                                  onChange={(e) =>
+                                    setCurrentSentence(e.target.value)
+                                  }
+                                  placeholder="e.g. Can you pass the water?"
+                                />
                               </div>
                             </div>
 
                             {/* ACTIONS */}
                             <div className="flex gap-5 pt-8 border-t border-gray-100">
-                              <button onClick={() => handleManualSync(patient.id)} disabled={updatingId === patient.id} className="flex-1 bg-white border border-gray-200 text-[#012b1d] py-6 rounded-2xl font-extrabold text-[11px] uppercase tracking-[0.2em] shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-4">
-                                {updatingId === patient.id ? <Loader2 className="animate-spin w-5 h-5" /> : <Save size={18} />} Sync Edits
+                              <button
+                                onClick={() => handleManualSync(patient.id)}
+                                disabled={updatingId === patient.id}
+                                className="flex-1 bg-white border border-gray-200 text-[#012b1d] py-6 rounded-2xl font-extrabold text-[11px] uppercase tracking-[0.2em] shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-4"
+                              >
+                                {updatingId === patient.id ? (
+                                  <Loader2 className="animate-spin w-5 h-5" />
+                                ) : (
+                                  <Save size={18} />
+                                )}{" "}
+                                Sync Edits
                               </button>
                               {activeSessionId && (
-                                <button onClick={() => markSessionComplete(patient.id)} disabled={updatingId === patient.id} className="flex-1 bg-[#012b1d] text-white py-6 rounded-2xl font-extrabold text-[11px] uppercase tracking-[0.2em] shadow-2xl shadow-[#012b1d]/20 hover:brightness-125 transition-all flex items-center justify-center gap-3">
+                                <button
+                                  onClick={() =>
+                                    markSessionComplete(patient.id)
+                                  }
+                                  disabled={updatingId === patient.id}
+                                  className="flex-1 bg-[#012b1d] text-white py-6 rounded-2xl font-extrabold text-[11px] uppercase tracking-[0.2em] shadow-2xl shadow-[#012b1d]/20 hover:brightness-125 transition-all flex items-center justify-center gap-3"
+                                >
                                   <CheckCircle size={18} /> Mark Complete
                                 </button>
                               )}
@@ -488,10 +886,22 @@ const MyPatients = () => {
                         <div className="mt-16 pt-10 border-t border-gray-100 animate-in slide-in-from-bottom duration-700">
                           <div className="bg-[#172554]/5 p-10 rounded-[3rem] border border-[#172554]/10 flex flex-col md:flex-row justify-between items-center gap-8 shadow-inner">
                             <div>
-                              <h3 className="text-[11px] font-extrabold text-[#172554] uppercase tracking-[0.3em] flex items-center gap-3"><Download size={18} /> Clinical Data Export</h3>
-                              <p className="text-sm text-gray-500 font-semibold mt-3 italic max-w-lg leading-relaxed">Download a formatted clinical dataset for {patient.full_name} containing historical accuracy and metrics.</p>
+                              <h3 className="text-[11px] font-extrabold text-[#172554] uppercase tracking-[0.3em] flex items-center gap-3">
+                                <Download size={18} /> Clinical Data Export
+                              </h3>
+                              <p className="text-sm text-gray-500 font-semibold mt-3 italic max-w-lg leading-relaxed">
+                                Download a formatted clinical dataset for{" "}
+                                {patient.full_name} containing historical
+                                accuracy and metrics.
+                              </p>
                             </div>
-                            <button onClick={() => downloadCSV(patient)} disabled={sessionReports.length === 0} className="bg-white text-[#172554] px-12 py-5 rounded-2xl text-[11px] font-extrabold uppercase tracking-[0.2em] flex items-center justify-center gap-4 border border-[#172554]/20 shadow-xl transition-all disabled:opacity-40"><Download size={20} /> Download CSV</button>
+                            <button
+                              onClick={() => downloadCSV(patient)}
+                              disabled={sessionReports.length === 0}
+                              className="bg-white text-[#172554] px-12 py-5 rounded-2xl text-[11px] font-extrabold uppercase tracking-[0.2em] flex items-center justify-center gap-4 border border-[#172554]/20 shadow-xl transition-all disabled:opacity-40"
+                            >
+                              <Download size={20} /> Download CSV
+                            </button>
                           </div>
                         </div>
                       </td>

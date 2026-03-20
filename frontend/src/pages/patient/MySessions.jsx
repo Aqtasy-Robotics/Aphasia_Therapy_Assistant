@@ -11,6 +11,7 @@ import {
   Calendar,
   Activity,
   ArrowRight,
+  ShieldCheck,
 } from "lucide-react";
 
 const MySessions = () => {
@@ -132,9 +133,7 @@ const MySessions = () => {
 
   return (
     <div className="max-w-6xl mx-auto animate-in fade-in duration-700 pb-32 font-sans antialiased">
-      {/* ==========================================
-          THERAPIST VIEW: Deep Navy (#172554)
-      ========================================== */}
+      {/* THERAPIST VIEW */}
       {role === "therapist" ? (
         <div className="space-y-12">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
@@ -168,7 +167,9 @@ const MySessions = () => {
                       key={p.id}
                       className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm hover:shadow-xl hover:scale-[1.02] transition-all group"
                     >
-                      <p className="font-extrabold text-gray-800 text-sm">{p.full_name}</p>
+                      <p className="font-extrabold text-gray-800 text-sm">
+                        {p.full_name}
+                      </p>
                       <p className="text-[9px] uppercase tracking-widest text-gray-400 mt-1 mb-6">
                         {p.clinic_name || "Independent Case"}
                       </p>
@@ -229,17 +230,6 @@ const MySessions = () => {
                               {s.target_words?.length || 0} Targets Set
                             </p>
                           </div>
-
-                          {s.therapy_goal && (
-                            <div className="bg-gray-50 p-4 rounded-2xl mt-6">
-                              <p className="text-[10px] font-extrabold text-gray-400 uppercase tracking-widest mb-1">
-                                Clinical Goal
-                              </p>
-                              <p className="text-xs font-semibold text-gray-700 italic line-clamp-2">
-                                {s.therapy_goal}
-                              </p>
-                            </div>
-                          )}
                         </div>
                       </div>
                       <button
@@ -266,56 +256,56 @@ const MySessions = () => {
         </div>
       ) : (
         /* ==========================================
-            PATIENT VIEW: Forest Green (#064e3b)
+            PATIENT VIEW: Matched to Deep Navy (#172554)
         ========================================== */
-        <div className="space-y-12">
+        <div className="space-y-10">
           <header>
-            <h1 className="text-4xl font-extrabold text-gray-800 tracking-tight">
+            <h1 className="text-3xl font-extrabold text-gray-800 tracking-tight">
               My Sessions
             </h1>
-            <p className="text-gray-500 font-semibold mt-2 text-sm italic">
-              Your personalized robotic speech therapy schedule.
+            <p className="text-gray-400 font-semibold mt-1 text-sm italic">
+              Your speech therapy schedule.
             </p>
           </header>
 
           {sessions.length > 0 ? (
-            <div className="space-y-10">
-              <div className="bg-[#064e3b] rounded-[3.5rem] p-10 md:p-14 shadow-2xl shadow-[#064e3b]/20 text-white relative overflow-hidden group">
-                <div className="absolute -top-24 -right-24 w-80 h-80 bg-white/5 rounded-full blur-3xl group-hover:bg-white/10 transition-all"></div>
-                <div className="absolute -bottom-24 -left-12 w-64 h-64 bg-black/10 rounded-full blur-2xl"></div>
+            <div className="space-y-8">
+              {/* PRIMARY SESSION BLOCK: Smaller & Deep Navy (#172554) */}
+              <div className="bg-[#172554] rounded-[2.5rem] p-8 md:p-10 shadow-2xl shadow-[#172554]/20 text-white relative overflow-hidden group">
+                <div className="absolute -top-16 -right-16 w-64 h-64 bg-white/10 rounded-full blur-3xl group-hover:bg-white/20 transition-all"></div>
 
-                <div className="relative z-10 flex flex-col md:flex-row gap-10 items-start md:items-center justify-between">
-                  <div className="space-y-6 flex-1">
-                    <span className="bg-white/15 backdrop-blur-md px-5 py-2 rounded-full text-[10px] font-extrabold uppercase tracking-[0.3em] inline-flex items-center gap-3">
-                      <div className="w-2.5 h-2.5 rounded-full bg-white animate-pulse"></div>
+                <div className="relative z-10 flex flex-col md:flex-row gap-8 items-start md:items-center justify-between">
+                  <div className="space-y-4 flex-1">
+                    <span className="bg-white/20 backdrop-blur-md px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-[0.2em] inline-flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-white animate-pulse"></div>
                       Up Next
                     </span>
-                    <h2 className="text-5xl md:text-6xl font-extrabold tracking-tighter leading-none">
-                      {sessions[0].bot_name} <br /> Therapy
+                    <h2 className="text-4xl md:text-5xl font-extrabold tracking-tighter leading-tight">
+                      {sessions[0].bot_name} Therapy
                     </h2>
-                    <div className="flex flex-wrap items-center gap-4 pt-4">
-                      <p className="flex items-center gap-3 text-xs font-extrabold bg-black/20 px-6 py-3 rounded-2xl border border-white/10">
-                        <Calendar size={18} /> {sessions[0].session_date}
+                    <div className="flex flex-wrap items-center gap-3 pt-2">
+                      <p className="flex items-center gap-2 text-[11px] font-bold bg-white/10 px-4 py-2 rounded-xl border border-white/10">
+                        <Calendar size={14} /> {sessions[0].session_date}
                       </p>
-                      <p className="flex items-center gap-3 text-xs font-extrabold bg-black/20 px-6 py-3 rounded-2xl border border-white/10">
-                        <Clock size={18} /> {sessions[0].session_time}
+                      <p className="flex items-center gap-2 text-[11px] font-bold bg-white/10 px-4 py-2 rounded-xl border border-white/10">
+                        <Clock size={14} /> {sessions[0].session_time}
                       </p>
                     </div>
                   </div>
 
-                  <div className="w-full md:w-auto flex flex-col gap-6 items-start md:items-end">
-                    <div className="bg-white/10 backdrop-blur-xl border border-white/20 p-8 rounded-[2.5rem]">
-                      <p className="text-[11px] font-extrabold uppercase tracking-[0.2em] text-white flex items-center gap-3 justify-center md:justify-end">
-                        <MessageSquare size={18} /> Ready to practice
+                  <div className="w-full md:w-auto flex flex-col gap-4 items-start md:items-end">
+                    <div className="bg-black/10 backdrop-blur-md border border-white/10 p-5 rounded-[2rem] w-full md:w-64">
+                      <p className="text-[10px] font-black uppercase tracking-[0.1em] text-white flex items-center gap-2">
+                        <MessageSquare size={14} /> Practice Mode
                       </p>
-                      <p className="text-xs font-medium text-white/70 mt-3 italic">
-                        Open the bot to begin today's targets.
+                      <p className="text-[11px] font-medium text-white/80 mt-2 italic">
+                        Ready to begin today's targets.
                       </p>
                     </div>
 
                     <button
                       onClick={() => handleCancel(sessions[0].id)}
-                      className="text-white/40 hover:text-white text-[10px] font-extrabold uppercase tracking-[0.3em] transition-colors flex items-center gap-2 pt-2 ml-4 md:ml-0"
+                      className="text-white/50 hover:text-white text-[9px] font-bold uppercase tracking-widest transition-colors flex items-center gap-2 pt-1"
                     >
                       <Trash2 size={12} /> Cancel Appointment
                     </button>
@@ -323,35 +313,36 @@ const MySessions = () => {
                 </div>
               </div>
 
+              {/* UPCOMING SESSIONS LIST */}
               {sessions.length > 1 && (
-                <div className="space-y-6">
-                  <h3 className="text-[10px] font-extrabold text-gray-400 uppercase tracking-[0.3em] mb-6 ml-4">
+                <div className="space-y-5">
+                  <h3 className="text-[10px] font-extrabold text-gray-400 uppercase tracking-[0.2em] ml-2">
                     Later This Week
                   </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {sessions.slice(1).map((s) => (
                       <div
                         key={s.id}
-                        className="p-8 bg-white border border-gray-50 rounded-[2.5rem] flex items-center justify-between shadow-2xl shadow-gray-200/30 hover:shadow-gray-200/40 transition-all group"
+                        className="p-6 bg-white border border-gray-100 rounded-[2rem] flex items-center justify-between shadow-xl shadow-gray-200/20 hover:shadow-gray-200/40 transition-all group"
                       >
-                        <div className="flex items-center gap-6">
-                          <div className="w-14 h-14 bg-[#064e3b]/5 text-[#064e3b] rounded-2xl flex items-center justify-center shadow-inner border border-[#064e3b]/10">
-                            <Calendar size={24} />
+                        <div className="flex items-center gap-4">
+                          <div className="w-12 h-12 bg-[#172554]/5 text-[#172554] rounded-xl flex items-center justify-center border border-[#172554]/10">
+                            <Calendar size={20} />
                           </div>
                           <div>
-                            <p className="font-extrabold text-gray-800 text-lg tracking-tight">
+                            <p className="font-extrabold text-gray-800 text-base tracking-tight">
                               {s.bot_name} Therapy
                             </p>
-                            <p className="text-[11px] font-bold text-gray-400 mt-1 uppercase tracking-widest">
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
                               {s.session_date} • {s.session_time}
                             </p>
                           </div>
                         </div>
                         <button
                           onClick={() => handleCancel(s.id)}
-                          className="w-10 h-10 rounded-full bg-gray-50 text-gray-300 flex items-center justify-center hover:bg-red-50 hover:text-red-500 transition-all"
+                          className="w-8 h-8 rounded-full bg-gray-50 text-gray-300 flex items-center justify-center hover:bg-red-50 hover:text-red-500 transition-all"
                         >
-                          <Trash2 size={16} />
+                          <Trash2 size={14} />
                         </button>
                       </div>
                     ))}
@@ -360,16 +351,15 @@ const MySessions = () => {
               )}
             </div>
           ) : (
-            <div className="py-40 bg-white border border-gray-50 rounded-[3.5rem] flex flex-col items-center justify-center text-center shadow-2xl shadow-gray-200/20 px-8">
-              <div className="w-24 h-24 bg-gray-50 rounded-[2.5rem] flex items-center justify-center mb-8 text-gray-200 shadow-inner">
-                <AlertCircle size={48} />
+            <div className="py-32 bg-white border border-gray-100 rounded-[3rem] flex flex-col items-center justify-center text-center shadow-xl shadow-gray-200/20 px-8">
+              <div className="w-20 h-20 bg-gray-50 rounded-3xl flex items-center justify-center mb-6 text-gray-200 shadow-inner">
+                <AlertCircle size={40} />
               </div>
-              <h3 className="text-gray-800 font-extrabold text-3xl tracking-tight mb-4">
+              <h3 className="text-gray-800 font-extrabold text-2xl tracking-tight mb-3">
                 No Sessions Scheduled
               </h3>
-              <p className="text-gray-400 font-semibold max-w-sm text-sm leading-relaxed italic">
-                Your therapist hasn't prepared a target list for you yet. Please
-                check back later.
+              <p className="text-gray-400 font-semibold max-w-xs text-xs italic">
+                Your therapist hasn't prepared your session yet.
               </p>
             </div>
           )}
