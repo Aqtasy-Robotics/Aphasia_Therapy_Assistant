@@ -10,8 +10,6 @@ import {
   ChevronUp,
   X,
   UserCog,
-  BrainCircuit,
-  Settings2,
   CheckCircle,
   Calendar,
   Clock,
@@ -85,11 +83,12 @@ const MyPatients = () => {
     try {
       setUpdatingId(patientId);
       const valueToSet = newTherapistId === "" ? null : newTherapistId;
-      const { data, error } = await supabase
+      
+      // FIXED: Removed unused 'data' declaration
+      const { error } = await supabase
         .from("profiles")
         .update({ selected_therapist_id: valueToSet })
-        .eq("id", patientId)
-        .select();
+        .eq("id", patientId);
 
       if (error) throw error;
       setPatients((prev) =>
@@ -213,6 +212,7 @@ const MyPatients = () => {
         status: "upcoming",
       };
       if (activeSessionId) {
+        // FIXED: Removed unused 'data' declaration
         const { error } = await supabase
           .from("sessions")
           .update(sessionPayload)
@@ -263,6 +263,7 @@ const MyPatients = () => {
           .select()
           .single();
         if (insertError) throw insertError;
+        
         await supabase.from("sessions").delete().eq("id", activeSessionId);
         setSessionReports([newReport, ...sessionReports]);
         setActiveSessionId(null);
@@ -280,14 +281,12 @@ const MyPatients = () => {
     }
   };
 
-  // --- UPDATED CSV GENERATOR (1 ROW PER SESSION, | DELIMITED) ---
   const downloadCSV = (patient) => {
     if (sessionReports.length === 0) {
       alert("No reports available to download for this patient.");
       return;
     }
 
-    // Lookup the assigned therapist's name
     const assignedTherapist = therapists.find(
       (t) => t.id === patient.selected_therapist_id,
     );
@@ -310,7 +309,6 @@ const MyPatients = () => {
     const csvRows = [];
 
     sessionReports.forEach((report) => {
-      // Helper to safely parse arrays from Supabase
       const parseArray = (arr) => {
         if (!arr) return [];
         if (Array.isArray(arr)) return arr;
@@ -326,14 +324,11 @@ const MyPatients = () => {
         return [String(arr)];
       };
 
-      // Helper to replace newlines with a pipe " | "
       const formatText = (text) => (text || "").replace(/\n/g, " | ");
 
-      // Extract and format data
       const targetWordsArr = parseArray(report.target_word);
       const targetSentence = report.target_sentence || "";
 
-      // Use Sentence if it exists, otherwise join Words with |
       const targetPractice =
         targetSentence.trim().length > 0
           ? targetSentence
@@ -358,7 +353,6 @@ const MyPatients = () => {
         attemptedPhons,
       ];
 
-      // Wrap in double quotes to prevent internal commas from breaking the CSV layout
       csvRows.push(
         rowData
           .map((value) => `"${String(value).replace(/"/g, '""')}"`)
@@ -464,7 +458,6 @@ const MyPatients = () => {
 
   return (
     <div className="animate-in fade-in duration-700 font-sans antialiased pb-20">
-      {/* OPEN HEADER SECTION */}
       <header className="mb-12 flex justify-between items-end">
         <div>
           <h1 className="text-4xl font-extrabold text-[#012b1d] tracking-tight">
@@ -479,7 +472,6 @@ const MyPatients = () => {
         </div>
       </header>
 
-      {/* SEARCH INTERFACE */}
       <div className="relative group max-w-xl mb-12">
         <div className="absolute inset-y-0 left-0 pl-6 flex items-center pointer-events-none text-gray-300">
           <Search size={20} />
@@ -577,7 +569,6 @@ const MyPatients = () => {
                     <tr className="bg-[#064e3b]/[0.02]">
                       <td colSpan="4" className="px-16 py-12">
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 animate-in slide-in-from-top duration-500">
-                          {/* LEFT COLUMN */}
                           <div className="space-y-10">
                             <div className="grid grid-cols-2 gap-6">
                               <div className="space-y-3 relative">
@@ -744,13 +735,11 @@ const MyPatients = () => {
                             </div>
                           </div>
 
-                          {/* RIGHT COLUMN: MODERN CHOICE CARDS */}
                           <div className="flex flex-col h-full space-y-4">
                             <label className="text-[10px] font-extrabold text-gray-400 uppercase tracking-[0.3em] ml-6 mb-2">
                               Practice Target (Choose One)
                             </label>
 
-                            {/* WORDS MODE */}
                             <div
                               onClick={() => handleModeChange("words")}
                               className={`relative p-8 rounded-[2.5rem] border-2 cursor-pointer transition-all duration-300 ${practiceMode === "words" ? "border-[#012b1d] bg-white shadow-2xl shadow-[#012b1d]/5 ring-4 ring-[#012b1d]/5" : "border-gray-50 bg-gray-50/50 hover:bg-white hover:border-gray-200"}`}
@@ -809,7 +798,6 @@ const MyPatients = () => {
                               </div>
                             </div>
 
-                            {/* SENTENCE MODE */}
                             <div
                               onClick={() => handleModeChange("sentence")}
                               className={`relative p-8 rounded-[2.5rem] border-2 cursor-pointer transition-all duration-300 ${practiceMode === "sentence" ? "border-[#172554] bg-white shadow-2xl shadow-[#172554]/5 ring-4 ring-[#172554]/5" : "border-gray-50 bg-gray-50/50 hover:bg-white hover:border-gray-200"}`}
@@ -853,7 +841,6 @@ const MyPatients = () => {
                               </div>
                             </div>
 
-                            {/* ACTIONS */}
                             <div className="flex gap-5 pt-8 border-t border-gray-100">
                               <button
                                 onClick={() => handleManualSync(patient.id)}
@@ -882,7 +869,6 @@ const MyPatients = () => {
                           </div>
                         </div>
 
-                        {/* DATA EXPORT FOOTER */}
                         <div className="mt-16 pt-10 border-t border-gray-100 animate-in slide-in-from-bottom duration-700">
                           <div className="bg-[#172554]/5 p-10 rounded-[3rem] border border-[#172554]/10 flex flex-col md:flex-row justify-between items-center gap-8 shadow-inner">
                             <div>
