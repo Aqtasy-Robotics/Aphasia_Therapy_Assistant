@@ -8,8 +8,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 # Import and run
-from ui.body_app import SpeechTherapyApp
+from ui.body_app import SpeechTherapyApp, load_display_config
 
 if __name__ == "__main__":
-    app = SpeechTherapyApp()
+    display = load_display_config(Path(__file__).parent)
+    app = SpeechTherapyApp(
+        display_width=display["width"],
+        display_height=display["height"],
+        fullscreen=False,
+    )
     app.run()

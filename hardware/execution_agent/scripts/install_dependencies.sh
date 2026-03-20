@@ -84,7 +84,6 @@ fi
 
 echo "Piper TTS model downloaded successfully."
 
-
 # Optionally set up the Python environment as the invoking user (default: pi).
 TARGET_USER="${SUDO_USER:-pi}"
 
@@ -96,4 +95,3 @@ else
 fi
 
 echo "Done. Reboot is recommended after first install so kernel modules and I2C/GPIO are ready."
-

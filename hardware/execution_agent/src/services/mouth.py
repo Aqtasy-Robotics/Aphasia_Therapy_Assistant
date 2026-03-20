@@ -1,4 +1,5 @@
 """Mouth driver — Piper TTS + speaker output.
+
 This module implements text-to-speech synthesis using Piper TTS (ONNX) and
 plays audio through the configured output device using sounddevice.
 """
@@ -8,6 +9,7 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 from typing import Any, Dict, Optional
+
 import numpy as np
 from loguru import logger
 
@@ -128,6 +130,7 @@ def _synthesize_speech(text: str, voice: Any) -> np.ndarray:
         logger.error("Failed to synthesize speech: {}", exc)
         raise RuntimeError(f"Speech synthesis failed: {exc}") from exc
 
+
 def _play_audio(audio_array: np.ndarray, volume: float, sample_rate: int, device: int) -> None:
     """
     Play audio array through sounddevice with volume control.
@@ -166,9 +169,10 @@ async def speak(payload: Dict[str, Any], settings: Any | None = None) -> Dict[st
     Expected payload (from backend command):
         {
             "text": "Hello, let's practice",
-            "voice": "en_US-lessac-medium",   # optional (currently ingonored, uses configured model)
+            "voice": "en_US-lessac-medium",   # optional (currently ignored, uses configured model)
             "volume": 0.8                     # optional override
         }
+
     Args:
         payload: Command payload with text, optional voice, and optional volume.
         settings: Settings instance for model path and audio config.
@@ -205,6 +209,7 @@ async def speak(payload: Dict[str, Any], settings: Any | None = None) -> Dict[st
 
     # Clamp volume to valid range
     volume = max(0.0, min(1.0, volume))
+
     logger.info("[MOUTH] speak: text={!r}, voice={}, volume={}", text, voice, volume)
 
     # Hardware mocking fallback
@@ -261,5 +266,5 @@ async def speak(payload: Dict[str, Any], settings: Any | None = None) -> Dict[st
             "error_message": str(exc),
         }
 
-__all__ = ["speak"]
 
+__all__ = ["speak"]

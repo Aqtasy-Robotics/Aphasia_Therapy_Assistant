@@ -8,11 +8,12 @@ import logging
 
 import httpx
 
-
 from src.communication.models import CommandAck, ExecutionCommand
 from src.settings import Settings
 
+
 logger = logging.getLogger(__name__)
+
 
 class ApiClient:
     """HTTP client responsible for polling commands and sending results/audio."""
@@ -222,13 +223,3 @@ class ApiClient:
 
 
 __all__ = ["ApiClient"]
-
-
-
-
-
-
-
-
-
-

@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Any, Awaitable, Callable, Dict
 
 from loguru import logger
+
 from src.communication.api_client import ApiClient
 from src.communication.models import ActionEnum, CommandAck, ExecutionCommand, StatusEnum
 from src.settings import Settings
@@ -70,7 +71,7 @@ class Dispatcher:
                 # speak() needs settings for model path and audio config
                 result = await driver(payload, self._settings)
             else:
-                # Other drivers just get payload            
+                # Other drivers just get payload
                 result = await driver(payload)
 
             # Check if driver returned an error status

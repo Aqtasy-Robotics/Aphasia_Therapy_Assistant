@@ -14,6 +14,22 @@ except Exception:  # noqa: BLE001
     AngularServo = None
     GPIOZERO_AVAILABLE = False
 
+try:
+    from gpiozero.pins.pigpio import PiGPIOFactory
+
+    PIGPIO_AVAILABLE = True
+except Exception:  # noqa: BLE001
+    PiGPIOFactory = None
+    PIGPIO_AVAILABLE = False
+
+try:
+    from gpiozero.pins.lgpio import LGPIOFactory
+
+    LGPio_AVAILABLE = True
+except Exception:  # noqa: BLE001
+    LGPIOFactory = None
+    LGPio_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 PAN_MIN = -90.0
@@ -57,19 +73,31 @@ def _ensure_servo(settings: Any) -> AngularServo:
         return _servo
 
     gpio = settings.gpio
+    if PIGPIO_AVAILABLE:
+        pin_factory = PiGPIOFactory()
+    elif LGPio_AVAILABLE:
+        pin_factory = LGPIOFactory()
+    else:
+        pin_factory = None
     _servo = AngularServo(
         gpio.servo_pan_pin,
         min_pulse_width=gpio.servo_min_pulse_width,
         max_pulse_width=gpio.servo_max_pulse_width,
         min_angle=PAN_MIN,
         max_angle=PAN_MAX,
+        pin_factory=pin_factory,
     )
     _servo_settings_ref = settings
     return _servo
 
 
 async def _set_servo_angle(servo: AngularServo, angle: float) -> None:
-    await asyncio.to_thread(setattr, servo, "angle", angle)
+    # Clamp before setting to avoid OutputDeviceBadValue due to float step
+    # accumulation during interpolation.
+    min_angle = float(getattr(servo, "min_angle", PAN_MIN))
+    max_angle = float(getattr(servo, "max_angle", PAN_MAX))
+    safe_angle = max(min_angle, min(max_angle, float(angle)))
+    await asyncio.to_thread(setattr, servo, "angle", safe_angle)
 
 
 async def _release_servo(servo: AngularServo) -> None:

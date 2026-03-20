@@ -1,4 +1,5 @@
 """Ear driver — microphone recording.
+
 This module implements audio recording from the microphone using sounddevice,
 converts the audio to WAV format, and uploads it via ApiClient.
 """
@@ -12,6 +13,7 @@ from typing import Any, Dict, Optional
 import numpy as np
 from loguru import logger
 from scipy.io import wavfile
+
 from src.communication.api_client import ApiClient
 from src.services.audio_utils import SOUNDDEVICE_AVAILABLE, select_input_device
 
@@ -95,13 +97,14 @@ def _numpy_to_wav_bytes(audio_array: np.ndarray, sample_rate: int) -> bytes:
         wavfile.write(buffer, sample_rate, audio_int16)
         wav_bytes = buffer.getvalue()
         buffer.close()
-        
+
         logger.debug("Converted audio to WAV: {} bytes, {} samples", len(wav_bytes), len(audio_int16))
         return wav_bytes
     except Exception as exc:
         logger.error("Failed to convert audio to WAV: {}", exc)
         raise RuntimeError(f"WAV conversion failed: {exc}") from exc
-    
+
+
 async def listen(
     payload: Dict[str, Any],
     api_client: ApiClient | None = None,
@@ -123,12 +126,10 @@ async def listen(
     Returns:
         Result dict with status, duration, and upload success.
     """
-
     global _input_device, _settings
 
     duration_s = payload.get("duration_s", 5)
     prompt = payload.get("prompt")
-
 
     logger.info("[EAR] listen: duration_s={}, prompt={!r}", duration_s, prompt)
 
@@ -235,4 +236,3 @@ async def listen(
 
 
 __all__ = ["listen"]
-
