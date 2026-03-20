@@ -33,11 +33,10 @@ const AuthPage = ({ type }) => {
       ? "focus:ring-[#064e3b]/20"
       : "focus:ring-[#172554]/20";
 
-  // 1. CATCH MESSAGES FROM REDIRECTS (e.g., from successful signup)
+  // 1. CATCH MESSAGES FROM REDIRECTS (e.g., password reset success)
   useEffect(() => {
     if (location.state?.message) {
       setMessage(location.state.message);
-      // Clear the route state so the message disappears if they refresh the page
       navigate(location.pathname, { replace: true, state: {} });
     }
   }, [location, navigate]);
@@ -58,7 +57,7 @@ const AuthPage = ({ type }) => {
     };
   }, []);
 
-  // 3. STANDARD LOGIN / SIGNUP
+  // 3. STANDARD LOGIN / SIGNUP (Auto-login restored)
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
@@ -72,13 +71,6 @@ const AuthPage = ({ type }) => {
           await supabase.auth.signInWithPassword({ email, password });
 
         if (loginError) {
-          // Check if the error is specifically because the email isn't verified
-          if (loginError.message.includes("Email not confirmed")) {
-            throw new Error(
-              "Please verify your email address before signing in. Check your inbox!",
-            );
-          }
-          // Otherwise, it's a standard wrong password/email error
           throw new Error("Incorrect email or password. Please try again.");
         }
 
@@ -89,7 +81,7 @@ const AuthPage = ({ type }) => {
             : "/patient-dashboard",
         );
       } else {
-        // --- SIGNUP FLOW ---
+        // --- SIGNUP FLOW (No Email Confirmation Required) ---
         const { data, error: signUpError } = await supabase.auth.signUp({
           email,
           password,
@@ -97,7 +89,6 @@ const AuthPage = ({ type }) => {
             data: {
               full_name: fullName,
               role: role,
-              // Pass these directly into metadata so they save even before email is verified
               title: role === "therapist" ? title : null,
               clinic_name: role === "therapist" ? clinicName : null,
             },
@@ -114,16 +105,10 @@ const AuthPage = ({ type }) => {
             .eq("id", data.user.id);
         }
 
-        // FORCE A LOGOUT: This guarantees they don't bypass the email confirmation check
-        await supabase.auth.signOut();
-
-        // Redirect to the login view and pass the success message
-        navigate("/login", {
-          state: {
-            message:
-              "Registration successful! Please check your email inbox to verify your account before signing in for the first time.",
-          },
-        });
+        // Instantly route them to their dashboard
+        navigate(
+          role === "therapist" ? "/therapist-dashboard" : "/patient-dashboard",
+        );
       }
     } catch (err) {
       setError(err.message);
