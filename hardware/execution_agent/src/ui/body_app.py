@@ -7,15 +7,22 @@ from pathlib import Path
 from queue import Empty, Queue
 from threading import Thread
 from typing import Any, Dict, List
+import importlib
 import logging
 import os
+import sys
 import time
 
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.lang import Builder
 from kivy.properties import NumericProperty, StringProperty
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.button import Button
+from kivy.uix.label import Label
+from kivy.uix.popup import Popup
 from kivy.uix.screenmanager import Screen
+from kivy.uix.textinput import TextInput
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +95,8 @@ class UiState:
     words: List[str] = field(default_factory=lambda: list(DEFAULT_WORDS_BY_CATEGORY["all"]))
     current_index: int = 0
     category: str = "all"
+    patient_name: str = ""
+    session_busy: bool = False
 
 
 class BaseUiScreen(Screen):
@@ -138,6 +147,7 @@ class SpeechTherapyApp(App):
         self.fullscreen_mode = fullscreen
         self.state = UiState()
         self._last_feedback_ts = 0.0
+        self._graph_module = None
 
     def build(self):
         kv_path = Path(__file__).with_name("body_app.kv")
@@ -304,7 +314,129 @@ ScreenManager:
         self.emit_touch_event("next")
 
     def on_speak_tap(self) -> None:
-        self.emit_touch_event("speak_tap", word=self.state.word)
+        if self.state.session_busy:
+            return
+        if not self.state.patient_name:
+            self._open_patient_name_popup()
+            return
+        self._start_session_worker(self.state.patient_name)
+
+    def _open_patient_name_popup(self) -> None:
+        box = BoxLayout(orientation="vertical", spacing=10, padding=12)
+        label = Label(
+            text="Enter patient full name",
+            size_hint_y=None,
+            height=34,
+        )
+        input_name = TextInput(
+            multiline=False,
+            hint_text="Patient name from Supabase profiles.full_name",
+            size_hint_y=None,
+            height=42,
+        )
+        feedback = Label(text="", color=(0.9, 0.2, 0.2, 1), size_hint_y=None, height=24)
+        actions = BoxLayout(size_hint_y=None, height=42, spacing=8)
+        popup = Popup(
+            title="Start Therapy Session",
+            content=box,
+            size_hint=(None, None),
+            size=(520, 250),
+            auto_dismiss=False,
+        )
+
+        def _cancel(_btn: Button) -> None:
+            popup.dismiss()
+
+        def _confirm(_btn: Button) -> None:
+            name = (input_name.text or "").strip()
+            if not name:
+                feedback.text = "Patient name is required."
+                return
+            self.state.patient_name = name
+            popup.dismiss()
+            self._start_session_worker(name)
+
+        cancel_btn = Button(text="Cancel")
+        confirm_btn = Button(text="Start")
+        cancel_btn.bind(on_release=_cancel)
+        confirm_btn.bind(on_release=_confirm)
+        actions.add_widget(cancel_btn)
+        actions.add_widget(confirm_btn)
+
+        box.add_widget(label)
+        box.add_widget(input_name)
+        box.add_widget(feedback)
+        box.add_widget(actions)
+        popup.open()
+
+    def _start_session_worker(self, patient_name: str) -> None:
+        if self.state.session_busy:
+            return
+        self.state.session_busy = True
+        self.state.mic_hint = "Running perception and analysis..."
+        self._apply_state()
+        self.emit_touch_event("speak_tap", word=self.state.word, patient_name=patient_name)
+
+        def _runner() -> None:
+            try:
+                module = self._load_graph_module()
+                final_state = module.run_session_for_patient(patient_name=patient_name)
+                self._on_session_success(final_state)
+            except Exception as exc:  # noqa: BLE001
+                self._on_session_error(str(exc))
+            finally:
+                self.state.session_busy = False
+
+        Thread(target=_runner, name="ui-graph-session", daemon=True).start()
+
+    def _load_graph_module(self):
+        if self._graph_module is not None:
+            return self._graph_module
+        repo_root = Path(__file__).resolve().parents[3]
+        agentic_dir = repo_root / "agentic"
+        if str(agentic_dir) not in sys.path:
+            sys.path.insert(0, str(agentic_dir))
+        self._graph_module = importlib.import_module("graph")
+        return self._graph_module
+
+    def _on_session_success(self, final_state: Dict[str, Any]) -> None:
+        def _apply(_dt: float) -> None:
+            words = final_state.get("target_words") or self.state.words
+            idx = int(final_state.get("current_target_index", 0) or 0)
+            feedback = final_state.get("feedback") or {}
+            feedback_text = str(feedback.get("feedback_text") or "Session completed.")
+            self._apply_payload(
+                {
+                    "screen": "feedback",
+                    "words": words,
+                    "current_index": idx,
+                    "category": self.state.category,
+                    "message": feedback_text,
+                    "feedback": "correct",
+                }
+            )
+            self.state.mic_hint = "Click to speak"
+            self.state.session_busy = False
+            self.emit_touch_event(
+                "session_complete",
+                session_outcome=final_state.get("session_outcome"),
+                report_id=final_state.get("report_id"),
+            )
+        Clock.schedule_once(_apply, 0)
+
+    def _on_session_error(self, error_message: str) -> None:
+        def _apply(_dt: float) -> None:
+            self._apply_payload(
+                {
+                    "screen": "feedback",
+                    "message": f"Session failed: {error_message}",
+                    "feedback": "incorrect",
+                }
+            )
+            self.state.mic_hint = "Click to speak"
+            self.state.session_busy = False
+            self.emit_touch_event("session_error", error=error_message)
+        Clock.schedule_once(_apply, 0)
 
     def on_open_settings(self) -> None:
         self.state.screen = "settings"

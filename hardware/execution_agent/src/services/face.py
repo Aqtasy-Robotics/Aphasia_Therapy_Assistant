@@ -13,13 +13,17 @@ from PIL import Image, ImageDraw
 
 try:
     from luma.core.interface.serial import i2c
+    from luma.core.interface.serial import spi
     from luma.oled.device import ssd1351
+    import luma.oled.device as oled_device_mod
 
     OLED_AVAILABLE = True
 except Exception:  # noqa: BLE001
     OLED_AVAILABLE = False
     i2c = None
+    spi = None
     ssd1351 = None
+    oled_device_mod = None
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +39,7 @@ EXPRESSION_PROFILE = {
 _oled_device: Any | None = None
 _oled_settings_ref: Any | None = None
 _render_lock = asyncio.Lock()
+_standalone_task: asyncio.Task | None = None
 
 
 def _clamp(value: float, lower: float, upper: float) -> float:
@@ -69,13 +74,35 @@ def _init_oled(settings: Any) -> Any:
         return _oled_device
 
     oled = settings.oled
-    serial = i2c(port=oled.i2c_port, address=int(str(oled.i2c_address), 16))
-    _oled_device = ssd1351(
-        serial_interface=serial,
-        width=oled.width,
-        height=oled.height,
-        rotate=oled.rotate,
-    )
+    if oled.interface == "spi":
+        serial = spi(
+            port=oled.spi_port,
+            device=oled.spi_device,
+            gpio_DC=oled.spi_gpio_dc,
+            gpio_RST=oled.spi_gpio_rst,
+            bus_speed_hz=oled.spi_bus_speed_hz,
+        )
+    else:
+        serial = i2c(port=oled.i2c_port, address=int(str(oled.i2c_address), 16))
+
+    driver = str(oled.oled_driver).lower()
+    if driver == "ssd1351":
+        _oled_device = ssd1351(
+            serial_interface=serial,
+            width=oled.width,
+            height=oled.height,
+            rotate=oled.rotate,
+        )
+    else:
+        driver_cls = getattr(oled_device_mod, driver, None)
+        if driver_cls is None:
+            raise RuntimeError(f"Unsupported oled_driver={driver!r}")
+        _oled_device = driver_cls(
+            serial_interface=serial,
+            width=oled.width,
+            height=oled.height,
+            rotate=oled.rotate,
+        )
     _oled_settings_ref = settings
     return _oled_device
 
@@ -221,5 +248,76 @@ async def show_face(payload: Dict[str, Any], settings: Any | None = None) -> Dic
         }
 
 
-__all__ = ["show_face", "shutdown_face"]
+async def _standalone_math_eyes_loop(settings: Any) -> None:
+    expression = str(settings.oled.default_expression or "neutral").lower()
+    frame_delay = float(settings.oled.frame_delay_seconds)
+
+    async with _render_lock:
+        device = _init_oled(settings)
+        frame_w = int(device.width)
+        frame_h = int(device.height)
+
+    start = time.monotonic()
+    next_blink_at = start + random.uniform(0.8, 1.6)
+    expressions = list(EXPRESSION_PROFILE.keys())
+
+    while True:
+        now = time.monotonic()
+        elapsed = now - start
+
+        # Slow expression auto-cycle to keep the face alive without backend input.
+        expression = expressions[int(elapsed // 6) % len(expressions)]
+        gaze_x = math.sin(elapsed * 0.60) * 0.55
+        gaze_y = math.cos(elapsed * 0.37) * 0.35
+
+        blink_factor = 0.0
+        if next_blink_at <= now <= (next_blink_at + 0.12):
+            progress = (now - next_blink_at) / 0.12
+            blink_factor = 1.0 - abs((progress * 2.0) - 1.0)
+        elif now > (next_blink_at + 0.12):
+            next_blink_at = now + random.uniform(1.1, 2.8)
+
+        image = _draw_frame(
+            frame_w,
+            frame_h,
+            expression,
+            gaze_x,
+            gaze_y,
+            blink_factor,
+            elapsed * 3.0,
+        )
+        await asyncio.to_thread(device.display, image)
+        await asyncio.sleep(frame_delay)
+
+
+def maybe_start_standalone_face(settings: Any) -> None:
+    """Start local math-based face animator when configured."""
+    global _standalone_task
+    if not OLED_AVAILABLE or not bool(settings.oled.standalone_math_eyes):
+        return
+    if _standalone_task is not None and not _standalone_task.done():
+        return
+    _standalone_task = asyncio.create_task(_standalone_math_eyes_loop(settings))
+    logger.info("Started standalone math-eyes OLED animator")
+
+
+async def stop_standalone_face() -> None:
+    global _standalone_task
+    if _standalone_task is None:
+        return
+    _standalone_task.cancel()
+    try:
+        await _standalone_task
+    except asyncio.CancelledError:
+        pass
+    finally:
+        _standalone_task = None
+
+
+__all__ = [
+    "show_face",
+    "shutdown_face",
+    "maybe_start_standalone_face",
+    "stop_standalone_face",
+]
 
