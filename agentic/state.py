@@ -18,17 +18,20 @@ class SpeechTherapyState(TypedDict):
     transcript:         Optional[str]        # whisper output
     confidence_score:   Optional[float]      # avg_logprob from whisper
     retry_count:        int                  # how many re-record attempts
-    perception_failure_reason: Optional[str]  # 'silence' | 'noise' | 'non_english' (used to guide re-record prompts)
     transcript_attempts: Optional[List[Dict[str, Any]]]  # all perception attempts across session (for audit/debug)
 
     # ── Session meta (collected once at start) ──────────────────
+    session_type:       Optional[str]        # 'word_level' | 'sentence_level'
     target_word:        Optional[str]        # word patient should say
     target_words:       Optional[List[str]]  # ordered target words loaded from sessions.target_words
-    current_target_index: int                # current index in target_words
-    has_more_target_words: bool              # True when there is another word after current one
+    target_sentence:    Optional[str]        # sentence patient should say (sentence_level mode)
+    target_items:       Optional[List[str]]  # unified ordered targets for active mode (target_words or [target_sentence])
+    current_target_index: int                # current index in target_items
+    has_more_target_words: bool              # legacy flag: True when there is another target item
     patient_name:       str                  # for personalised feedback
     therapy_goals:      Optional[List[str]]  # therapist-defined goals from portal/session config
     phonemes_to_focus_on: Optional[List[str]]  # prioritized phonemes to emphasize in guidance
+    phonemes_to_focus: Optional[List[str]]  # legacy alias accepted from older payloads
     difficulty_level:   Optional[str]        # expected difficulty: easy | medium | hard
 
     # ── Phoneme Analysis ────────────────────────────────────────
@@ -59,6 +62,7 @@ class SpeechTherapyState(TypedDict):
 
     # ── Control / error propagation ─────────────────────────────
     current_error:      Annotated[Optional[str], _merge_current_error]  # merge helper prefers newer non-empty error messages
+    failure_reason:     Optional[str]                             # silence | noise | non_english | error from recent perception failures
 
     # ── History / progress ──────────────────────────────────────
     session_history:    Optional[List[Dict[str, Any]]]            # list of past session summaries for this patient
