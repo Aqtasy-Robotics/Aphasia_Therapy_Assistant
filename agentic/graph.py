@@ -12,7 +12,7 @@ High-level pipeline flow:
 """
 
 from __future__ import annotations  # enable postponed evaluation of type annotations
-from asyncio import graph  # imported but unused; kept to mirror original file structure
+#from asyncio import graph  # imported but unused; kept to mirror original file structure
 import time  # used to timestamp session start and compute duration
 
 from langgraph.graph import StateGraph, END  # core LangGraph primitives for building the state machine
@@ -20,7 +20,7 @@ from langgraph.graph import StateGraph, END  # core LangGraph primitives for bui
 from state import SpeechTherapyState  # shared TypedDict that defines the graph's state
 from db.supabase_store import (
     fetch_patient_id_by_name,
-    fetch_latest_session_config,
+    fetch_target_words_for_patient,
     fetch_personalization_config,
     persist_session_state,
 )  # helpers to resolve patient identity and target words from Supabase
@@ -120,6 +120,117 @@ def build_graph():
     return graph.compile()  # return a compiled, ready-to-run LangGraph application
 
 
+def _build_initial_state(
+    *,
+    patient_name: str,
+    patient_id: str,
+    assignment_id: str | None,
+    personalization: dict,
+    target_words: list[str],
+) -> SpeechTherapyState:
+    target_word = target_words[0] if target_words else ""
+    return {
+        # Perception
+        "audio_path":        None,
+        "transcript":        None,
+        "confidence_score":  None,
+        "retry_count":       0,
+        "perception_failure_reason": None,
+        "transcript_attempts": [],
+
+        # Session meta
+        "target_word":       target_word,
+        "target_words":      target_words,
+        "current_target_index": 0,
+        "has_more_target_words": len(target_words) > 1,
+        "patient_name":      patient_name,
+        "therapy_goals":     personalization.get("therapy_goals") or [],
+        "phonemes_to_focus_on": personalization.get("phonemes_to_focus_on") or [],
+        "difficulty_level":  personalization.get("difficulty_level") or "medium",
+
+        # Session identity (Supabase linkage)
+        "patient_id":        patient_id,
+        "assignment_id":     assignment_id,
+        "word_source":       "sessions_table",
+        "session_start":     time.time(),
+        "session_duration_secs": None,
+
+        # Report
+        "report_id":         None,
+
+        # Phoneme analysis
+        "target_phonemes":   None,
+        "attempt_phonemes":  None,
+        "error_report":      None,
+        "semantic_label":    None,
+
+        # Feedback
+        "feedback":          None,
+        "practice_exercise": None,
+        "feedback_attempts": 0,
+
+        # Execution
+        "audio_output_path": None,
+        "session_complete":  False,
+        "session_outcome":   None,
+        "fatigue_level":     0,
+
+        # Control
+        "current_error":     None,
+
+        # History / progress
+        "session_history":   [],
+        "memory_context":    [],
+        "patient_trend":     None,
+        "sessions_done":     0,
+    }
+
+
+def run_session_for_patient(
+    *,
+    patient_name: str,
+    assignment_id: str | None = None,
+) -> SpeechTherapyState:
+    """Programmatic graph entrypoint used by GUI integration.
+
+    Raises:
+        ValueError: if patient cannot be resolved.
+    """
+    patient_name = (patient_name or "").strip()
+    if not patient_name:
+        raise ValueError("Patient name is required.")
+
+    patient_id = fetch_patient_id_by_name(patient_name)
+    if not patient_id:
+        raise ValueError(
+            f"Could not resolve patient '{patient_name}'. Check profiles.full_name and role='patient'."
+        )
+
+    personalization = fetch_personalization_config(
+        patient_id=patient_id,
+        assignment_id=assignment_id,
+    )
+    target_words = fetch_target_words_for_patient(patient_id)
+    if not target_words:
+        raise ValueError(
+            "No target words found in Supabase sessions.target_words for this patient."
+        )
+
+    initial_state = _build_initial_state(
+        patient_name=patient_name,
+        patient_id=patient_id,
+        assignment_id=assignment_id,
+        personalization=personalization,
+        target_words=target_words,
+    )
+    app = build_graph()
+    final_state = app.invoke(initial_state)
+    report_id = persist_session_state(final_state)
+    if report_id:
+        final_state["report_id"] = report_id
+    return final_state  # type: ignore[return-value]
+
+
 def run_session() -> SpeechTherapyState:
     """Collect session inputs, build the graph, run a session, and return the final state."""
 
@@ -150,138 +261,29 @@ def run_session() -> SpeechTherapyState:
         "Enter therapist_assignments.id UUID (optional, press Enter to skip): "
     ).strip() or None  # optional assignment linkage
 
-    # Fetch personalization from sessions using the patient_id resolved from name input.
-    personalization = fetch_personalization_config(
-        patient_id=patient_id,
-    )
-
-    # Fetch latest session mode + targets for this patient from sessions.
-    session_config = fetch_latest_session_config(patient_id)
-    target_words = list(session_config.get("target_words") or [])
-    target_sentence = str(session_config.get("target_sentence") or "").strip() or None
-    session_type = str(session_config.get("session_type") or "word_level").strip().lower()
-    if target_words:
-        session_type = "word_level"
-        mode_source = "target_words"
-    elif target_sentence:
-        session_type = "sentence_level"
-        mode_source = "target_sentence"
-    else:
-        session_type = "word_level"
-        mode_source = "fallback_empty_targets"
-
-    target_items = target_words if session_type == "word_level" else ([target_sentence] if target_sentence else [])
-    target_word = target_items[0] if target_items else ""
-
-    if not target_items:
-        target_column = "target_sentence/target_words"
-        print(
-            f"[session] Warning: No {target_column} found in Supabase for this patient. "
-            "The session will continue with an empty target value, which may degrade analysis quality."
+    try:
+        final_state = run_session_for_patient(
+            patient_name=patient_name,
+            assignment_id=assignment_id,
         )
-    else:
-        target_label = "sentence(s)" if session_type == "sentence_level" else "word(s)"
-        print(
-            f"[session] Loaded {len(target_items)} target {target_label} "
-            f"for mode={session_type}. Starting with: '{target_word}'"
-        )
-    print(f"[session] Mode selected: {session_type} (from {mode_source})")
-
-    # Build the initial state dict that seeds the LangGraph run.
-    initial_state: SpeechTherapyState = {
-        # Perception
-        "audio_path":        None,          # will hold path to the latest recorded audio file
-        "transcript":        None,          # will hold the latest transcribed text
-        "confidence_score":  None,          # will store confidence proxy from Whisper
-        "retry_count":       0,             # start with zero re-record attempts
-        "transcript_attempts": [],          # store all transcript attempts across re-record loops
-
-        # Session meta
-        "session_type":      session_type,
-        "target_word":       target_word,   # store the word the patient should say
-        "target_words":      target_words,  # ordered list from sessions.target_words
-        "target_sentence":   target_sentence,  # active sentence target for sentence_level mode
-        "target_items":      target_items,  # mode-resolved ordered target list
-        "current_target_index": 0,          # begin with the first array element
-        "has_more_target_words": len(target_items) > 1,
-        "patient_name":      patient_name,  # personalise feedback by name
-        "therapy_goals":     personalization["therapy_goals"],        # loaded from latest sessions row for this patient_id
-        "phonemes_to_focus_on": personalization["phonemes_to_focus_on"],  # prioritized phonemes from latest sessions row
-        "difficulty_level":  personalization["difficulty_level"],     # easy | medium | hard
-
-        # Session identity (Supabase linkage)
-        # `patient_id` must correspond to an existing row in
-        # `profiles` for persistence and lookups to succeed.
-        "patient_id":        patient_id,    # link state to a concrete patient record
-        "assignment_id":     assignment_id, # optional link to a therapist assignment row
-        "word_source":       "sessions_table",  # label that the target word came from Supabase sessions
-        "session_start":     time.time(),   # timestamp when this session started
-        "session_duration_secs": None,      # will be filled once the session finishes
-
-        # Report
-        "report_id":         None,          # Supabase session_reports.id, set by execution/persistence
-
-        # Phoneme analysis
-        "target_phonemes":   None,          # phoneme sequence for the target word
-        "attempt_phonemes":  None,          # phoneme sequence for the patient's attempt
-        "error_report":      None,          # detailed analysis of where phonemes differ
-        "semantic_label":    None,          # high-level semantic error classification
-
-        # Feedback
-        "feedback":          None,          # full feedback payload returned from the LLM
-        "practice_exercise": None,          # text describing a follow-up practice exercise
-        "feedback_attempts": 0,             # how many times feedback generation has been retried
-
-        # Execution
-        "audio_output_path": None,          # path to generated TTS audio (if any)
-        "session_complete":  False,         # will be flipped to True by a terminal node
-        "session_outcome":   None,          # will be set to 'success' / 'hard_stop' / 'escalate_to_human'
-        "fatigue_level":     0,             # starting fatigue level; can be updated by nodes over time
-
-        # Control
-        "current_error":     None,          # most recent error message, if something went wrong
-        "failure_reason":    None,          # reason for recent failed perception attempt (if any)
-
-        # History / progress
-        "session_history":   [],            # list of previous session summaries for this patient
-        "memory_context":    [],            # relevant prior sessions fetched from Mem0
-        "patient_trend":     None,          # overall progress trend, filled by history_analysis
-        "sessions_done":     0,             # count of sessions completed so far
-    }
-
-    app         = build_graph()             # compile the LangGraph state machine
-    final_state = app.invoke(initial_state) # run the full session starting from the initial state
-
-    # Persist one aggregated row for the whole multi-word session.
-    report_id = persist_session_state(final_state)
-    if report_id:
-        final_state["report_id"] = report_id
+    except ValueError as exc:
+        print(f"[session] {exc}")
+        raise
 
     print("\n✅ Session complete.")  # let the operator know the graph finished
-    trend_value = str(final_state.get("patient_trend") or "").strip().lower()
-    if trend_value == "improving":
-        trend_message = "Improving trend detected across recent sessions."
-    elif trend_value == "needs work":
-        trend_message = "Needs-work trend detected; consider easier prompts and more repetition."
-    else:
-        trend_message = "Trend unavailable (insufficient history)."
-
-    print(f"[session] Trend summary: {trend_message}")
-
     history = final_state.get("session_history") or []
     if history:
-        total_targets = len(history)
-        avg_accuracy = sum(float(h.get("accuracy", 0) or 0) for h in history) / max(total_targets, 1)
-        targets = [str(h.get("target_word", "")).strip() for h in history if str(h.get("target_word", "")).strip()]
+        total_words = len(history)
+        avg_accuracy = sum(float(h.get("accuracy", 0) or 0) for h in history) / max(total_words, 1)
+        words = [str(h.get("target_word", "")).strip() for h in history if str(h.get("target_word", "")).strip()]
 
         print("\n" + "═" * 55)
         print("  SESSION OVERALL SUMMARY")
         print("═" * 55)
-        if targets:
-            print(f"  Targets practiced    : {', '.join(targets)}")
-        print(f"  Items practiced      : {total_targets}")
+        if words:
+            print(f"  Target words practiced: {', '.join(words)}")
+        print(f"  Words practiced      : {total_words}")
         print(f"  Average accuracy     : {avg_accuracy:.2f}%")
-        print(f"  Trend                : {trend_value or 'unknown'}")
         for idx, item in enumerate(history, 1):
             w = item.get("target_word", "")
             acc = item.get("accuracy", 0)
@@ -293,7 +295,7 @@ def run_session() -> SpeechTherapyState:
         print(f"Supabase session report id: {final_state['report_id']}")  # show the Supabase report ID if persistence succeeded
     if final_state.get("session_outcome"):
         print(f"Session outcome: {final_state['session_outcome']}")       # show the explicit outcome label for this run
-    return final_state  # hand the final state back to the caller (for tests / further inspection)
+    return final_state  # type: ignore # hand the final state back to the caller (for tests / further inspection)
 
 
 if __name__ == "__main__":

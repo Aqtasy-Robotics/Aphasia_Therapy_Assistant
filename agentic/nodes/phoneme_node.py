@@ -127,12 +127,10 @@ def phoneme_errors(target_phonemes: list, attempt_phonemes: list) -> dict:
 
 
 def phoneme_analysis_node(state: SpeechTherapyState) -> dict:
-    session_type = str(state.get("session_type") or "word_level").strip().lower()
-    target_label = "sentence" if session_type == "sentence_level" else "word"
-    target_word = state.get("target_word") or state.get("target_sentence") or ""
+    target_word = state.get("target_word", "")
     transcript  = state.get("transcript", "") or ""
 
-    print(f"\nConverting target {target_label} '{target_word}' to phonemes...")
+    print(f"\nConverting '{target_word}' to phonemes...")
     target_ph  = text_to_phonemes(target_word)
     print("Converting transcript to phonemes...")
     attempt_ph = text_to_phonemes(transcript)

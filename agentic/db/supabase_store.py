@@ -40,77 +40,6 @@ def _get_client() -> Optional[Client]:
     return _supabase
 
 
-def _normalize_text_array(values: Any) -> list[str]:
-    """Normalize a potential Postgres text[]/JSON array to list[str]."""
-    if not isinstance(values, list):
-        return []
-    normalized: list[str] = []
-    for value in values:
-        candidate = str(value).strip()
-        if candidate:
-            normalized.append(candidate)
-    return normalized
-
-
-def fetch_latest_session_config(patient_id: str) -> Dict[str, Any]:
-    """Fetch latest sessions row fields required to bootstrap runtime mode/targets."""
-    defaults: Dict[str, Any] = {
-        "session_type": "word_level",
-        "target_words": [],
-        "target_sentence": None,
-    }
-
-    if not patient_id:
-        print("[agentic-db] Cannot fetch latest session config without a patient_id.")
-        return defaults
-
-    client = _get_client()
-    if client is None:
-        print("[agentic-db] Supabase client unavailable; cannot fetch latest session config.")
-        return defaults
-
-    try:
-        response = (
-            client
-            .table("sessions")
-            .select("target_words, target_sentence, session_date")
-            .eq("patient_id", patient_id)
-            .order("session_date", desc=True)
-            .limit(1)
-            .execute()
-        )
-    except Exception as exc:
-        print(f"[agentic-db] Error querying public.sessions for latest config: {exc}")
-        return defaults
-
-    data = getattr(response, "data", None) or []
-    if not data or not isinstance(data, list):
-        print(f"[agentic-db] No sessions found for patient_id={patient_id} in public.sessions.")
-        return defaults
-
-    row = data[0] or {}
-    target_words = _normalize_text_array(row.get("target_words"))
-    target_sentence_raw = str(row.get("target_sentence") or "").strip()
-    target_sentence = target_sentence_raw if target_sentence_raw else None
-    if target_words:
-        session_type = "word_level"
-    elif target_sentence:
-        session_type = "sentence_level"
-    else:
-        session_type = "word_level"
-
-    print(
-        f"[agentic-db] Loaded latest session config for patient {patient_id}: "
-        f"session_type={session_type}, words={len(target_words)}, sentence={'yes' if target_sentence else 'no'}"
-    )
-
-    return {
-        "session_type": session_type,
-        "target_words": target_words,
-        "target_sentence": target_sentence,
-    }
-
-
 def fetch_patient_id_by_name(patient_name: str) -> Optional[str]:
     """Resolve a patient full name to ``public.profiles.id``.
 
@@ -189,25 +118,51 @@ def fetch_target_words_for_patient(patient_id: str) -> list[str]:
     Returns a list of non-empty words in order.
     """
 
-    config = fetch_latest_session_config(patient_id)
-    words = config.get("target_words") or []
+    if not patient_id:
+        print("[agentic-db] Cannot fetch target words without a patient_id.")
+        return []
+
+    client = _get_client()
+    if client is None:
+        print("[agentic-db] Supabase client unavailable; cannot fetch target words.")
+        return []
+
+    try:
+        response = (
+            client
+            .table("sessions")
+            .select("target_words, session_date")
+            .eq("patient_id", patient_id)
+            .order("session_date", desc=True)
+            .limit(1)
+            .execute()
+        )
+    except Exception as exc:
+        print(f"[agentic-db] Error querying public.sessions for target words: {exc}")
+        return []
+
+    data = getattr(response, "data", None) or []
+    if not data or not isinstance(data, list):
+        print(f"[agentic-db] No sessions found for patient_id={patient_id} in public.sessions.")
+        return []
+
+    row = data[0] or {}
+    values = row.get("target_words")
+    if not isinstance(values, list) or not values:
+        print(f"[agentic-db] target_words empty or not an array for patient_id={patient_id}.")
+        return []
+
+    words: list[str] = []
+    for value in values:
+        candidate = str(value).strip()
+        if candidate:
+            words.append(candidate)
+
     if words:
         print(f"[agentic-db] Loaded {len(words)} target word(s) for patient {patient_id}.")
         return words
 
     print(f"[agentic-db] No non-empty entries in target_words for patient_id={patient_id}.")
-    return []
-
-
-def fetch_target_sentences_for_patient(patient_id: str) -> list[str]:
-    """Fetch target sentence from the latest ``public.sessions`` row as list[str]."""
-    config = fetch_latest_session_config(patient_id)
-    sentence = str(config.get("target_sentence") or "").strip()
-    if sentence:
-        print(f"[agentic-db] Loaded 1 target sentence for patient {patient_id}.")
-        return [sentence]
-
-    print(f"[agentic-db] No non-empty entry in target_sentence for patient_id={patient_id}.")
     return []
 
 
@@ -373,10 +328,9 @@ def persist_session_state(state: SpeechTherapyState) -> Optional[str]:
 
     # Map SpeechTherapyState → session_reports columns.
     # session_reports.target_word is stored as text[] in this schema.
-    # Persist target_word array from word-level targets only.
+    # Persist the full session target list when available.
     state_target_words = state.get("target_words") or []
     target_word_array = [str(w).strip() for w in state_target_words if str(w).strip()]
-    target_sentence_value = str(state.get("target_sentence") or "").strip() or None
     if not target_word_array:
         # Backward-compatible fallback when only a single target word exists.
         target_word_value = state.get("target_word")
@@ -458,7 +412,6 @@ def persist_session_state(state: SpeechTherapyState) -> Optional[str]:
 
             # Core session info (aggregated)
             "target_word":           target_word_array,
-            "target_sentence":       target_sentence_value,
             "transcript":            "\n".join(transcript_lines) if transcript_lines else state.get("transcript"),
             "target_phonemes":       "\n".join(target_phoneme_lines) if target_phoneme_lines else target_phonemes_text,
             "attempted_phonemes":    "\n".join(attempted_phoneme_lines) if attempted_phoneme_lines else attempted_phonemes_text,
@@ -498,7 +451,6 @@ def persist_session_state(state: SpeechTherapyState) -> Optional[str]:
 
             # Core session info
             "target_word":           target_word_array,
-            "target_sentence":       target_sentence_value,
             "transcript":            state.get("transcript"),
             "target_phonemes":       target_phonemes_text,
             "attempted_phonemes":    attempted_phonemes_text,
