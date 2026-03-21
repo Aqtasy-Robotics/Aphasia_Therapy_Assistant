@@ -236,12 +236,6 @@ const TherapistMessages = () => {
                 Select a patient from the roster or start a new conversation to
                 begin secure messaging.
               </p>
-              <button
-                onClick={() => setShowNewChatModal(true)}
-                className="mt-10 bg-[#012b1d] text-white px-8 py-3.5 rounded-xl font-extrabold shadow-xl shadow-[#012b1d]/20 hover:brightness-110 hover:-translate-y-1 transition-all flex items-center gap-3 uppercase tracking-[0.2em] text-[10px]"
-              >
-                <PlusCircle size={16} /> New Conversation
-              </button>
             </div>
           ) : (
             <>
