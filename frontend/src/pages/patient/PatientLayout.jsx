@@ -45,13 +45,13 @@ const PatientLayout = () => {
     );
 
   return (
-    <div className="flex min-h-screen w-full bg-[#f8fafc] font-sans antialiased text-slate-900">
+    <div className="flex h-screen w-full bg-[#f8fafc] relative overflow-hidden font-sans antialiased">
       {/* MOBILE HEADER - Only visible on small screens */}
       <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 z-[100] flex items-center justify-between px-6">
         <img src={logo} alt="Logo" className="h-8" />
         <button
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          className="p-2 bg-[#172554] text-white rounded-xl shadow-lg"
+          className="p-2 bg-[#0f172a] text-white rounded-xl shadow-lg"
         >
           {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
         </button>
@@ -60,7 +60,7 @@ const PatientLayout = () => {
       {/* SIDEBAR BACKDROP - Blurs the content when menu is open on mobile */}
       {isMobileMenuOpen && (
         <div
-          className="fixed inset-0 bg-[#172554]/20 backdrop-blur-sm z-[110] lg:hidden"
+          className="fixed inset-0 bg-[#0f172a]/20 backdrop-blur-sm z-[110] lg:hidden"
           onClick={() => setIsMobileMenuOpen(false)}
         />
       )}
@@ -68,7 +68,7 @@ const PatientLayout = () => {
       {/* SIDEBAR - Fixed to prevent white space at bottom */}
       <aside
         className={`
-        fixed inset-y-0 left-0 z-[120] w-72 bg-[#172554] flex flex-col p-8 transition-transform duration-500 ease-in-out
+        fixed inset-y-0 left-0 z-[120] w-72 bg-[#0f172a] flex flex-col p-8 transition-transform duration-500 ease-in-out
         lg:translate-x-0 lg:static lg:h-screen
         ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"}
       `}
@@ -87,7 +87,7 @@ const PatientLayout = () => {
           </span>
         </div>
 
-        <nav className="relative z-10 flex-1 space-y-3 overflow-y-auto no-scrollbar">
+        <nav className="relative z-10 flex-1 space-y-3 overflow-y-auto no-scrollbar -mx-4 px-4 py-4">
           <NavItem
             label="Home"
             active={isActive("/patient-dashboard")}
@@ -166,17 +166,23 @@ const PatientLayout = () => {
 const NavItem = ({ label, active, onClick }) => (
   <div
     onClick={onClick}
-    className={`group px-6 py-4 rounded-2xl cursor-pointer transition-all duration-300 flex items-center gap-4
+    className={`group px-6 py-4 rounded-[1.5rem] cursor-pointer transition-all duration-300 flex items-center gap-5
       ${
         active
-          ? "bg-white/10 text-white shadow-lg ring-1 ring-white/20"
-          : "text-white/50 hover:bg-white/5 hover:text-white"
+          ? "bg-white/15 text-white font-black shadow-[0_12px_24px_rgba(0,0,0,0.3)] ring-1 ring-white/30 translate-x-2"
+          : "text-white/70 hover:bg-white/5 hover:text-white hover:translate-x-1"
       }`}
   >
     <div
-      className={`w-1.5 h-1.5 rounded-full transition-all duration-500 ${active ? "bg-[#5cb338] shadow-[0_0_10px_#5cb338]" : "bg-transparent"}`}
+      className={`w-2 h-2 rounded-full transition-all duration-500 ${
+        active
+          ? "bg-white shadow-[0_0_12px_white] scale-110"
+          : "bg-transparent scale-0"
+      }`}
     />
-    <span className="text-[10px] uppercase tracking-[0.2em] font-extrabold">
+
+    {/* MAIN NAVIGATION LINKS: 11px */}
+    <span className="text-[11px] uppercase tracking-[0.2em] font-black leading-none">
       {label}
     </span>
   </div>
