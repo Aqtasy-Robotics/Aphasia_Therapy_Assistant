@@ -67,10 +67,13 @@ const TherapistLayout = () => {
       </div>
     );
 
-  return (
-    <div className="flex h-screen w-full bg-[#f8fafc] font-sans antialiased text-slate-900 overflow-hidden">
-      {/* MOBILE HEADER */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 z-[100] flex items-center justify-between px-6">
+    return (
+      <div 
+        className="flex h-screen w-full bg-cover bg-center bg-fixed font-sans antialiased text-slate-900 overflow-hidden"
+        style={{ backgroundImage: "url('/backgroundpic.jpg')"}}
+      >
+        {/* MOBILE HEADER */}
+        <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 z-[100] flex items-center justify-between px-6">
         <img src={logo} alt="Logo" className="h-8" />
         <button
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
