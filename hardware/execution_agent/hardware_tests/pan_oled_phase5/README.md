@@ -45,6 +45,8 @@ If your wiring differs, update:
 - `oled.interface` (`i2c` or `spi`)
 - `oled.i2c_address` / `oled.rotate` / `oled_driver` (if needed)
 - SPI modules: `oled.spi_port`, `oled.spi_device`, `oled.spi_gpio_dc`, `oled.spi_gpio_rst`
+- **Orientation:** `oled.rotate` — luma uses `0..3` (steps of 90° clockwise). Try `1`, `2`, or `3` if the face is sideways in your enclosure.
+- **Eye position:** `oled.eye_layout` — `horizontal` (default) or `vertical` (stacked, good for portrait mounts). `oled.eyes_bias_x` — `-1.0`..`1.0`; **negative shifts both eyes left**, positive shifts right.
 
 4) Test the pan servo
 ----------------------
@@ -75,6 +77,8 @@ Servo issues:
 - Ensure the servo has a suitable 5V supply (do not power servos from the Pi directly if unstable).
 
 OLED issues:
+
+- **Static / snow on a 128x128 blue 7-pin SPI board:** that panel is almost always **SH1107** (monochrome), not **SSD1351** (color). Use `"oled_driver": "sh1107"` with `"interface": "spi"`. Using `ssd1351` on SH1107 hardware produces garbage pixels.
 - Confirm I2C is enabled: `sudo raspi-config` -> Interface Options -> I2C -> Enable.
 - Confirm the OLED address (common is `0x3C` or `0x3D`).
 - **`GME128128-01` / 1.5\" SH1107 IIC:** use `"oled_driver": "sh1107"`. The script uses

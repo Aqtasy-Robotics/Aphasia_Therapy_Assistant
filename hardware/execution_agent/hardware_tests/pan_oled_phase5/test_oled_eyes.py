@@ -213,6 +213,16 @@ def _clamp(value: float, lower: float, upper: float) -> float:
     return max(lower, min(upper, value))
 
 
+def _prep_image_for_device(image: Image.Image, device: Any) -> Image.Image:
+    """Convert image to device's expected mode (e.g. '1' for monochrome SH1107)."""
+    target = getattr(device, "mode", "RGB")
+    if image.mode == target:
+        return image
+    if target == "1":
+        return image.convert("L").point(lambda x: 0 if x < 128 else 255, mode="1")
+    return image.convert(target)
+
+
 def _load_config(config_path: Path) -> Dict[str, Any]:
     if not config_path.exists():
         return {}
@@ -227,6 +237,9 @@ def _draw_frame(
     gaze_y: float,
     blink_factor: float,
     micro_phase: float,
+    *,
+    eye_layout: str = "horizontal",
+    eyes_bias_x: float = 0.0,
 ) -> Image.Image:
     profile = EXPRESSION_PROFILE.get(expression, EXPRESSION_PROFILE["neutral"])
 
@@ -242,21 +255,32 @@ def _draw_frame(
     base_y = int(height * (0.5 + vertical_bias + (math.sin(micro_phase) * 0.02)))
     gaze_dx = int(gaze_x * width * 0.09)
     gaze_dy = int(gaze_y * height * 0.09)
-
-    left_cx = width // 2 - center_gap // 2 - eye_w // 2 + gaze_dx
-    right_cx = width // 2 + center_gap // 2 + eye_w // 2 + gaze_dx
-    cy = base_y + gaze_dy
+    bias_px = int(_clamp(eyes_bias_x, -1.0, 1.0) * width * 0.22)
 
     radius = max(2, int(min(eye_w, eye_h) * 0.35))
 
     img = Image.new("RGB", (width, height), "black")
     draw = ImageDraw.Draw(img)
 
-    left_box = [left_cx - eye_w // 2, cy - eye_h // 2, left_cx + eye_w // 2, cy + eye_h // 2]
-    right_box = [right_cx - eye_w // 2, cy - eye_h // 2, right_cx + eye_w // 2, cy + eye_h // 2]
-
-    draw.rounded_rectangle(left_box, radius=radius, fill="white")
-    draw.rounded_rectangle(right_box, radius=radius, fill="white")
+    layout = str(eye_layout).lower().strip()
+    if layout == "vertical":
+        gap_y = max(4, int(height * spacing_ratio * 0.55))
+        cx = width // 2 + bias_px + gaze_dx
+        cy_mid = base_y + gaze_dy
+        top_cy = cy_mid - gap_y // 2
+        bot_cy = cy_mid + gap_y // 2
+        top_box = [cx - eye_w // 2, top_cy - eye_h // 2, cx + eye_w // 2, top_cy + eye_h // 2]
+        bot_box = [cx - eye_w // 2, bot_cy - eye_h // 2, cx + eye_w // 2, bot_cy + eye_h // 2]
+        draw.rounded_rectangle(top_box, radius=radius, fill="white")
+        draw.rounded_rectangle(bot_box, radius=radius, fill="white")
+    else:
+        left_cx = width // 2 - center_gap // 2 - eye_w // 2 + gaze_dx + bias_px
+        right_cx = width // 2 + center_gap // 2 + eye_w // 2 + gaze_dx + bias_px
+        cy = base_y + gaze_dy
+        left_box = [left_cx - eye_w // 2, cy - eye_h // 2, left_cx + eye_w // 2, cy + eye_h // 2]
+        right_box = [right_cx - eye_w // 2, cy - eye_h // 2, right_cx + eye_w // 2, cy + eye_h // 2]
+        draw.rounded_rectangle(left_box, radius=radius, fill="white")
+        draw.rounded_rectangle(right_box, radius=radius, fill="white")
     return img
 
 
@@ -299,12 +323,6 @@ def _init_oled(cfg: Dict[str, Any]) -> Any:
             cmd_control=cmd_control,
             data_control=data_control,
         )
-    if driver == "sh1107" and interface == "spi":
-        raise RuntimeError(
-            "Invalid config: oled_driver='sh1107' is I2C-only in this test script. "
-            "For SPI displays, use oled_driver='ssd1351' or 'sh1106'."
-        )
-
     if not LUMA_AVAILABLE:
         raise RuntimeError("luma.oled not available")
 
@@ -342,17 +360,23 @@ def _init_oled(cfg: Dict[str, Any]) -> Any:
         serial.command = _safe_command
         serial.data = _safe_data
 
-    # For SPI/I2C via luma: allow any driver class that exists in luma.oled.device.
+    # Support a couple common controllers for physical testing.
     if driver == "ssd1351":
         return ssd1351(serial_interface=serial, width=width, height=height, rotate=rotate)
+    if driver == "sh1106":
+        sh1106_cls = getattr(oled_device_mod, "sh1106", None)
+        if sh1106_cls is None:
+            raise RuntimeError("luma.oled sh1106 driver not available in this environment")
+        return sh1106_cls(serial_interface=serial, width=width, height=height, rotate=rotate)
+    if driver == "sh1107":
+        # Monochrome 128x128 SPI modules (common blue 7-pin boards) use SH1107, not SSD1351.
+        # Using ssd1351 driver on SH1107 hardware shows random/static pixels.
+        sh1107_cls = getattr(oled_device_mod, "sh1107", None)
+        if sh1107_cls is None:
+            raise RuntimeError("luma.oled sh1107 driver not available in this environment")
+        return sh1107_cls(serial_interface=serial, width=width, height=height, rotate=rotate)
 
-    driver_cls = getattr(oled_device_mod, driver, None)
-    if driver_cls is None:
-        raise RuntimeError(
-            f"Unsupported oled_driver={driver!r}. "
-            "Try one of: ssd1351, ssd1327, ssd1331, sh1106."
-        )
-    return driver_cls(serial_interface=serial, width=width, height=height, rotate=rotate)
+    raise RuntimeError(f"Unsupported oled_driver={driver!r}")
 
 
 async def main() -> int:
@@ -362,12 +386,9 @@ async def main() -> int:
     parser.add_argument("--expression", default="auto", help="neutral|happy|sad|thinking|surprised|listening|auto")
     parser.add_argument("--gaze_x", type=float, default=0.0)
     parser.add_argument("--gaze_y", type=float, default=0.0)
-    parser.add_argument("--driver", default=None, help="Optional driver override (e.g. ssd1351|ssd1327|ssd1331|sh1106)")
     args = parser.parse_args()
 
     cfg = _load_config(Path(args.config))
-    if args.driver:
-        cfg.setdefault("oled", {})["oled_driver"] = str(args.driver).lower()
     oled_cfg = cfg.get("oled", {})
     print(
         "OLED config: interface={} driver={} spi_port={} spi_device={} dc={} rst={}".format(
@@ -380,8 +401,10 @@ async def main() -> int:
         )
     )
     drv = str(cfg.get("oled", {}).get("oled_driver", "ssd1351")).lower()
-    if not LUMA_AVAILABLE and drv != "sh1107":
-        print("ERROR: luma.oled not available. Install deps or use oled_driver \"sh1107\".")
+    intf = str(cfg.get("oled", {}).get("interface", "i2c")).lower()
+    # Native SH1107 (no luma) is I2C-only; SPI SH1107 and all other drivers need luma.
+    if not LUMA_AVAILABLE and not (drv == "sh1107" and intf == "i2c"):
+        print("ERROR: luma.oled not available. Install deps, or use oled_driver \"sh1107\" with interface \"i2c\".")
         return 2
 
     gaze_x = _clamp(args.gaze_x, -1.0, 1.0)
@@ -393,6 +416,10 @@ async def main() -> int:
     height = int(device.height)
 
     print(f"OLED init OK: {width}x{height} rotate={getattr(device, 'rotate', None)}")
+
+    eye_layout = str(oled_cfg.get("eye_layout", "horizontal")).lower()
+    eyes_bias_x = _clamp(float(oled_cfg.get("eyes_bias_x", 0.0)), -1.0, 1.0)
+    print(f"Eyes: layout={eye_layout} eyes_bias_x={eyes_bias_x} (negative = shift left)")
 
     start = time.monotonic()
     next_blink_at = start + random.uniform(0.8, 1.6)
@@ -430,13 +457,25 @@ async def main() -> int:
                 gaze_y=gaze_y,
                 blink_factor=blink_factor,
                 micro_phase=elapsed * 3.0,
+                eye_layout=eye_layout,
+                eyes_bias_x=eyes_bias_x,
             )
-            await asyncio.to_thread(device.display, image)
+            await asyncio.to_thread(device.display, _prep_image_for_device(image, device))
             await asyncio.sleep(frame_delay)
 
         # Leave a neutral frame at the end.
-        final_img = _draw_frame(width, height, "neutral", gaze_x, gaze_y, 0.0, 0.0)
-        await asyncio.to_thread(device.display, final_img)
+        final_img = _draw_frame(
+            width,
+            height,
+            "neutral",
+            gaze_x,
+            gaze_y,
+            0.0,
+            0.0,
+            eye_layout=eye_layout,
+            eyes_bias_x=eyes_bias_x,
+        )
+        await asyncio.to_thread(device.display, _prep_image_for_device(final_img, device))
         return 0
     finally:
         try:
