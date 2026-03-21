@@ -115,8 +115,8 @@ const PatientLayout = () => {
           />
           <NavItem
             label="My Profile"
-            active={isActive("/profile")}
-            onClick={() => handleNav("/profile")}
+            active={isActive("/patient-profile")}
+            onClick={() => handleNav("/patient-profile")}
           />
         </nav>
 
@@ -143,7 +143,7 @@ const PatientLayout = () => {
         <header className="px-6 lg:px-12 pt-20 lg:pt-12 mb-8 shrink-0 relative z-20">
           <div className="flex justify-between items-center animate-in slide-in-from-top duration-700">
             <div className="bg-white/70 backdrop-blur-xl px-6 py-3 rounded-2xl border border-white shadow-sm flex items-center gap-4">
-              <div className="w-2 h-2 rounded-full bg-[#5cb338] animate-pulse" />
+              <div className="w-2 h-2 rounded-full bg-[#0f172a] animate-pulse" />
               <h2 className="text-[10px] font-black text-[#172554] uppercase tracking-[0.2em]">
                 Verified User:{" "}
                 <span className="text-slate-500 ml-1">{userName}</span>

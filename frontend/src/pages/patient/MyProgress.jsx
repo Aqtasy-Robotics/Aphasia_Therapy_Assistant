@@ -27,9 +27,6 @@ const MyProgress = () => {
           <h1 className="text-4xl font-extrabold text-gray-800 tracking-tight">My Progress</h1>
           <p className="text-gray-500 font-semibold mt-2 text-sm italic">Track your clinical improvement over time</p>
         </div>
-        <button className="bg-[#172554] text-white px-8 py-4 rounded-2xl font-extrabold text-[11px] uppercase tracking-[0.2em] shadow-xl shadow-[#172554]/20 hover:scale-105 active:scale-95 transition-all flex items-center gap-3">
-          <Download size={16} /> Download Monthly Report
-        </button>
       </div>
 
       {/* STATS CARDS GRID */}

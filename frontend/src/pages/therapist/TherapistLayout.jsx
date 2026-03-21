@@ -91,7 +91,7 @@ const TherapistLayout = () => {
             className="h-16 mb-4 brightness-0 invert filter drop-shadow-md"
           />
           <span className="text-[10px] font-black text-white/40 uppercase tracking-[0.4em]">
-            Portal
+            Therapist Portal
           </span>
         </div>
 
@@ -167,12 +167,23 @@ const TherapistLayout = () => {
 const NavItem = ({ label, active, onClick }) => (
   <div
     onClick={onClick}
-    className={`group px-6 py-4 rounded-2xl cursor-pointer transition-all duration-300 flex items-center gap-4 ${active ? "bg-white/10 text-white shadow-lg ring-1 ring-white/20" : "text-white/50 hover:bg-white/5 hover:text-white"}`}
+    className={`group px-6 py-4 rounded-[1.5rem] cursor-pointer transition-all duration-300 flex items-center gap-5
+      ${
+        active
+          ? "bg-white/15 text-white font-black shadow-[0_12px_24px_rgba(0,0,0,0.3)] ring-1 ring-white/30 translate-x-2"
+          : "text-white/70 hover:bg-white/5 hover:text-white hover:translate-x-1"
+      }`}
   >
     <div
-      className={`w-1.5 h-1.5 rounded-full transition-all duration-500 ${active ? "bg-[#5cb338] shadow-[0_0_10px_#5cb338]" : "bg-transparent"}`}
+      className={`w-2 h-2 rounded-full transition-all duration-500 ${
+        active
+          ? "bg-white shadow-[0_0_12px_white] scale-110"
+          : "bg-transparent scale-0"
+      }`}
     />
-    <span className="text-[10px] uppercase tracking-[0.2em] font-extrabold leading-none">
+
+    {/* MAIN NAVIGATION LINKS: 11px */}
+    <span className="text-[11px] uppercase tracking-[0.2em] font-black leading-none">
       {label}
     </span>
   </div>
