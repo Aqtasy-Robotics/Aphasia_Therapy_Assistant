@@ -46,6 +46,16 @@ def _clamp(value: float, lower: float, upper: float) -> float:
     return max(lower, min(upper, value))
 
 
+def _prep_image_for_device(image: Image.Image, device: Any) -> Image.Image:
+    """Convert image to device's expected mode (e.g. '1' for monochrome SH1107)."""
+    target = getattr(device, "mode", "RGB")
+    if image.mode == target:
+        return image
+    if target == "1":
+        return image.convert("L").point(lambda x: 0 if x < 128 else 255, mode="1")
+    return image.convert(target)
+
+
 async def shutdown_face() -> None:
     """Clear and close OLED resources."""
     global _oled_device, _oled_settings_ref
@@ -115,6 +125,9 @@ def _draw_frame(
     gaze_y: float,
     blink_factor: float,
     micro_phase: float,
+    *,
+    eye_layout: str = "horizontal",
+    eyes_bias_x: float = 0.0,
 ) -> Image.Image:
     profile = EXPRESSION_PROFILE.get(expression, EXPRESSION_PROFILE["neutral"])
 
@@ -131,21 +144,43 @@ def _draw_frame(
     base_y = int(height * (0.5 + vertical_bias + (math.sin(micro_phase) * 0.02)))
     gaze_dx = int(gaze_x * width * 0.09)
     gaze_dy = int(gaze_y * height * 0.09)
-
-    left_cx = width // 2 - center_gap // 2 - eye_w // 2 + gaze_dx
-    right_cx = width // 2 + center_gap // 2 + eye_w // 2 + gaze_dx
-    cy = base_y + gaze_dy
+    bias_px = int(_clamp(eyes_bias_x, -1.0, 1.0) * width * 0.22)
 
     radius = max(2, int(min(eye_w, eye_h) * 0.35))
 
     img = Image.new("RGB", (width, height), "black")
     draw = ImageDraw.Draw(img)
 
-    left_box = [left_cx - eye_w // 2, cy - eye_h // 2, left_cx + eye_w // 2, cy + eye_h // 2]
-    right_box = [right_cx - eye_w // 2, cy - eye_h // 2, right_cx + eye_w // 2, cy + eye_h // 2]
-    draw.rounded_rectangle(left_box, radius=radius, fill="white")
-    draw.rounded_rectangle(right_box, radius=radius, fill="white")
+    layout = str(eye_layout).lower().strip()
+    if layout == "vertical":
+        gap_y = max(4, int(height * spacing_ratio * 0.55))
+        cx = width // 2 + bias_px + gaze_dx
+        cy_mid = base_y + gaze_dy
+        top_cy = cy_mid - gap_y // 2
+        bot_cy = cy_mid + gap_y // 2
+        top_box = [cx - eye_w // 2, top_cy - eye_h // 2, cx + eye_w // 2, top_cy + eye_h // 2]
+        bot_box = [cx - eye_w // 2, bot_cy - eye_h // 2, cx + eye_w // 2, bot_cy + eye_h // 2]
+        draw.rounded_rectangle(top_box, radius=radius, fill="white")
+        draw.rounded_rectangle(bot_box, radius=radius, fill="white")
+    else:
+        left_cx = width // 2 - center_gap // 2 - eye_w // 2 + gaze_dx + bias_px
+        right_cx = width // 2 + center_gap // 2 + eye_w // 2 + gaze_dx + bias_px
+        cy = base_y + gaze_dy
+        left_box = [left_cx - eye_w // 2, cy - eye_h // 2, left_cx + eye_w // 2, cy + eye_h // 2]
+        right_box = [right_cx - eye_w // 2, cy - eye_h // 2, right_cx + eye_w // 2, cy + eye_h // 2]
+        draw.rounded_rectangle(left_box, radius=radius, fill="white")
+        draw.rounded_rectangle(right_box, radius=radius, fill="white")
     return img
+
+
+def _eye_draw_kwargs(settings: Any | None) -> Dict[str, Any]:
+    if settings is None:
+        return {"eye_layout": "horizontal", "eyes_bias_x": 0.0}
+    oled = settings.oled
+    return {
+        "eye_layout": getattr(oled, "eye_layout", "horizontal"),
+        "eyes_bias_x": float(getattr(oled, "eyes_bias_x", 0.0)),
+    }
 
 
 async def show_face(payload: Dict[str, Any], settings: Any | None = None) -> Dict[str, Any]:
@@ -185,14 +220,17 @@ async def show_face(payload: Dict[str, Any], settings: Any | None = None) -> Dic
             device = _init_oled(settings)
             frame_w = int(device.width)
             frame_h = int(device.height)
+            eye_kw = _eye_draw_kwargs(settings)
 
             start = time.monotonic()
             next_blink_at = start + random.uniform(0.8, 1.6)
             frame_delay = 0.05
 
             if duration == 0.0:
-                image = _draw_frame(frame_w, frame_h, expression, gaze_x, gaze_y, 0.0, 0.0)
-                await asyncio.to_thread(device.display, image)
+                image = _draw_frame(
+                    frame_w, frame_h, expression, gaze_x, gaze_y, 0.0, 0.0, **eye_kw
+                )
+                await asyncio.to_thread(device.display, _prep_image_for_device(image, device))
             else:
                 while True:
                     now = time.monotonic()
@@ -216,8 +254,9 @@ async def show_face(payload: Dict[str, Any], settings: Any | None = None) -> Dic
                         gaze_y,
                         blink_factor,
                         elapsed * 3.0,
+                        **eye_kw,
                     )
-                    await asyncio.to_thread(device.display, image)
+                    await asyncio.to_thread(device.display, _prep_image_for_device(image, device))
                     await asyncio.sleep(frame_delay)
 
             return {
@@ -249,45 +288,57 @@ async def show_face(payload: Dict[str, Any], settings: Any | None = None) -> Dic
 
 
 async def _standalone_math_eyes_loop(settings: Any) -> None:
-    expression = str(settings.oled.default_expression or "neutral").lower()
+    """Run math eyes until cancelled; on errors, log and re-init (keeps running under systemd)."""
     frame_delay = float(settings.oled.frame_delay_seconds)
-
-    async with _render_lock:
-        device = _init_oled(settings)
-        frame_w = int(device.width)
-        frame_h = int(device.height)
-
-    start = time.monotonic()
-    next_blink_at = start + random.uniform(0.8, 1.6)
     expressions = list(EXPRESSION_PROFILE.keys())
 
     while True:
-        now = time.monotonic()
-        elapsed = now - start
+        try:
+            async with _render_lock:
+                device = _init_oled(settings)
+                frame_w = int(device.width)
+                frame_h = int(device.height)
+                eye_kw = _eye_draw_kwargs(settings)
 
-        # Slow expression auto-cycle to keep the face alive without backend input.
-        expression = expressions[int(elapsed // 6) % len(expressions)]
-        gaze_x = math.sin(elapsed * 0.60) * 0.55
-        gaze_y = math.cos(elapsed * 0.37) * 0.35
+            start = time.monotonic()
+            next_blink_at = start + random.uniform(0.8, 1.6)
 
-        blink_factor = 0.0
-        if next_blink_at <= now <= (next_blink_at + 0.12):
-            progress = (now - next_blink_at) / 0.12
-            blink_factor = 1.0 - abs((progress * 2.0) - 1.0)
-        elif now > (next_blink_at + 0.12):
-            next_blink_at = now + random.uniform(1.1, 2.8)
+            while True:
+                now = time.monotonic()
+                elapsed = now - start
 
-        image = _draw_frame(
-            frame_w,
-            frame_h,
-            expression,
-            gaze_x,
-            gaze_y,
-            blink_factor,
-            elapsed * 3.0,
-        )
-        await asyncio.to_thread(device.display, image)
-        await asyncio.sleep(frame_delay)
+                expression = expressions[int(elapsed // 6) % len(expressions)]
+                gaze_x = math.sin(elapsed * 0.60) * 0.55
+                gaze_y = math.cos(elapsed * 0.37) * 0.35
+
+                blink_factor = 0.0
+                if next_blink_at <= now <= (next_blink_at + 0.12):
+                    progress = (now - next_blink_at) / 0.12
+                    blink_factor = 1.0 - abs((progress * 2.0) - 1.0)
+                elif now > (next_blink_at + 0.12):
+                    next_blink_at = now + random.uniform(1.1, 2.8)
+
+                image = _draw_frame(
+                    frame_w,
+                    frame_h,
+                    expression,
+                    gaze_x,
+                    gaze_y,
+                    blink_factor,
+                    elapsed * 3.0,
+                    **eye_kw,
+                )
+                await asyncio.to_thread(device.display, _prep_image_for_device(image, device))
+                await asyncio.sleep(frame_delay)
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001
+            logger.exception("Standalone OLED eyes hit an error; will retry in 3s")
+            try:
+                await shutdown_face()
+            except Exception:  # noqa: BLE001
+                pass
+            await asyncio.sleep(3.0)
 
 
 def maybe_start_standalone_face(settings: Any) -> None:

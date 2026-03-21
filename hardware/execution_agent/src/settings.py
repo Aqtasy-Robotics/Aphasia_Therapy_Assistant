@@ -83,6 +83,16 @@ class OledConfig(BaseModel):
         gt=0.0,
         description="Frame delay for local eye animation loop.",
     )
+    eye_layout: str = Field(
+        default="horizontal",
+        description="Eye pair layout: horizontal (side-by-side) or vertical (stacked).",
+    )
+    eyes_bias_x: float = Field(
+        default=0.0,
+        ge=-1.0,
+        le=1.0,
+        description="Shift both eyes horizontally in frame (-1=left, +1=right).",
+    )
 
     @field_validator("i2c_address")
     @classmethod
@@ -102,6 +112,14 @@ class OledConfig(BaseModel):
         normalized = v.lower().strip()
         if normalized not in {"i2c", "spi"}:
             raise ValueError("oled.interface must be 'i2c' or 'spi'")
+        return normalized
+
+    @field_validator("eye_layout")
+    @classmethod
+    def validate_eye_layout(cls, v: str) -> str:
+        normalized = v.lower().strip()
+        if normalized not in {"horizontal", "vertical"}:
+            raise ValueError("oled.eye_layout must be 'horizontal' or 'vertical'")
         return normalized
 
 
