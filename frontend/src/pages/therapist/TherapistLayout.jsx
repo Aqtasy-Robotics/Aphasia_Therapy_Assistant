@@ -123,8 +123,8 @@ const TherapistLayout = () => {
           />
           <NavItem
             label="My Profile"
-            active={isActive("/therapist-profile")}
-            onClick={() => handleNav("/therapist-profile")}
+            active={isActive("/therapist-settings")}
+            onClick={() => handleNav("/therapist-settings")}
           />
         </nav>
 

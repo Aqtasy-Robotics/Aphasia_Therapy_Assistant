@@ -68,7 +68,6 @@ function App() {
           <Route path="/therapist-reports" element={<Reports />} />
           <Route path="/therapist-messages" element={<Messages />} />
           <Route path="/therapist-settings" element={<Settings />} />
-          <Route path="/therapist-profile" element={<Profile />} />
         </Route>
 
         {/* --- FALLBACK (404) --- */}
