@@ -19,7 +19,7 @@ from typing import Dict, Any, Optional
 from dotenv import load_dotenv
 from groq import Groq
 
-from state import SpeechTherapyState
+from agentic.state import SpeechTherapyState
 
 load_dotenv()
 

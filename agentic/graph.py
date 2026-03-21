@@ -12,31 +12,35 @@ High-level pipeline flow:
 """
 
 from __future__ import annotations  # enable postponed evaluation of type annotations
-#from asyncio import graph  # imported but unused; kept to mirror original file structure
-import time  # used to timestamp session start and compute duration
+import time
+import uuid
+from typing import Any, Dict
 
 from langgraph.graph import StateGraph, END  # core LangGraph primitives for building the state machine
 
-from state import SpeechTherapyState  # shared TypedDict that defines the graph's state
-from db.supabase_store import (
+from agentic.state import SpeechTherapyState
+from agentic.db.supabase_store import (
     fetch_patient_id_by_name,
     fetch_target_words_for_patient,
     fetch_personalization_config,
+    insert_agent_pipeline_step,
+    link_pipeline_steps_to_report,
     persist_session_state,
-)  # helpers to resolve patient identity and target words from Supabase
-from nodes.perception_node import perception_node      # node that records audio and runs Whisper
-from nodes.phoneme_node     import phoneme_analysis_node  # node that performs phoneme/semantic analysis
-from nodes.feedback_node    import feedback_generation_node  # node that generates explanatory feedback
-from nodes.execution_node   import execution_node      # node that delivers feedback (e.g., TTS)
-from nodes.history_node     import history_node        # node that summarises cross-session history
-from nodes.therapist_review_node import therapist_review_node  # new node for human-in-the-loop escalation
-from nodes.terminal_nodes       import success_node, hard_stop_node  # new nodes representing explicit terminal outcomes
-from edges import (
-    check_transcription_quality,  # router for perception → re-record / analyze / escalate
-    route_by_error_type,          # router for phoneme_analysis → deep vs standard feedback
-    check_feedback_quality,       # router for feedback_generation → retry / execute / escalate
-    route_after_execution,        # new router deciding what happens after execution
 )
+from agentic.nodes.perception_node import perception_node
+from agentic.nodes.phoneme_node import phoneme_analysis_node
+from agentic.nodes.feedback_node import feedback_generation_node
+from agentic.nodes.execution_node import execution_node
+from agentic.nodes.history_node import history_node
+from agentic.nodes.therapist_review_node import therapist_review_node
+from agentic.nodes.terminal_nodes import success_node, hard_stop_node
+from agentic.edges import (
+    check_transcription_quality,
+    route_by_error_type,
+    check_feedback_quality,
+    route_after_execution,
+)
+from agentic.progress_bridge import clear_progress_events, emit_pipeline_step
 
 
 def build_graph():
@@ -120,6 +124,32 @@ def build_graph():
     return graph.compile()  # return a compiled, ready-to-run LangGraph application
 
 
+def _summarize_patch(node_name: str, patch: Any) -> Dict[str, Any]:
+    """JSON-friendly subset for Supabase ``agent_pipeline_steps.detail``."""
+    out: Dict[str, Any] = {"node": node_name}
+    if not isinstance(patch, dict):
+        return out
+    for key in (
+        "transcript",
+        "semantic_label",
+        "session_outcome",
+        "patient_trend",
+        "session_complete",
+        "retry_count",
+        "confidence_score",
+    ):
+        if key in patch and patch[key] is not None:
+            val = patch[key]
+            if key == "transcript" and isinstance(val, str) and len(val) > 200:
+                val = val[:200] + "…"
+            out[key] = val
+    fb = patch.get("feedback")
+    if isinstance(fb, dict) and fb.get("feedback_text"):
+        txt = str(fb["feedback_text"])
+        out["feedback_preview"] = txt[:160] + ("…" if len(txt) > 160 else "")
+    return out
+
+
 def _build_initial_state(
     *,
     patient_name: str,
@@ -168,6 +198,7 @@ def _build_initial_state(
         "feedback":          None,
         "practice_exercise": None,
         "feedback_attempts": 0,
+        "feedback_scores":   None,
 
         # Execution
         "audio_output_path": None,
@@ -183,6 +214,8 @@ def _build_initial_state(
         "memory_context":    [],
         "patient_trend":     None,
         "sessions_done":     0,
+
+        "agent_run_id":      None,
     }
 
 
@@ -216,6 +249,7 @@ def run_session_for_patient(
             "No target words found in Supabase sessions.target_words for this patient."
         )
 
+    run_id = str(uuid.uuid4())
     initial_state = _build_initial_state(
         patient_name=patient_name,
         patient_id=patient_id,
@@ -223,12 +257,60 @@ def run_session_for_patient(
         personalization=personalization,
         target_words=target_words,
     )
+    initial_state["agent_run_id"] = run_id
+
+    clear_progress_events()
+    emit_pipeline_step("session_start", f"Patient resolved; {len(target_words)} target word(s)")
+
     app = build_graph()
-    final_state = app.invoke(initial_state)
+    acc: Dict[str, Any] = dict(initial_state)
+
+    try:
+        stream_iter = app.stream(initial_state, stream_mode="updates")
+        for update in stream_iter:
+            if not isinstance(update, dict):
+                continue
+            for node_name, patch in update.items():
+                label = str(node_name)
+                emit_pipeline_step(label, detail=_human_step_label(label))
+                detail = _summarize_patch(label, patch)
+                insert_agent_pipeline_step(
+                    patient_id=patient_id,
+                    run_id=run_id,
+                    step_name=label,
+                    detail=detail,
+                )
+                if isinstance(patch, dict):
+                    acc.update(patch)
+        final_state = acc  # type: ignore[assignment]
+    except TypeError:
+        final_state = app.invoke(initial_state)
+        emit_pipeline_step("graph", "invoke() fallback (stream_mode unsupported)")
+
     report_id = persist_session_state(final_state)
     if report_id:
         final_state["report_id"] = report_id
+        link_pipeline_steps_to_report(
+            run_id=run_id,
+            report_id=report_id,
+            patient_id=patient_id,
+        )
+
+    emit_pipeline_step("session_end", f"report_id={report_id or 'none'}")
     return final_state  # type: ignore[return-value]
+
+
+def _human_step_label(node_name: str) -> str:
+    return {
+        "perception": "Recording & transcription…",
+        "phoneme_analysis": "Analysing sounds…",
+        "history_analysis": "Loading your progress history…",
+        "feedback_generation": "Preparing therapist feedback…",
+        "execution": "Speaking feedback…",
+        "success": "Session complete",
+        "hard_stop": "Session paused",
+        "therapist_review": "Escalated to therapist",
+    }.get(node_name, node_name.replace("_", " "))
 
 
 def run_session() -> SpeechTherapyState:

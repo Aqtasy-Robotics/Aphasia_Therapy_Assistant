@@ -20,6 +20,7 @@ import Calender from "./pages/therapist/Calender";
 import Reports from "./pages/therapist/Reports";
 import Messages from "./pages/therapist/Messages";
 import Settings from "./pages/therapist/Settings";
+import AgentSessionTrace from "./pages/therapist/AgentSessionTrace";
 
 // Patient Pages
 import PatientDashboard from "./pages/patient/PatientDashboard";
@@ -68,6 +69,10 @@ function App() {
           <Route path="/therapist-reports" element={<Reports />} />
           <Route path="/therapist-messages" element={<Messages />} />
           <Route path="/therapist-settings" element={<Settings />} />
+          <Route
+            path="/therapist-agent-pipeline"
+            element={<AgentSessionTrace />}
+          />
         </Route>
 
         {/* --- FALLBACK (404) --- */}

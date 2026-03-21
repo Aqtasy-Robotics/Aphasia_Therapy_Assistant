@@ -202,7 +202,7 @@ async def listen(
 
         if upload_success:
             logger.info("Audio recorded and uploaded successfully: {} bytes", len(wav_bytes))
-            return {
+            out: Dict[str, Any] = {
                 "driver": "ear",
                 "action": "listen",
                 "duration_s": duration_s,
@@ -211,6 +211,9 @@ async def listen(
                 "audio_size_bytes": len(wav_bytes),
                 "upload_success": True,
             }
+            if payload.get("patient_id"):
+                out["patient_id"] = str(payload["patient_id"])
+            return out
         else:
             logger.error("Audio recorded but upload failed")
             return {

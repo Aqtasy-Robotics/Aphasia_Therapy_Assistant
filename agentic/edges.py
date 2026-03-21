@@ -8,7 +8,7 @@ Changes from original:
 """
 
 from __future__ import annotations  # enable postponed evaluation of annotations
-from state import SpeechTherapyState  # shared TypedDict used by all routing helpers
+from agentic.state import SpeechTherapyState  # shared TypedDict used by all routing helpers
 
 CONFIDENCE_THRESHOLD = -1.0  # minimum acceptable confidence score from the transcription step
 MAX_RECORD_RETRIES   = 2     # how many times we are willing to re-record audio

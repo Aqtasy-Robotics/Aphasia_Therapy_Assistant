@@ -16,7 +16,7 @@ from g2p_en import G2p
 from sentence_transformers import SentenceTransformer, util
 from wordfreq import zipf_frequency
 
-from state import SpeechTherapyState
+from agentic.state import SpeechTherapyState
 
 _g2p = G2p()
 print("Loading Semantic Model...")

@@ -192,6 +192,7 @@ ScreenManager:
         _APP_READY = True
         Clock.schedule_interval(self._drain_ui_command_queue, 1 / 30.0)
         Clock.schedule_interval(self._feedback_autoreturn, 1 / 10.0)
+        Clock.schedule_interval(self._poll_agent_progress, 0.15)
         self._apply_state()
 
     def on_stop(self) -> None:
@@ -203,6 +204,23 @@ ScreenManager:
             return
         if (time.monotonic() - self._last_feedback_ts) > 1.0:
             self.root.current = "practice_word"
+
+    def _poll_agent_progress(self, _dt: float) -> None:
+        """Show LangGraph step labels from agentic.progress_bridge while session_busy."""
+        if not self.state.session_busy:
+            return
+        try:
+            from agentic.progress_bridge import drain_progress_events
+        except ImportError:
+            return
+        events = drain_progress_events(24)
+        if not events:
+            return
+        last = events[-1]
+        hint = (last.get("detail") or last.get("step") or "").strip()
+        if hint:
+            self.state.mic_hint = str(hint)[:140]
+            self._apply_state()
 
     def _drain_ui_command_queue(self, _dt: float) -> None:
         for _ in range(12):
@@ -381,7 +399,13 @@ ScreenManager:
         if self.state.session_busy:
             return
         self.state.session_busy = True
-        self.state.mic_hint = "Running perception and analysis..."
+        try:
+            from agentic.progress_bridge import clear_progress_events
+
+            clear_progress_events()
+        except ImportError:
+            pass
+        self.state.mic_hint = "Starting therapy session…"
         self._apply_state()
         self.emit_touch_event("speak_tap", word=self.state.word, patient_name=patient_name)
 
@@ -400,11 +424,15 @@ ScreenManager:
     def _load_graph_module(self):
         if self._graph_module is not None:
             return self._graph_module
-        repo_root = Path(__file__).resolve().parents[3]
-        agentic_dir = repo_root / "agentic"
-        if str(agentic_dir) not in sys.path:
-            sys.path.insert(0, str(agentic_dir))
-        self._graph_module = importlib.import_module("graph")
+        here = Path(__file__).resolve()
+        repo_root = here
+        for p in [here, *here.parents]:
+            if (p / "agentic" / "graph.py").is_file():
+                repo_root = p
+                break
+        if str(repo_root) not in sys.path:
+            sys.path.insert(0, str(repo_root))
+        self._graph_module = importlib.import_module("agentic.graph")
         return self._graph_module
 
     def _on_session_success(self, final_state: Dict[str, Any]) -> None:
@@ -429,6 +457,7 @@ ScreenManager:
                 "session_complete",
                 session_outcome=final_state.get("session_outcome"),
                 report_id=final_state.get("report_id"),
+                agent_run_id=final_state.get("agent_run_id"),
             )
         Clock.schedule_once(_apply, 0)
 

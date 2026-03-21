@@ -41,6 +41,7 @@ class SpeechTherapyState(TypedDict):
     feedback:           Optional[Dict[str, Any]]   # full feedback dict from Groq
     practice_exercise:  Optional[str]
     feedback_attempts:  int
+    feedback_scores:    Optional[Dict[str, Any]]   # optional LLM evaluator scores (simplicity, empathy, actionable)
 
     # ── Session identity ─────────────────────────────────────────
     patient_id:             Optional[str]    # Supabase patients.id
@@ -51,6 +52,7 @@ class SpeechTherapyState(TypedDict):
    
     # ── Report ───────────────────────────────────────────────────
     report_id:              Optional[str]    # Supabase session_reports.id
+    agent_run_id:           Optional[str]    # UUID grouping rows in agent_pipeline_steps
     # ── Execution ───────────────────────────────────────────────
     audio_output_path:  Optional[str]        # path to any generated TTS audio output file
     session_complete:   bool                 # flag indicating whether the logical session has finished

@@ -26,8 +26,8 @@ from typing import Optional
 
 from loguru import logger
 
-from db.mem0_store import add_session_memory
-from state import SpeechTherapyState
+from agentic.db.mem0_store import add_session_memory
+from agentic.state import SpeechTherapyState
 
 # ── Optional TTS (pyttsx3 works offline on Raspberry Pi) ────────────────────
 try:

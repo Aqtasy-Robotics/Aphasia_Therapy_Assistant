@@ -19,9 +19,17 @@ import os
 import sys
 from pathlib import Path
 
-# run_gui.py lives in …/execution_agent/execution_agent/ (folder with main.py).
 _AGENT_DIR = Path(__file__).resolve().parent
-_REPO_ROOT = _AGENT_DIR.parent
+
+
+def _find_repo_root(start: Path) -> Path:
+    for p in [start, *start.parents]:
+        if (p / "agentic" / "graph.py").is_file():
+            return p
+    return start.parent
+
+
+_REPO_ROOT = _find_repo_root(_AGENT_DIR)
 
 
 def _load_env_files() -> None:
@@ -41,6 +49,7 @@ def _load_env_files() -> None:
         _REPO_ROOT / "backend" / ".env",
         _REPO_ROOT / "agentic" / "db" / ".env",
         _AGENT_DIR / ".env",
+        _AGENT_DIR.parent / ".env",
     ]
     for path in candidates:
         if path.is_file():

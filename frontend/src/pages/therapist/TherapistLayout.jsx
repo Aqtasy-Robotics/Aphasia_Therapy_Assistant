@@ -107,6 +107,11 @@ const TherapistLayout = () => {
             onClick={() => handleNav("/therapist-patients")}
           />
           <NavItem
+            label="Agent pipeline"
+            active={isActive("/therapist-agent-pipeline")}
+            onClick={() => handleNav("/therapist-agent-pipeline")}
+          />
+          <NavItem
             label="Calendar"
             active={isActive("/therapist-calendar")}
             onClick={() => handleNav("/therapist-calendar")}

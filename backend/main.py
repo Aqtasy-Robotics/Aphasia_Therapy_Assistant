@@ -120,8 +120,9 @@ async def post_robot_status(ack: CommandAck):
     state: SpeechTherapyState = {
         "audio_path": None,
         "transcript": result.get("transcript"),
-        "confidence_score": None,
-        "retry_count": 0,
+        "confidence_score": result.get("confidence_score"),
+        "retry_count": int(result.get("retry_count") or 0),
+        "perception_failure_reason": result.get("perception_failure_reason"),
         "transcript_attempts": result.get("transcript_attempts") or [],
 
         "target_word": result.get("target_word"),
@@ -141,6 +142,7 @@ async def post_robot_status(ack: CommandAck):
         "feedback": result.get("feedback"),
         "practice_exercise": result.get("practice_exercise"),
         "feedback_attempts": int(result.get("feedback_attempts") or 0),
+        "feedback_scores": result.get("feedback_scores"),
 
         "patient_id": str(patient_id),
         "assignment_id": result.get("assignment_id"),
@@ -149,7 +151,8 @@ async def post_robot_status(ack: CommandAck):
         "session_duration_secs": _to_optional_int(result.get("session_duration_secs")),
 
         "report_id": None,
-        "audio_output_path": None,
+        "agent_run_id": result.get("agent_run_id"),
+        "audio_output_path": result.get("audio_output_path"),
         "session_complete": bool(result.get("session_complete") or False),
         "session_outcome": result.get("session_outcome"),
         "fatigue_level": _to_optional_int(result.get("fatigue_level")),
@@ -176,6 +179,17 @@ async def post_ui_event(device_id: str, body: UiEventIn):
         body.payload,
         body.timestamp,
     )
+    try:
+        supabase.table("robot_ui_events").insert(
+            {
+                "device_id": device_id,
+                "event_type": body.type,
+                "payload": body.payload,
+                "client_ts": body.timestamp,
+            }
+        ).execute()
+    except Exception as exc:
+        bridge_log.warning("robot_ui_events insert skipped: %s", exc)
     return {"status": "ok", "device_id": device_id}
 
 

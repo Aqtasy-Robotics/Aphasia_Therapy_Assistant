@@ -17,9 +17,9 @@ import soundfile as sf
 from dotenv import load_dotenv
 from groq import Groq
 
-from edges import CONFIDENCE_THRESHOLD
-from nodes.execution_node import _get_failure_reason_message
-from state import SpeechTherapyState
+from agentic.edges import CONFIDENCE_THRESHOLD
+from agentic.nodes.execution_node import _get_failure_reason_message
+from agentic.state import SpeechTherapyState
 
 load_dotenv()
 

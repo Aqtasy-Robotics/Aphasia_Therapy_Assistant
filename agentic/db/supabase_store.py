@@ -14,7 +14,7 @@ from typing import Any, Dict, Optional
 from dotenv import load_dotenv
 from supabase import Client, create_client
 
-from state import SpeechTherapyState
+from agentic.state import SpeechTherapyState
 
 # Load environment from the agentic .env (and parent env)
 load_dotenv()
@@ -22,6 +22,7 @@ load_dotenv()
 _SUPABASE_URL: Optional[str] = os.getenv("SUPABASE_URL")
 _SUPABASE_SERVICE_KEY: Optional[str] = os.getenv("SUPABASE_SERVICE_KEY")
 _SESSION_REPORTS_TABLE: str = os.getenv("SESSION_REPORTS_TABLE", "session_reports")
+_PIPELINE_STEPS_TABLE: str = os.getenv("AGENT_PIPELINE_STEPS_TABLE", "agent_pipeline_steps")
 
 _supabase: Optional[Client] = None
 
@@ -513,3 +514,116 @@ def persist_session_state(state: SpeechTherapyState) -> Optional[str]:
 
         print(f"[agentic-db] Error inserting session report into '{_SESSION_REPORTS_TABLE}': {exc}")
         return None
+
+
+def fetch_recent_session_metrics(
+    patient_id: str,
+    *,
+    limit_reports: int = 12,
+) -> tuple[Optional[str], int]:
+    """Return (patient_trend, sessions_done_window) from recent ``session_reports`` rows.
+
+    *patient_trend* is ``\"improving\"``, ``\"needs work\"``, or ``None`` if unknown/flat.
+    """
+
+    if not patient_id:
+        return None, 0
+
+    client = _get_client()
+    if client is None:
+        return None, 0
+
+    try:
+        response = (
+            client.table(_SESSION_REPORTS_TABLE)
+            .select("accuracy, created_at")
+            .eq("patient_id", patient_id)
+            .order("created_at", desc=True)
+            .limit(limit_reports)
+            .execute()
+        )
+    except Exception as exc:
+        print(f"[agentic-db] fetch_recent_session_metrics: {exc}")
+        return None, 0
+
+    rows = getattr(response, "data", None) or []
+    if not rows:
+        return None, 0
+
+    def _to_float(val: Any) -> Optional[float]:
+        try:
+            if val is None:
+                return None
+            return float(val)
+        except (TypeError, ValueError):
+            return None
+
+    accs = [_to_float(r.get("accuracy")) for r in rows if isinstance(r, dict)]
+    accs = [a for a in accs if a is not None]
+    n = len(rows)
+    if len(accs) < 2:
+        return None, n
+
+    recent = accs[:3]
+    older = accs[3:6]
+    r_avg = sum(recent) / len(recent)
+    if len(older) < 2:
+        return None, n
+    o_avg = sum(older) / len(older)
+    if r_avg >= o_avg + 5.0:
+        return "improving", n
+    if r_avg <= o_avg - 5.0:
+        return "needs work", n
+    return None, n
+
+
+def insert_agent_pipeline_step(
+    *,
+    patient_id: str,
+    run_id: str,
+    step_name: str,
+    detail: Optional[Dict[str, Any]] = None,
+    report_id: Optional[str] = None,
+) -> None:
+    """Append one LangGraph step for portal / analytics (table may be absent on older DBs)."""
+
+    client = _get_client()
+    if client is None:
+        return
+
+    row: Dict[str, Any] = {
+        "patient_id": patient_id,
+        "run_id": run_id,
+        "step_name": step_name,
+        "detail": detail or {},
+    }
+    if report_id:
+        row["report_id"] = report_id
+
+    try:
+        client.table(_PIPELINE_STEPS_TABLE).insert(row).execute()
+    except Exception as exc:
+        print(f"[agentic-db] pipeline step insert skipped ({_PIPELINE_STEPS_TABLE}): {exc}")
+
+
+def link_pipeline_steps_to_report(
+    *,
+    run_id: str,
+    report_id: str,
+    patient_id: str,
+) -> None:
+    """Attach ``report_id`` to all steps from a completed graph run."""
+
+    client = _get_client()
+    if client is None:
+        return
+    try:
+        (
+            client.table(_PIPELINE_STEPS_TABLE)
+            .update({"report_id": report_id})
+            .eq("run_id", run_id)
+            .eq("patient_id", patient_id)
+            .execute()
+        )
+    except Exception as exc:
+        print(f"[agentic-db] link_pipeline_steps_to_report: {exc}")

@@ -9,7 +9,7 @@ from __future__ import annotations  # enable postponed evaluation of annotations
 
 from typing import Dict, Any  # typing aliases used for the return type
 
-from state import SpeechTherapyState  # shared TypedDict for all LangGraph nodes
+from agentic.state import SpeechTherapyState
 
 
 def success_node(state: SpeechTherapyState) -> Dict[str, Any]:
