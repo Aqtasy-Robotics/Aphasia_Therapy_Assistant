@@ -27,3 +27,18 @@ kivy>=2.3.0                # Touch UI framework
 
 # Utilities
 loguru>=0.7.0              # Better logging
+
+# LangGraph therapy session (Kivy: patient name + mic → agentic/graph.py)
+# Requires repo-root .env with SUPABASE_*, GROQ_API, etc.
+supabase>=2.0.0
+langgraph>=0.2.0
+langchain>=0.2.0
+langchain-core>=0.2.0
+groq>=0.9.0
+soundfile>=0.12.1
+g2p-en>=2.1.0
+nltk>=3.8.1
+sentence-transformers>=2.2.2
+wordfreq>=3.0.0
+pyttsx3>=2.90
+mem0ai>=0.1.0
