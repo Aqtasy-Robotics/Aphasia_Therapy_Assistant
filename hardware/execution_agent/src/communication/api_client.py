@@ -8,7 +8,7 @@ import logging
 
 import httpx
 
-from src.communication.models import CommandAck, ExecutionCommand
+from src.communication.models import CommandAck, ExecutionCommand, UiEventPayload
 from src.settings import Settings
 
 
@@ -193,6 +193,36 @@ class ApiClient:
         logger.error(
             "Non-success response when uploading audio for device %s: %s",
             self._device_id,
+            response.status_code,
+        )
+        return False
+
+    async def post_ui_event(self, event: dict) -> bool:
+        """
+        POST a touch or local UI event to the bridge (best-effort).
+
+        Expected keys (see emit_touch_event in body_app): type, payload, timestamp.
+        """
+        try:
+            data = UiEventPayload.model_validate(event).model_dump(mode="json")
+        except Exception as exc:
+            logger.warning("Skipping invalid UI event payload: %s: %s", exc, event)
+            return False
+
+        endpoint = f"/ui-events/{self._device_id}"
+        response = await self._request_with_retries("POST", endpoint, json=data)
+
+        if response is None:
+            logger.warning("Failed to POST UI event type=%s after retries", data.get("type"))
+            return False
+
+        if response.is_success:
+            logger.debug("Posted UI event type=%s", data.get("type"))
+            return True
+
+        logger.warning(
+            "Non-success response when posting UI event type=%s: %s",
+            data.get("type"),
             response.status_code,
         )
         return False

@@ -40,6 +40,17 @@ class ExecutionCommand(BaseModel):
     )
 
 
+class UiEventPayload(BaseModel):
+    """Touch or local UI event posted from the execution agent to the bridge."""
+
+    type: str = Field(..., description="Event name, e.g. start_session, speak_tap")
+    payload: Dict[str, Any] = Field(default_factory=dict, description="Event-specific data")
+    timestamp: Optional[float] = Field(
+        default=None,
+        description="Client monotonic or wall time when the event was emitted",
+    )
+
+
 class CommandAck(BaseModel):
     """Acknowledgement / result sent back to the backend after executing a command."""
 
@@ -64,5 +75,6 @@ __all__ = [
     "StatusEnum",
     "ExecutionCommand",
     "CommandAck",
+    "UiEventPayload",
 ]
 

@@ -73,6 +73,14 @@ def dequeue_ui_events(max_items: int = 16) -> List[Dict[str, Any]]:
     return events
 
 
+def has_pending_ui_events() -> bool:
+    """Return True if the UI event queue may have items (best-effort, for loop timing)."""
+    try:
+        return _UI_EVENT_QUEUE.qsize() > 0
+    except NotImplementedError:
+        return False
+
+
 def _parse_screen(payload: Dict[str, Any]) -> str:
     raw = str(payload.get("screen", "idle")).strip().lower()
     return raw if raw in VALID_SCREENS else "idle"
@@ -534,6 +542,7 @@ __all__ = [
     "start_ui_app",
     "is_ui_ready",
     "dequeue_ui_events",
+    "has_pending_ui_events",
     "load_display_config",
     "maybe_start_ui_from_env",
 ]
