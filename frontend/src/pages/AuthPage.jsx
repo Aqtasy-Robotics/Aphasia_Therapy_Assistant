@@ -12,18 +12,12 @@ const AuthPage = ({ type }) => {
   const [role, setRole] = useState("patient");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [newPassword, setNewPassword] = useState(""); // For recovery
   const [fullName, setFullName] = useState("");
+  const [clinicName, setClinicName] = useState("");
 
   const [error, setError] = useState("");
-  const [message, setMessage] = useState(""); // For success messages
+  const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // View States
-  const [isForgotPassword, setIsForgotPassword] = useState(false);
-  const [isRecoveryFlow, setIsRecoveryFlow] = useState(false);
-
-  const [clinicName, setClinicName] = useState("");
 
   const themeColor = role === "therapist" ? "bg-[#064e3b]" : "bg-[#172554]";
   const textColor = role === "therapist" ? "text-[#064e3b]" : "text-[#172554]";
@@ -32,7 +26,7 @@ const AuthPage = ({ type }) => {
       ? "focus:ring-[#064e3b]/20"
       : "focus:ring-[#172554]/20";
 
-  // 1. CATCH MESSAGES FROM REDIRECTS (e.g., password reset success)
+  // Catch messages from redirects if any
   useEffect(() => {
     if (location.state?.message) {
       setMessage(location.state.message);
@@ -40,23 +34,6 @@ const AuthPage = ({ type }) => {
     }
   }, [location, navigate]);
 
-  // 2. LISTEN FOR PASSWORD RECOVERY LINK CLICK
-  useEffect(() => {
-    const { data: authListener } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        if (event === "PASSWORD_RECOVERY") {
-          setIsRecoveryFlow(true);
-          setIsForgotPassword(false);
-        }
-      },
-    );
-
-    return () => {
-      authListener.subscription.unsubscribe();
-    };
-  }, []);
-
-  // 3. STANDARD LOGIN / INSTANT SIGNUP
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
@@ -78,7 +55,7 @@ const AuthPage = ({ type }) => {
           userRole === "therapist" ? "/dashboard" : "/patient-dashboard",
         );
       } else {
-        // --- SIGNUP FLOW (Instant Login) ---
+        // --- SIGNUP FLOW ---
         const { data, error: signUpError } = await supabase.auth.signUp({
           email,
           password,
@@ -93,7 +70,7 @@ const AuthPage = ({ type }) => {
 
         if (signUpError) throw signUpError;
 
-        // FORCE SAVE TO PROFILES TABLE USING UPSERT
+        // Force Save to Profiles table
         if (data.user) {
           const { error: profileError } = await supabase
             .from("profiles")
@@ -104,7 +81,6 @@ const AuthPage = ({ type }) => {
               clinic_name: role === "therapist" ? clinicName : null,
             });
 
-          // Log error to console if RLS policies are blocking the write
           if (profileError) {
             console.error(
               "⚠️ Supabase Profile Save Error:",
@@ -113,7 +89,6 @@ const AuthPage = ({ type }) => {
           }
         }
 
-        // Instantly route them to their dashboard
         navigate(role === "therapist" ? "/dashboard" : "/patient-dashboard");
       }
     } catch (err) {
@@ -122,66 +97,6 @@ const AuthPage = ({ type }) => {
       setIsSubmitting(false);
     }
   };
-
-  // 4. SEND RESET LINK TO EMAIL
-  const handlePasswordResetRequest = async (e) => {
-    e.preventDefault();
-    setError("");
-    setMessage("");
-    setIsSubmitting(true);
-
-    try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: window.location.origin + "/login",
-      });
-      if (error) throw error;
-      setMessage(
-        "Password reset link sent! Check your email inbox or spam folder.",
-      );
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  // 5. UPDATE THE ACTUAL PASSWORD
-  const handleUpdatePassword = async (e) => {
-    e.preventDefault();
-    setError("");
-    setMessage("");
-    setIsSubmitting(true);
-
-    try {
-      const { error } = await supabase.auth.updateUser({
-        password: newPassword,
-      });
-      if (error) throw error;
-
-      setMessage("Password updated successfully! Redirecting...");
-
-      setTimeout(() => {
-        setIsRecoveryFlow(false);
-        navigate(role === "therapist" ? "/dashboard" : "/patient-dashboard");
-      }, 2000);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  // Dynamic Text Helpers
-  let pageTitle = isLogin ? "Welcome Back" : "Join Us";
-  let subTitle = "Clinical Portal Access";
-
-  if (isRecoveryFlow) {
-    pageTitle = "Set New Password";
-    subTitle = "Secure Account Recovery";
-  } else if (isForgotPassword) {
-    pageTitle = "Reset Password";
-    subTitle = "Account Recovery";
-  }
 
   return (
     <div className="h-screen flex flex-col md:flex-row font-sans selection:bg-[#172554]/10 bg-white overflow-hidden antialiased">
@@ -212,8 +127,7 @@ const AuthPage = ({ type }) => {
                 <span className="font-extrabold text-white border-b-2 border-white/20 pb-1">
                   Waabi
                 </span>
-                —an intelligent speech therapy companion designed to support
-                every voice.
+                —an intelligent companion designed to support every voice.
               </p>
               <p>
                 Whether you are a <b className="text-white">therapist</b>{" "}
@@ -221,17 +135,9 @@ const AuthPage = ({ type }) => {
                 <b className="text-white">patient</b> finding your words again,
                 Waabi bridges the gap between the clinic and the home.
               </p>
-              <p>
-                By combining <b className="text-white">empathetic AI</b> with{" "}
-                <b className="text-white">personalized care</b>, we make
-                recovery more consistent, data-driven, and human.
-              </p>
             </div>
-
             <div className="pt-8 animate-in fade-in slide-in-from-bottom-8 duration-700 delay-500">
-              <p
-                className={`text-[10px] font-extrabold uppercase tracking-[0.8em] text-white/40`}
-              >
+              <p className="text-[10px] font-extrabold uppercase tracking-[0.8em] text-white/40">
                 The Future of Aphasia Recovery
               </p>
             </div>
@@ -249,10 +155,10 @@ const AuthPage = ({ type }) => {
               className="h-14 w-auto mb-10 cursor-pointer hover:scale-110 transition-transform duration-500"
             />
             <h2 className="text-3xl font-extrabold text-gray-800 tracking-tight">
-              {pageTitle}
+              {isLogin ? "Welcome Back" : "Join Us"}
             </h2>
             <p className="text-gray-400 font-bold text-[10px] uppercase tracking-[0.2em] mt-3 italic">
-              {subTitle}
+              Clinical Portal Access
             </p>
 
             {error && (
@@ -271,61 +177,27 @@ const AuthPage = ({ type }) => {
             )}
           </div>
 
-          {/* Hide Role Switcher if in Forgot/Recover Password mode */}
-          {!isForgotPassword && !isRecoveryFlow && (
-            <div className="flex bg-gray-50 rounded-2xl p-1.5 mb-10 border border-gray-100 shadow-inner animate-in fade-in duration-500">
-              <button
-                type="button"
-                onClick={() => setRole("patient")}
-                className={`flex-1 py-4 text-[10px] font-extrabold uppercase tracking-[0.2em] rounded-xl transition-all duration-500 ${
-                  role === "patient"
-                    ? "bg-[#172554] text-white shadow-xl shadow-[#172554]/20"
-                    : "text-gray-400 hover:text-gray-600"
-                }`}
-              >
-                Patient
-              </button>
-              <button
-                type="button"
-                onClick={() => setRole("therapist")}
-                className={`flex-1 py-4 text-[10px] font-extrabold uppercase tracking-[0.2em] rounded-xl transition-all duration-500 ${
-                  role === "therapist"
-                    ? "bg-[#064e3b] text-white shadow-xl shadow-[#064e3b]/20"
-                    : "text-gray-400 hover:text-gray-600"
-                }`}
-              >
-                Therapist
-              </button>
-            </div>
-          )}
+          {/* Role Switcher */}
+          <div className="flex bg-gray-50 rounded-2xl p-1.5 mb-10 border border-gray-100 shadow-inner">
+            <button
+              type="button"
+              onClick={() => setRole("patient")}
+              className={`flex-1 py-4 text-[10px] font-extrabold uppercase tracking-[0.2em] rounded-xl transition-all duration-500 ${role === "patient" ? "bg-[#172554] text-white shadow-xl shadow-[#172554]/20" : "text-gray-400 hover:text-gray-600"}`}
+            >
+              Patient
+            </button>
+            <button
+              type="button"
+              onClick={() => setRole("therapist")}
+              className={`flex-1 py-4 text-[10px] font-extrabold uppercase tracking-[0.2em] rounded-xl transition-all duration-500 ${role === "therapist" ? "bg-[#064e3b] text-white shadow-xl shadow-[#064e3b]/20" : "text-gray-400 hover:text-gray-600"}`}
+            >
+              Therapist
+            </button>
+          </div>
 
-          {/* DYNAMIC FORM */}
-          <form
-            onSubmit={
-              isRecoveryFlow
-                ? handleUpdatePassword
-                : isForgotPassword
-                  ? handlePasswordResetRequest
-                  : handleSubmit
-            }
-            className="space-y-5"
-          >
-            {/* 1. UPDATE PASSWORD FLOW */}
-            {isRecoveryFlow && (
-              <input
-                type="password"
-                placeholder="Enter new password"
-                value={newPassword}
-                required
-                className={`w-full bg-gray-50 border border-transparent rounded-xl px-5 py-4 text-xs font-bold outline-none transition-all ${ringColor} focus:ring-4 focus:bg-white focus:border-gray-100`}
-                onChange={(e) => setNewPassword(e.target.value)}
-              />
-            )}
-
-            {/* 2. NORMAL SIGNUP FLOW */}
-            {!isLogin && !isForgotPassword && !isRecoveryFlow && (
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {!isLogin && (
               <>
-                {/* Full Name input for BOTH Therapist and Patient */}
                 <input
                   type="text"
                   placeholder="Full Name"
@@ -334,8 +206,6 @@ const AuthPage = ({ type }) => {
                   className={`w-full bg-gray-50 border border-transparent rounded-xl px-5 py-4 text-xs font-bold outline-none transition-all ${ringColor} focus:ring-4 focus:bg-white focus:border-gray-100`}
                   onChange={(e) => setFullName(e.target.value)}
                 />
-
-                {/* Therapist View: Clinic Name separately below */}
                 {role === "therapist" && (
                   <input
                     type="text"
@@ -349,50 +219,24 @@ const AuthPage = ({ type }) => {
               </>
             )}
 
-            {/* 3. EMAIL INPUT (Used in Login, Signup, and Request Reset) */}
-            {!isRecoveryFlow && (
-              <input
-                type="email"
-                placeholder="Email Address"
-                value={email}
-                required
-                className={`w-full bg-gray-50 border border-transparent rounded-xl px-5 py-4 text-xs font-bold outline-none transition-all ${ringColor} focus:ring-4 focus:bg-white focus:border-gray-100`}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            )}
+            <input
+              type="email"
+              placeholder="Email Address"
+              value={email}
+              required
+              className={`w-full bg-gray-50 border border-transparent rounded-xl px-5 py-4 text-xs font-bold outline-none transition-all ${ringColor} focus:ring-4 focus:bg-white focus:border-gray-100`}
+              onChange={(e) => setEmail(e.target.value)}
+            />
 
-            {/* 4. PASSWORD INPUT (Used in Login & Signup only) */}
-            {!isForgotPassword && !isRecoveryFlow && (
-              <div>
-                <input
-                  type="password"
-                  placeholder="Password"
-                  value={password}
-                  required
-                  className={`w-full bg-gray-50 border border-transparent rounded-xl px-5 py-4 text-xs font-bold outline-none transition-all ${ringColor} focus:ring-4 focus:bg-white focus:border-gray-100`}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
+            <input
+              type="password"
+              placeholder="Password"
+              value={password}
+              required
+              className={`w-full bg-gray-50 border border-transparent rounded-xl px-5 py-4 text-xs font-bold outline-none transition-all ${ringColor} focus:ring-4 focus:bg-white focus:border-gray-100`}
+              onChange={(e) => setPassword(e.target.value)}
+            />
 
-                {/* Forgot Password Link */}
-                {isLogin && (
-                  <div className="flex justify-end mt-3">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsForgotPassword(true);
-                        setError("");
-                        setMessage("");
-                      }}
-                      className={`text-[10px] font-extrabold uppercase tracking-widest ${textColor} hover:underline transition-all`}
-                    >
-                      Forgot Password?
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* SUBMIT BUTTON */}
             <button
               type="submit"
               disabled={isSubmitting}
@@ -400,48 +244,25 @@ const AuthPage = ({ type }) => {
             >
               {isSubmitting
                 ? "Processing..."
-                : isRecoveryFlow
-                  ? "Update Password"
-                  : isForgotPassword
-                    ? "Send Reset Link"
-                    : isLogin
-                      ? "Sign In"
-                      : "Register Now"}
+                : isLogin
+                  ? "Sign In"
+                  : "Register Now"}
             </button>
           </form>
 
-          {/* BOTTOM LINKS */}
-          {!isRecoveryFlow && (
-            <div className="mt-12 text-center text-[11px] font-bold text-gray-400 tracking-wide">
-              {isForgotPassword ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsForgotPassword(false);
-                    setError("");
-                    setMessage("");
-                  }}
-                  className={`font-extrabold ${textColor} hover:underline decoration-2 underline-offset-4 transition-all`}
-                >
-                  Back to Login
-                </button>
-              ) : (
-                <>
-                  {isLogin ? "Don't have an account? " : "Already registered? "}
-                  <Link
-                    to={isLogin ? "/signup" : "/login"}
-                    className={`font-extrabold ${textColor} hover:underline ml-1 decoration-2 underline-offset-4 transition-all`}
-                    onClick={() => {
-                      setError("");
-                      setMessage("");
-                    }}
-                  >
-                    {isLogin ? "Create account" : "Log In"}
-                  </Link>
-                </>
-              )}
-            </div>
-          )}
+          <div className="mt-12 text-center text-[11px] font-bold text-gray-400 tracking-wide">
+            {isLogin ? "Don't have an account? " : "Already registered? "}
+            <Link
+              to={isLogin ? "/signup" : "/login"}
+              className={`font-extrabold ${textColor} hover:underline ml-1 decoration-2 underline-offset-4 transition-all`}
+              onClick={() => {
+                setError("");
+                setMessage("");
+              }}
+            >
+              {isLogin ? "Create account" : "Log In"}
+            </Link>
+          </div>
         </div>
       </div>
     </div>
