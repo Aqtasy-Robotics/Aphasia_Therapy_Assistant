@@ -27,7 +27,7 @@ import MyProgress from "./pages/patient/MyProgress";
 import MyWords from "./pages/patient/MyWords";
 import MySessions from "./pages/patient/MySessions";
 import Chat from "./pages/patient/Chat";
-import Profile from "./pages/patient/Profile";
+import Profile from "./pages/patient/Profile"; // Generic Profile component
 
 function App() {
   return (
@@ -38,7 +38,7 @@ function App() {
         <Route path="/login" element={<AuthPage type="login" />} />
         <Route path="/signup" element={<AuthPage type="signup" />} />
 
-        {/* --- PROTECTED PATIENT ROUTES (NESTED) --- */}
+        {/* --- PROTECTED PATIENT ROUTES --- */}
         <Route
           element={
             <ProtectedRoute requiredRole="patient">
@@ -51,10 +51,10 @@ function App() {
           <Route path="/patient-words" element={<MyWords />} />
           <Route path="/patient-sessions" element={<MySessions />} />
           <Route path="/patient-chat" element={<Chat />} />
-          <Route path="/profile" element={<Profile />} />
+          <Route path="/patient-profile" element={<Profile />} />
         </Route>
 
-        {/* --- PROTECTED THERAPIST ROUTES (NESTED) --- */}
+        {/* --- PROTECTED THERAPIST ROUTES --- */}
         <Route
           element={
             <ProtectedRoute requiredRole="therapist">
@@ -68,6 +68,7 @@ function App() {
           <Route path="/therapist-reports" element={<Reports />} />
           <Route path="/therapist-messages" element={<Messages />} />
           <Route path="/therapist-settings" element={<Settings />} />
+          <Route path="/therapist-profile" element={<Profile />} />
         </Route>
 
         {/* --- FALLBACK (404) --- */}

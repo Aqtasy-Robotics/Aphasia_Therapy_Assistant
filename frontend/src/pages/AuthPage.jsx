@@ -23,7 +23,6 @@ const AuthPage = ({ type }) => {
   const [isForgotPassword, setIsForgotPassword] = useState(false);
   const [isRecoveryFlow, setIsRecoveryFlow] = useState(false);
 
-  const [title, setTitle] = useState("Mr.");
   const [clinicName, setClinicName] = useState("");
 
   const themeColor = role === "therapist" ? "bg-[#064e3b]" : "bg-[#172554]";
@@ -57,7 +56,7 @@ const AuthPage = ({ type }) => {
     };
   }, []);
 
-  // 3. STANDARD LOGIN / SIGNUP (Auto-login restored)
+  // 3. STANDARD LOGIN / INSTANT SIGNUP
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
@@ -76,12 +75,10 @@ const AuthPage = ({ type }) => {
 
         const userRole = data.user.user_metadata.role;
         navigate(
-          userRole === "therapist"
-            ? "/therapist-dashboard"
-            : "/patient-dashboard",
+          userRole === "therapist" ? "/dashboard" : "/patient-dashboard",
         );
       } else {
-        // --- SIGNUP FLOW (No Email Confirmation Required) ---
+        // --- SIGNUP FLOW (Instant Login) ---
         const { data, error: signUpError } = await supabase.auth.signUp({
           email,
           password,
@@ -89,7 +86,6 @@ const AuthPage = ({ type }) => {
             data: {
               full_name: fullName,
               role: role,
-              title: role === "therapist" ? title : null,
               clinic_name: role === "therapist" ? clinicName : null,
             },
           },
@@ -97,18 +93,28 @@ const AuthPage = ({ type }) => {
 
         if (signUpError) throw signUpError;
 
-        // If they are a therapist, update the extra profile info
-        if (role === "therapist" && data.user) {
-          await supabase
+        // FORCE SAVE TO PROFILES TABLE USING UPSERT
+        if (data.user) {
+          const { error: profileError } = await supabase
             .from("profiles")
-            .update({ title, clinic_name: clinicName })
-            .eq("id", data.user.id);
+            .upsert({
+              id: data.user.id,
+              full_name: fullName,
+              role: role,
+              clinic_name: role === "therapist" ? clinicName : null,
+            });
+
+          // Log error to console if RLS policies are blocking the write
+          if (profileError) {
+            console.error(
+              "⚠️ Supabase Profile Save Error:",
+              profileError.message,
+            );
+          }
         }
 
         // Instantly route them to their dashboard
-        navigate(
-          role === "therapist" ? "/therapist-dashboard" : "/patient-dashboard",
-        );
+        navigate(role === "therapist" ? "/dashboard" : "/patient-dashboard");
       }
     } catch (err) {
       setError(err.message);
@@ -156,9 +162,7 @@ const AuthPage = ({ type }) => {
 
       setTimeout(() => {
         setIsRecoveryFlow(false);
-        navigate(
-          role === "therapist" ? "/therapist-dashboard" : "/patient-dashboard",
-        );
+        navigate(role === "therapist" ? "/dashboard" : "/patient-dashboard");
       }, 2000);
     } catch (err) {
       setError(err.message);
@@ -318,33 +322,10 @@ const AuthPage = ({ type }) => {
               />
             )}
 
-            {/* 2. NORMAL SIGNUP FLOW (Names & Clinic) */}
+            {/* 2. NORMAL SIGNUP FLOW */}
             {!isLogin && !isForgotPassword && !isRecoveryFlow && (
               <>
-                {role === "therapist" && (
-                  <div className="flex gap-3 animate-in slide-in-from-top-4 duration-500">
-                    <div className="w-24">
-                      <select
-                        className={`w-full bg-gray-50 border border-transparent rounded-xl px-3 py-4 text-xs font-bold text-gray-700 outline-none transition-all ${ringColor} focus:ring-4 focus:bg-white focus:border-gray-100`}
-                        value={title}
-                        onChange={(e) => setTitle(e.target.value)}
-                      >
-                        <option value="Mr.">Mr.</option>
-                        <option value="Ms.">Ms.</option>
-                        <option value="Dr.">Dr.</option>
-                        <option value="SLP">SLP</option>
-                      </select>
-                    </div>
-                    <div className="flex-1">
-                      <input
-                        type="text"
-                        placeholder="Clinic Name"
-                        className={`w-full bg-gray-50 border border-transparent rounded-xl px-5 py-4 text-xs font-bold outline-none transition-all ${ringColor} focus:ring-4 focus:bg-white focus:border-gray-100`}
-                        onChange={(e) => setClinicName(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                )}
+                {/* Full Name input for BOTH Therapist and Patient */}
                 <input
                   type="text"
                   placeholder="Full Name"
@@ -353,6 +334,18 @@ const AuthPage = ({ type }) => {
                   className={`w-full bg-gray-50 border border-transparent rounded-xl px-5 py-4 text-xs font-bold outline-none transition-all ${ringColor} focus:ring-4 focus:bg-white focus:border-gray-100`}
                   onChange={(e) => setFullName(e.target.value)}
                 />
+
+                {/* Therapist View: Clinic Name separately below */}
+                {role === "therapist" && (
+                  <input
+                    type="text"
+                    placeholder="Clinic Name"
+                    value={clinicName}
+                    required
+                    className={`w-full bg-gray-50 border border-transparent rounded-xl px-5 py-4 text-xs font-bold outline-none transition-all ${ringColor} focus:ring-4 focus:bg-white focus:border-gray-100 animate-in slide-in-from-top-4 duration-500`}
+                    onChange={(e) => setClinicName(e.target.value)}
+                  />
+                )}
               </>
             )}
 

@@ -5,29 +5,52 @@ import { Menu, X, LogOut } from "lucide-react";
 import logo from "../../assets/black_logo.svg";
 
 const TherapistLayout = () => {
-  const [userName, setUserName] = useState("User");
+  const [userData, setUserData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
 
   useEffect(() => {
-    const checkSession = async () => {
+    const getProfile = async () => {
       const {
         data: { session },
       } = await supabase.auth.getSession();
-      if (session) {
-        setUserName(session.user.user_metadata.full_name || "User");
-        setLoading(false);
-      } else {
+
+      if (!session) {
         navigate("/login");
+        return;
       }
+
+      const { data: profile, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", session.user.id)
+        .single();
+
+      if (error) {
+        console.error("Error fetching profile:", error.message);
+        setUserData({
+          fullName: session.user.user_metadata.full_name || "User",
+          clinicName: "Unknown Clinic",
+          role: "therapist",
+        });
+      } else {
+        setUserData({
+          fullName: profile.full_name,
+          clinicName: profile.clinic_name,
+          role: profile.role,
+        });
+      }
+      setLoading(false);
     };
-    checkSession();
+
+    getProfile();
   }, [navigate]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
+    navigate("/login");
   };
 
   const handleNav = (path) => {
@@ -57,45 +80,31 @@ const TherapistLayout = () => {
         </button>
       </div>
 
-      {/* MOBILE BACKDROP */}
-      {isMobileMenuOpen && (
-        <div
-          className="fixed inset-0 bg-[#012b1d]/20 backdrop-blur-sm z-[110] lg:hidden"
-          onClick={() => setIsMobileMenuOpen(false)}
-        />
-      )}
-
       {/* FIXED SIDEBAR */}
       <aside
-        className={`
-        fixed inset-y-0 left-0 z-[120] w-72 bg-[#012b1d] flex flex-col transition-transform duration-500 ease-in-out
-        lg:translate-x-0 lg:static lg:h-full
-        ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"}
-      `}
+        className={`fixed inset-y-0 left-0 z-[120] w-72 bg-[#012b1d] flex flex-col transition-transform duration-500 ease-in-out lg:translate-x-0 lg:static lg:h-full ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"}`}
       >
-        {/* Logo Section */}
         <div className="relative z-10 flex flex-col items-center pt-12 pb-8 px-8">
           <img
             src={logo}
-            alt="Aqtasy Logo"
+            alt="Logo"
             className="h-16 mb-4 brightness-0 invert filter drop-shadow-md"
           />
-          <span className="text-[10px] font-black text-white/40 uppercase tracking-[0.4em] text-center">
+          <span className="text-[10px] font-black text-white/40 uppercase tracking-[0.4em]">
             Portal
           </span>
         </div>
 
-        {/* Navigation - The middle part now grows and scrolls if needed */}
         <nav className="relative z-10 flex-1 px-6 space-y-3 overflow-y-auto no-scrollbar py-4">
           <NavItem
             label="Home"
-            active={isActive("/therapist-dashboard")}
-            onClick={() => handleNav("/therapist-dashboard")}
+            active={isActive("/dashboard")}
+            onClick={() => handleNav("/dashboard")}
           />
           <NavItem
             label="My Patients"
-            active={isActive("/my-patients")}
-            onClick={() => handleNav("/my-patients")}
+            active={isActive("/therapist-patients")}
+            onClick={() => handleNav("/therapist-patients")}
           />
           <NavItem
             label="Calendar"
@@ -114,16 +123,15 @@ const TherapistLayout = () => {
           />
           <NavItem
             label="My Profile"
-            active={isActive("/profile")}
-            onClick={() => handleNav("/profile")}
+            active={isActive("/therapist-profile")}
+            onClick={() => handleNav("/therapist-profile")}
           />
         </nav>
 
-        {/* Logout Section - Pinned to bottom with padding */}
         <div className="relative z-10 p-8 border-t border-white/10 mt-auto">
           <button
             onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-3 text-white/50 hover:text-white transition-all duration-300 p-4 rounded-2xl hover:bg-red-500/10 group"
+            className="w-full flex items-center justify-center gap-3 text-white/50 hover:text-white p-4 rounded-2xl hover:bg-red-500/10"
           >
             <LogOut size={16} />
             <span className="font-black text-[10px] uppercase tracking-[0.3em]">
@@ -133,25 +141,22 @@ const TherapistLayout = () => {
         </div>
       </aside>
 
-      {/* MAIN CONTENT AREA */}
+      {/* MAIN CONTENT */}
       <main className="flex-1 flex flex-col h-full relative overflow-hidden">
-        {/* Dynamic Background Accents */}
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-[#012b1d]/5 rounded-full blur-[120px] pointer-events-none" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[30%] h-[30%] bg-[#5cb338]/5 rounded-full blur-[100px] pointer-events-none" />
-
         <header className="px-6 lg:px-12 pt-20 lg:pt-12 mb-4 shrink-0 relative z-20">
           <div className="bg-white/70 backdrop-blur-xl px-6 py-3 rounded-2xl border border-white shadow-sm inline-flex items-center gap-4">
             <div className="w-2 h-2 rounded-full bg-[#5cb338] animate-pulse" />
             <h2 className="text-[10px] font-black text-[#012b1d] uppercase tracking-[0.2em]">
               Verified User:{" "}
-              <span className="text-slate-500 ml-1">{userName}</span>
+              <span className="text-slate-500 ml-1">{userData?.fullName}</span>
             </h2>
           </div>
         </header>
 
         <div className="flex-1 overflow-y-auto px-6 lg:px-12 pb-12 relative z-10 no-scrollbar">
           <div className="max-w-7xl mx-auto">
-            <Outlet />
+            {/* Pass userData down to Dashboard and Profile */}
+            <Outlet context={{ userData }} />
           </div>
         </div>
       </main>
@@ -162,12 +167,7 @@ const TherapistLayout = () => {
 const NavItem = ({ label, active, onClick }) => (
   <div
     onClick={onClick}
-    className={`group px-6 py-4 rounded-2xl cursor-pointer transition-all duration-300 flex items-center gap-4
-      ${
-        active
-          ? "bg-white/10 text-white shadow-lg ring-1 ring-white/20"
-          : "text-white/50 hover:bg-white/5 hover:text-white"
-      }`}
+    className={`group px-6 py-4 rounded-2xl cursor-pointer transition-all duration-300 flex items-center gap-4 ${active ? "bg-white/10 text-white shadow-lg ring-1 ring-white/20" : "text-white/50 hover:bg-white/5 hover:text-white"}`}
   >
     <div
       className={`w-1.5 h-1.5 rounded-full transition-all duration-500 ${active ? "bg-[#5cb338] shadow-[0_0_10px_#5cb338]" : "bg-transparent"}`}
