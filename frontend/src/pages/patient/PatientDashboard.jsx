@@ -2,55 +2,69 @@ import React from "react";
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer 
 } from "recharts";
-import { BookOpen, Calendar, Flame, Target } from "lucide-react";
+import { BookOpen, Calendar, Target, TrendingUp } from "lucide-react";
 
-/**
- * 1. ProgressChart Component
- * Explicitly passing the font family to the Recharts SVG elements.
- */
 const ProgressChart = () => {
+  // Empty dataset structurally ready for Supabase data mapping
   const emptyWeek = [
-    { day: "Mon", progress: null },
-    { day: "Tue", progress: null },
-    { day: "Wed", progress: null },
-    { day: "Thu", progress: null },
-    { day: "Fri", progress: null },
-    { day: "Sat", progress: null },
-    { day: "Sun", progress: null },
+    { day: "Mon" },
+    { day: "Tue" },
+    { day: "Wed" },
+    { day: "Thu" },
+    { day: "Fri" },
+    { day: "Sat" },
+    { day: "Sun" },
   ];
 
-  const axisStyle = {
-    fill: "#9ca3af",
+  const axisTextStyle = {
+    fill: "#64748b", // slate-500
     fontSize: 12,
-    fontWeight: 700,
-    fontFamily: "Plus Jakarta Sans", // Explicitly setting the font for the SVG
+    fontWeight: 600,
+    fontFamily: "inherit", // Forces Recharts to use the global portal font
   };
 
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <LineChart data={emptyWeek} margin={{ top: 10, right: 30, left: -20, bottom: 10 }}>
-        <CartesianGrid strokeDasharray="3 3" vertical={true} stroke="#f1f5f9" />
+      {/* Increased left margin to 25 to ensure the Y-Axis label isn't cut off */}
+      <LineChart data={emptyWeek} margin={{ top: 20, right: 20, left: 25, bottom: 10 }}>
+        
+        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={true} />
+        
         <XAxis 
           dataKey="day" 
-          axisLine={{ stroke: "#e5e7eb" }} 
+          axisLine={{ stroke: "#cbd5e1" }} 
           tickLine={false} 
-          tick={axisStyle}
+          tick={axisTextStyle}
           dy={10}
         />
+        
         <YAxis 
           domain={[0, 100]} 
           ticks={[0, 25, 50, 75, 100]}
-          axisLine={{ stroke: "#e5e7eb" }} 
+          axisLine={{ stroke: "#cbd5e1" }} 
           tickLine={false} 
-          tick={axisStyle}
-          dx={-5}
+          tick={axisTextStyle}
+          dx={-10}
+          label={{ 
+            value: 'Accuracy (%)', 
+            angle: -90, 
+            position: 'insideLeft', 
+            offset: -15, // Pushes label left so it doesn't overlap numbers
+            fill: '#172554', // Deep Navy Brand
+            fontSize: 13,
+            fontWeight: 800,
+            fontFamily: 'inherit'
+          }}
         />
+        
+        {/* Deep Navy Line with Forest Green Hover/Active states */}
         <Line 
           type="monotone" 
           dataKey="progress" 
-          stroke="#172554" // Updated to Deep Navy
+          stroke="#172554" 
           strokeWidth={4} 
           dot={{ r: 6, fill: "#172554", strokeWidth: 2, stroke: "#fff" }}
+          activeDot={{ r: 8, fill: "#5cb338", stroke: "#fff", strokeWidth: 2 }} 
           connectNulls={false} 
         />
       </LineChart>
@@ -62,7 +76,7 @@ const ProgressChart = () => {
  * 2. StatCard Component
  */
 const StatCard = ({ title, value, subText, icon, iconBg, textColor, highlightBg = "bg-white" }) => (
-  <div className={`${highlightBg} p-8 rounded-[2.5rem] shadow-2xl shadow-gray-200/40 flex flex-col items-start relative overflow-hidden transition-all duration-300 hover:scale-[1.03] border border-white font-sans`}>
+  <div className={`${highlightBg} p-8 rounded-[2.5rem] shadow-2xl shadow-gray-200/40 flex flex-col items-start relative overflow-hidden transition-all duration-300 hover:scale-[1.03] border border-gray-50 font-sans`}>
     <div className="flex items-center gap-4 mb-10">
       <div className={`${iconBg} p-3.5 rounded-[1.25rem] text-white shadow-lg`}>
         {icon}
@@ -87,7 +101,7 @@ const StatCard = ({ title, value, subText, icon, iconBg, textColor, highlightBg 
  */
 const PatientDashboard = () => {
   return (
-    <div className="animate-in fade-in duration-700 font-sans antialiased">
+    <div className="animate-in fade-in duration-700 font-sans antialiased pb-12">
       {/* Header Section */}
       <header className="mb-12 flex justify-between items-end">
         <div>
@@ -118,36 +132,39 @@ const PatientDashboard = () => {
           value="None" 
           subText="Contact Therapist" 
           icon={<Calendar className="w-5 h-5" />} 
-          iconBg="bg-[#172554]" // Updated to Deep Navy
-          textColor="text-gray-300"
+          iconBg="bg-[#172554]" // Deep Navy
+          textColor="text-[#172554]"
         />
         <StatCard 
           title="Accuracy" 
           value="0%" 
           subText="This week" 
           icon={<Target className="w-5 h-5" />} 
-          iconBg="bg-[#064e3b]" // Updated to Forest Green
-          textColor="text-[#064e3b]"
+          iconBg="bg-[#5cb338]" // Forest Green
+          textColor="text-[#5cb338]"
         />
       </div>
 
-      {/* Main Chart Section */}
-      <div className="bg-white p-10 rounded-[3.5rem] shadow-2xl shadow-gray-200/50 border border-gray-50 relative overflow-hidden">
-        <div className="flex justify-between items-center mb-12">
+      {/* Main Chart Section - Replicated from Screenshot */}
+      <div className="bg-white p-8 md:p-10 rounded-[2.5rem] shadow-xl shadow-gray-200/40 border border-gray-100 relative overflow-hidden">
+        
+        {/* Chart Header */}
+        <div className="flex justify-between items-start mb-10">
           <div>
-            <h2 className="text-xl font-extrabold text-gray-800 uppercase tracking-tight">
-              Recovery Progress
+            <h2 className="text-xl font-bold text-[#172554] tracking-tight">
+              Your Progress This Week
             </h2>
-            <p className="text-[10px] font-bold text-gray-400 mt-2 uppercase tracking-widest italic">Awaiting clinical data sync...</p>
+            <p className="text-sm font-semibold text-gray-500 mt-1">
+              Speech accuracy percentage
+            </p>
           </div>
-          <div className="text-[10px] font-extrabold text-white uppercase tracking-[0.2em] bg-[#172554] px-5 py-2 rounded-xl shadow-lg shadow-[#172554]/10">
-            Weekly View
-          </div>
+          <TrendingUp className="text-[#172554] w-6 h-6 mt-1 mr-2 opacity-80" />
         </div>
         
-        <div className="h-[380px]">
+        <div className="h-[320px] w-full">
           <ProgressChart />
         </div>
+        
       </div>
     </div>
   );
