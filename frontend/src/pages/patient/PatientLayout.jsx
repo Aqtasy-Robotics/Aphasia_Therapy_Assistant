@@ -44,8 +44,11 @@ const PatientLayout = () => {
       </div>
     );
 
-  return (
-    <div className="flex h-screen w-full bg-[#f8fafc] relative overflow-hidden font-sans antialiased">
+    return (
+      <div 
+        className="flex h-screen w-full bg-cover bg-center bg-fixed font-sans antialiased text-slate-900 overflow-hidden"
+        style={{ backgroundImage: "url('/backgroundpic.jpg')"}}
+      >
       {/* MOBILE HEADER - Only visible on small screens */}
       <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 z-[100] flex items-center justify-between px-6">
         <img src={logo} alt="Logo" className="h-8" />
