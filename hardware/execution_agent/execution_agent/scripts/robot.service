@@ -1,0 +1,21 @@
+[Unit]
+Description=Aphasia Therapy Robot Execution Agent (OLED + optional backend)
+After=network.target
+# OLED-only mode does not need network; service still starts after basic boot.
+
+[Service]
+Type=simple
+User=pi
+# Must be the directory that contains main.py, config.json, and .env
+WorkingDirectory=/home/pi/execution_agent
+ExecStart=/home/pi/execution_agent/.venv/bin/python /home/pi/execution_agent/main.py
+Restart=always
+RestartSec=5
+# Keep restarting forever if the process exits (power-on / 24x7 face)
+StartLimitIntervalSec=0
+Environment=PYTHONUNBUFFERED=1
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
