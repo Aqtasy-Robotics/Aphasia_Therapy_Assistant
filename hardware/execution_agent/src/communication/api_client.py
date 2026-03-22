@@ -121,6 +121,10 @@ class ApiClient:
             logger.error("Failed to decode JSON from /commands response: %s", exc)
             return None
 
+        if data is None:
+            logger.debug("No command available (null body) for device %s", self._device_id)
+            return None
+
         try:
             command = ExecutionCommand.model_validate(data)
         except Exception as exc:  # ValidationError in pydantic v2, keep generic to avoid import churn

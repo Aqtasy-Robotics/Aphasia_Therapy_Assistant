@@ -481,6 +481,22 @@ ScreenManager:
         self.emit_touch_event("open_settings")
 
 
+def ensure_app_running(
+    *,
+    width: int | None = None,
+    height: int | None = None,
+    fullscreen: bool | None = None,
+) -> bool:
+    """Start the Kivy UI thread once, using ``config.json`` display when sizes are omitted."""
+    project_root = Path(__file__).resolve().parents[2]
+    cfg = load_display_config(project_root)
+    return start_ui_app(
+        width=int(cfg["width"] if width is None else width),
+        height=int(cfg["height"] if height is None else height),
+        fullscreen=bool(cfg["fullscreen"] if fullscreen is None else fullscreen),
+    )
+
+
 def start_ui_app(*, width: int = 800, height: int = 480, fullscreen: bool = False) -> bool:
     """Start Kivy app in background thread once."""
     global _APP_THREAD
@@ -567,6 +583,7 @@ def maybe_start_ui_from_env(project_root: Path) -> bool:
 
 __all__ = [
     "SpeechTherapyApp",
+    "ensure_app_running",
     "show_ui",
     "start_ui_app",
     "is_ui_ready",

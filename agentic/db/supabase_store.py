@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import time
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from dotenv import load_dotenv
@@ -16,8 +17,24 @@ from supabase import Client, create_client
 
 from agentic.state import SpeechTherapyState
 
-# Load environment from the agentic .env (and parent env)
-load_dotenv()
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_EXEC_AGENT_DIR = _REPO_ROOT / "hardware" / "execution_agent"
+
+
+def _load_standard_env_files() -> None:
+    """Same merge order as ``hardware/execution_agent/env_bootstrap.py`` (later overrides)."""
+    for path in (
+        _REPO_ROOT / ".env",
+        _REPO_ROOT / "backend" / ".env",
+        _REPO_ROOT / "agentic" / "db" / ".env",
+        _EXEC_AGENT_DIR / ".env",
+        _EXEC_AGENT_DIR.parent / ".env",
+    ):
+        if path.is_file():
+            load_dotenv(path, override=True)
+
+
+_load_standard_env_files()
 
 _SUPABASE_URL: Optional[str] = os.getenv("SUPABASE_URL")
 _SUPABASE_SERVICE_KEY: Optional[str] = os.getenv("SUPABASE_SERVICE_KEY")

@@ -208,6 +208,10 @@ Log Level: {settings.log_level}
 
 
 if __name__ == "__main__":
+    from env_bootstrap import load_agent_env_files
+
+    load_agent_env_files(Path(__file__).resolve().parent)
+
     # Register signal handlers for graceful shutdown
     signal.signal(signal.SIGINT, handle_shutdown)
     signal.signal(signal.SIGTERM, handle_shutdown)

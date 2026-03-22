@@ -2,6 +2,7 @@ import logging
 import os
 import sys
 import time
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Any
@@ -22,6 +23,7 @@ from agentic.db.supabase_store import persist_session_state
 from agentic.state import SpeechTherapyState
 
 load_dotenv(PROJECT_ROOT / ".env")
+load_dotenv(PROJECT_ROOT / "backend" / ".env", override=True)
 
 app = FastAPI(
     title="Waabi Robot Bridge API",
@@ -37,6 +39,25 @@ if not url or not key:
 supabase: Client = create_client(url, key)
 
 bridge_log = logging.getLogger("robot_bridge")
+
+
+def _profile_id_for_robot_command(device_id: str) -> Optional[str]:
+    """Map URL device id to a Supabase ``profiles.id`` for personalized greetings.
+
+    Resolution order:
+    1. ``BRIDGE_PATIENT_PROFILE_ID`` env (explicit patient UUID on the server).
+    2. If ``device_id`` is a UUID, treat it as ``profiles.id`` (legacy behaviour).
+    3. Otherwise return None — caller should use a generic greeting.
+    """
+
+    explicit = (os.getenv("BRIDGE_PATIENT_PROFILE_ID") or "").strip()
+    if explicit:
+        return explicit
+    try:
+        uuid.UUID(device_id)
+    except (ValueError, TypeError):
+        return None
+    return device_id
 
 
 def _to_optional_int(value: Any) -> Optional[int]:
@@ -90,21 +111,33 @@ async def get_robot_command(device_id: str):
             timestamp=datetime.utcnow(),
         )
 
+    profile_id = _profile_id_for_robot_command(device_id)
+    now_iso = datetime.utcnow().isoformat()
+
+    if not profile_id:
+        # ``device_id`` is a robot label (e.g. robot-pi-001) and no server mapping was set.
+        return None
+
     try:
-        profile_response = supabase.table("profiles").select("full_name").eq("id", device_id).single().execute()
+        profile_response = (
+            supabase.table("profiles")
+            .select("full_name")
+            .eq("id", profile_id)
+            .single()
+            .execute()
+        )
         profile_data = profile_response.data
         profile = profile_data if isinstance(profile_data, dict) else {}
         name = str(profile.get("full_name", "there") or "there")
-        now_iso = datetime.utcnow().isoformat()
-        
-        return ExecutionCommand(
-            command_id=f"cmd-{now_iso}",
-            action="speak",
-            payload={"text": f"Hello {name}, let's start our session."},
-            timestamp=datetime.utcnow(),
-        )
     except Exception:
-        return None 
+        return None
+
+    return ExecutionCommand(
+        command_id=f"cmd-{now_iso}",
+        action="speak",
+        payload={"text": f"Hello {name}, let's start our session."},
+        timestamp=datetime.utcnow(),
+    )
 
 @app.post("/status", tags=["Robot Bridge"])
 async def post_robot_status(ack: CommandAck):
@@ -114,7 +147,11 @@ async def post_robot_status(ack: CommandAck):
         return {
             "report_id": None,
             "status": "skipped",
-            "message": "Missing patient_id in ack.result; session report was not persisted.",
+            "message": (
+                "Missing patient_id in ack.result; bridge did not write session_reports. "
+                "Therapy runs started from the Kivy GUI save via LangGraph when the graph "
+                "finishes (persist_session_state), not via this endpoint."
+            ),
         }
     
     state: SpeechTherapyState = {

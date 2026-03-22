@@ -19,41 +19,10 @@ import os
 import sys
 from pathlib import Path
 
+from env_bootstrap import find_repo_root, load_agent_env_files
+
 _AGENT_DIR = Path(__file__).resolve().parent
-
-
-def _find_repo_root(start: Path) -> Path:
-    for p in [start, *start.parents]:
-        if (p / "agentic" / "graph.py").is_file():
-            return p
-    return start.parent
-
-
-_REPO_ROOT = _find_repo_root(_AGENT_DIR)
-
-
-def _load_env_files() -> None:
-    """Load `.env` files so LangGraph / Supabase / Groq see keys before agentic imports.
-
-    Order (later files override earlier): repo root → this package → backend/.
-    """
-    try:
-        from dotenv import load_dotenv  # noqa: PLC0415
-    except ImportError:
-        return
-
-    # Later files override earlier. Put execution_agent/.env last.
-    # agentic/db/.env is used by some setups for GROQ_API (LangGraph / perception).
-    candidates = [
-        _REPO_ROOT / ".env",
-        _REPO_ROOT / "backend" / ".env",
-        _REPO_ROOT / "agentic" / "db" / ".env",
-        _AGENT_DIR / ".env",
-        _AGENT_DIR.parent / ".env",
-    ]
-    for path in candidates:
-        if path.is_file():
-            load_dotenv(path, override=True)
+_REPO_ROOT = find_repo_root(_AGENT_DIR)
 
 
 # Repo root on path helps imports when running from the execution_agent folder.
@@ -97,7 +66,7 @@ def _check_portaudio() -> None:
 
 
 if __name__ == "__main__":
-    _load_env_files()
+    load_agent_env_files(_AGENT_DIR)
     _check_portaudio()
 
     from ui.body_app import SpeechTherapyApp, load_display_config  # noqa: PLC0415
