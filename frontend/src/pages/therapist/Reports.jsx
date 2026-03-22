@@ -9,13 +9,7 @@ import {
   CartesianGrid,
   ResponsiveContainer,
 } from "recharts";
-import {
-  TrendingUp,
-  Users,
-  Award,
-  BarChart3,
-  ShieldCheck,
-} from "lucide-react";
+import { TrendingUp, Users, Award, BarChart3, ShieldCheck } from "lucide-react";
 
 // Ghost data for line chart
 const emptyLineData = [
@@ -24,10 +18,10 @@ const emptyLineData = [
 
 // Structural skeleton for the Bar Chart (No raw data)
 const emptyProgressData = [
-  { range: '0-25%', patients: 0 },
-  { range: '26-50%', patients: 0 },
-  { range: '51-75%', patients: 0 },
-  { range: '76-100%', patients: 0 },
+  { range: "0-25%", patients: 0 },
+  { range: "26-50%", patients: 0 },
+  { range: "51-75%", patients: 0 },
+  { range: "76-100%", patients: 0 },
 ];
 
 const TherapistReports = () => {
@@ -35,28 +29,30 @@ const TherapistReports = () => {
   const [userName, setUserName] = useState("User");
 
   useEffect(() => {
+    // 1. Define the function INSIDE the useEffect so it is declared before it runs
+    const fetchProfile = async () => {
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) return;
+
+        setUserName(user.user_metadata.full_name || "User");
+
+        const { data } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", user.id)
+          .single();
+        setRole(data?.role);
+      } catch (err) {
+        console.error("Error loading profile:", err);
+      }
+    };
+
+    // 2. Call it immediately after defining it
     fetchProfile();
-  }, []);
-
-  const fetchProfile = async () => {
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
-      
-      setUserName(user.user_metadata.full_name || "User");
-
-      const { data } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .single();
-      setRole(data?.role);
-    } catch (err) {
-      console.error("Error loading profile:", err);
-    }
-  };
+  }, []); // Empty dependency array is perfectly fine here now!
 
   return (
     <div className="animate-in fade-in duration-700 font-sans antialiased pb-20">
@@ -74,12 +70,12 @@ const TherapistReports = () => {
           </div>
         </div>
         <div className="text-right">
-            <p className="text-xs text-gray-400 font-extrabold uppercase tracking-widest leading-none">
-                verified clinician
-            </p>
-            <p className="text-2xl font-black text-[#012b1d] mt-2 tracking-tighter">
-                {userName}
-            </p>
+          <p className="text-xs text-gray-400 font-extrabold uppercase tracking-widest leading-none">
+            verified clinician
+          </p>
+          <p className="text-2xl font-black text-[#012b1d] mt-2 tracking-tighter">
+            {userName}
+          </p>
         </div>
       </header>
 
@@ -161,7 +157,6 @@ const TherapistReports = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-        
         {/* --- PATIENT PROGRESS DISTRIBUTION (Bar Chart) --- */}
         <div className="bg-white p-12 rounded-[3.5rem] border border-gray-50 shadow-2xl shadow-gray-200/40 flex flex-col min-h-[450px]">
           <div className="mb-10">
@@ -175,7 +170,10 @@ const TherapistReports = () => {
 
           <div className="flex-1 w-full relative">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={emptyProgressData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+              <BarChart
+                data={emptyProgressData}
+                margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+              >
                 <CartesianGrid
                   strokeDasharray="3 3"
                   stroke="#f1f5f9"
@@ -183,32 +181,32 @@ const TherapistReports = () => {
                 />
                 <XAxis
                   dataKey="range"
-                  tick={{ fontSize: 11, fill: '#64748b', fontWeight: 600 }}
-                  axisLine={{ stroke: '#94a3b8' }}
+                  tick={{ fontSize: 11, fill: "#64748b", fontWeight: 600 }}
+                  axisLine={{ stroke: "#94a3b8" }}
                   tickLine={false}
                   dy={10}
                 />
                 <YAxis
                   domain={[0, 12]}
                   ticks={[0, 3, 6, 9, 12]}
-                  label={{ 
-                    value: 'Patients', 
-                    angle: -90, 
-                    position: 'insideLeft', 
-                    fill: '#64748b', 
+                  label={{
+                    value: "Patients",
+                    angle: -90,
+                    position: "insideLeft",
+                    fill: "#64748b",
                     fontSize: 13,
                     fontWeight: 700,
-                    offset: 25
+                    offset: 25,
                   }}
-                  tick={{ fontSize: 11, fill: '#64748b', fontWeight: 600 }}
-                  axisLine={{ stroke: '#94a3b8' }}
+                  tick={{ fontSize: 11, fill: "#64748b", fontWeight: 600 }}
+                  axisLine={{ stroke: "#94a3b8" }}
                   tickLine={false}
                   dx={-10}
                 />
-                <Bar 
-                  dataKey="patients" 
-                  fill="#5cb338" 
-                  radius={[6, 6, 0, 0]} 
+                <Bar
+                  dataKey="patients"
+                  fill="#5cb338"
+                  radius={[6, 6, 0, 0]}
                   barSize={60}
                 />
               </BarChart>
