@@ -76,7 +76,6 @@ const TherapistDashboard = () => {
           icon={<Activity size={20} />}
           iconBg="bg-orange-600"
           textColor="text-orange-600"
-          highlightBg="bg-orange-50/20"
         />
         <StatCard
           title="Clinical Sites"

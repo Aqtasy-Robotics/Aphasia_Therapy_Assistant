@@ -106,7 +106,7 @@ const AgentSessionTrace = () => {
       <header className="mb-12 flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
         <div>
           <h1 className="text-4xl font-extrabold text-[#012b1d] tracking-tight flex items-center gap-4">
-            AI Agent Trace <Cpu className="w-8 h-8 text-[#5cb338]" />
+            AI Agent Trace 
           </h1>
           <p className="text-gray-400 font-semibold mt-2 text-sm italic max-w-xl leading-relaxed">
             Transparent LangGraph step logs recorded during Waabi sessions. Monitor the robot's logic and decision-making pipeline.
