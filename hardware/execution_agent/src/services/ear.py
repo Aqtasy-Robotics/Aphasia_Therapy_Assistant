@@ -30,6 +30,9 @@ except ImportError:
 _input_device: Optional[int] = None
 _settings: Optional[Any] = None
 
+# Force USB microphone — change this string if your USB mic has a different name
+USB_DEVICE_SPEC = "usb"
+
 
 def _record_audio(
     duration_s: float,
@@ -158,39 +161,35 @@ async def listen(
     if settings is None:
         # Try to use default settings if available
         logger.warning("settings not provided - using default audio config")
-        # We'll need sample_rate and channels - use defaults
         sample_rate = 22050
         channels = 1
-        device = None  # Will use default
+        device = None  # Will be resolved below
     else:
         sample_rate = settings.audio.sample_rate
         channels = settings.audio.channels
-        # Initialize input device if not already done
-        if _input_device is None or _settings is not settings:
-            try:
-                _input_device = select_input_device(settings.audio.input_device)
-                _settings = settings
-            except Exception as exc:
-                logger.error("Failed to select input device: {}", exc)
-                return {
-                    "driver": "ear",
-                    "action": "listen",
-                    "duration_s": duration_s,
-                    "status": "error",
-                    "error_message": f"Device selection failed: {exc}",
-                }
-        device = _input_device
+
+    # Always select USB mic, regardless of what settings say
+    if _input_device is None or _settings is not settings:
+        try:
+            logger.info("Selecting USB microphone (spec: '{}')", USB_DEVICE_SPEC)
+            _input_device = select_input_device(USB_DEVICE_SPEC)
+            _settings = settings
+        except Exception as exc:
+            logger.error("Failed to select USB input device: {}", exc)
+            return {
+                "driver": "ear",
+                "action": "listen",
+                "duration_s": duration_s,
+                "status": "error",
+                "error_message": f"USB device selection failed: {exc}",
+            }
+
+    device = _input_device
 
     try:
         # Record audio in thread to avoid blocking
         def _record() -> np.ndarray:
-            if device is None:
-                # Use default device
-                default_device = sd.query_devices(kind="input")
-                device_idx = default_device["index"]
-            else:
-                device_idx = device
-            return _record_audio(duration_s, sample_rate, channels, device_idx)
+            return _record_audio(duration_s, sample_rate, channels, device)
 
         audio_array = await asyncio.to_thread(_record)
 
