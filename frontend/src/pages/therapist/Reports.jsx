@@ -25,7 +25,6 @@ const emptyProgressData = [
 ];
 
 const TherapistReports = () => {
-  const [role, setRole] = useState(null);
   const [userName, setUserName] = useState("User");
 
   useEffect(() => {
@@ -35,16 +34,11 @@ const TherapistReports = () => {
         const {
           data: { user },
         } = await supabase.auth.getUser();
+
         if (!user) return;
 
+        // Set the user's name directly from the auth metadata
         setUserName(user.user_metadata.full_name || "User");
-
-        const { data } = await supabase
-          .from("profiles")
-          .select("role")
-          .eq("id", user.id)
-          .single();
-        setRole(data?.role);
       } catch (err) {
         console.error("Error loading profile:", err);
       }
