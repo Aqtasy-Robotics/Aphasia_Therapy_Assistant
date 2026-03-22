@@ -3,11 +3,8 @@ import { supabase } from "../../supabaseClient";
 import {
   Send,
   MessageCircle,
-  PlusCircle,
   Smile,
-  Paperclip,
   Bot,
-  User,
   ShieldCheck,
   Loader2,
 } from "lucide-react";
@@ -19,15 +16,14 @@ const PatientChat = () => {
   const [messageInput, setMessageInput] = useState("");
   const [loading, setLoading] = useState(true);
 
-  const messagesEndRef = useRef(null);
+  // FIX: Use a ref for the container to isolate scrolling
+  const chatContainerRef = useRef(null);
 
   // 1. Fetch Current User & Assigned Therapist
   useEffect(() => {
     const fetchSetupData = async () => {
       setLoading(true);
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         setMyId(user.id);
 
@@ -63,7 +59,7 @@ const PatientChat = () => {
         .from("messages")
         .select("*")
         .or(
-          `and(sender_id.eq.${myId},receiver_id.eq.${therapist.id}),and(sender_id.eq.${therapist.id},receiver_id.eq.${myId})`,
+          `and(sender_id.eq.${myId},receiver_id.eq.${therapist.id}),and(sender_id.eq.${therapist.id},receiver_id.eq.${myId})`
         )
         .order("created_at", { ascending: true });
 
@@ -81,22 +77,16 @@ const PatientChat = () => {
       .channel("patient_messages")
       .on(
         "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "messages",
-        },
+        { event: "INSERT", schema: "public", table: "messages" },
         (payload) => {
           const newMessage = payload.new;
           if (
-            (newMessage.sender_id === myId &&
-              newMessage.receiver_id === therapist.id) ||
-            (newMessage.sender_id === therapist.id &&
-              newMessage.receiver_id === myId)
+            (newMessage.sender_id === myId && newMessage.receiver_id === therapist.id) ||
+            (newMessage.sender_id === therapist.id && newMessage.receiver_id === myId)
           ) {
             setMessages((prev) => [...prev, newMessage]);
           }
-        },
+        }
       )
       .subscribe();
 
@@ -105,9 +95,14 @@ const PatientChat = () => {
     };
   }, [myId, therapist]);
 
-  // 4. Auto-Scroll
+  // 4. Auto-Scroll (Isolated to prevent page shifting)
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTo({
+        top: chatContainerRef.current.scrollHeight,
+        behavior: "smooth",
+      });
+    }
   }, [messages]);
 
   // 5. Send Message
@@ -134,7 +129,7 @@ const PatientChat = () => {
 
   if (loading) {
     return (
-      <div className="h-[calc(100vh-160px)] flex flex-col items-center justify-center bg-white rounded-[3.5rem] shadow-2xl shadow-gray-200/40 font-sans antialiased">
+      <div className="h-[calc(100vh-12rem)] min-h-[500px] flex flex-col items-center justify-center bg-white rounded-[2.5rem] shadow-xl shadow-[#172554]/5 border border-gray-100 font-sans antialiased">
         <Loader2 className="w-12 h-12 animate-spin text-[#172554] mb-4" />
         <span className="text-[10px] font-extrabold uppercase tracking-[0.3em] text-gray-400">
           Loading Secure Chat...
@@ -144,27 +139,26 @@ const PatientChat = () => {
   }
 
   return (
-    <div className="h-[calc(100vh-160px)] flex bg-white rounded-[3.5rem] overflow-hidden border border-gray-50 shadow-2xl shadow-gray-200/40 font-sans antialiased">
+    <div className="h-[calc(100vh-12rem)] min-h-[500px] flex bg-white rounded-[2.5rem] overflow-hidden border border-gray-100 shadow-xl shadow-[#172554]/5 font-sans antialiased">
+      
       {/* LEFT: CLINIC CONTACTS */}
-      <aside className="w-80 bg-gray-50/50 border-r border-gray-100 flex flex-col relative shrink-0">
-        <div className="absolute inset-y-0 right-0 w-[1px] bg-white pointer-events-none"></div>
-
+      <aside className="hidden md:flex w-80 bg-gray-50/50 border-r border-gray-100 flex-col relative shrink-0">
         <div className="p-8">
-          <h2 className="text-2xl font-extrabold text-gray-800 tracking-tight">
+          <h2 className="text-2xl font-extrabold text-[#172554] tracking-tight">
             Messages
           </h2>
           <div className="flex items-center gap-2 mt-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-[#064e3b] animate-pulse"></div>
-            <p className="text-[10px] text-[#064e3b] font-extrabold uppercase tracking-[0.3em]">
+            <div className="w-1.5 h-1.5 rounded-full bg-[#5cb338] animate-pulse"></div>
+            <p className="text-[10px] text-[#5cb338] font-extrabold uppercase tracking-[0.3em]">
               Support Active
             </p>
           </div>
         </div>
 
         {therapist ? (
-          <div className="p-4">
-            <div className="p-5 bg-white border border-[#172554]/10 rounded-[2rem] shadow-xl shadow-[#172554]/5 flex flex-col items-center text-center relative overflow-hidden group">
-              <div className="w-16 h-16 bg-[#172554] text-white rounded-2xl flex items-center justify-center font-extrabold text-xl shadow-inner mb-4">
+          <div className="p-6">
+            <div className="p-5 bg-white border border-[#172554]/10 rounded-[1.5rem] shadow-sm flex flex-col items-center text-center">
+              <div className="w-14 h-14 bg-[#172554] text-white rounded-[1rem] flex items-center justify-center font-extrabold text-xl shadow-inner mb-4">
                 {therapist.full_name?.charAt(0)}
               </div>
               <h3 className="font-extrabold text-gray-800 text-sm tracking-tight">
@@ -174,7 +168,7 @@ const PatientChat = () => {
                 Primary Therapist
               </p>
               {therapist.clinic_name && (
-                <p className="text-[10px] font-semibold text-[#172554] mt-3 bg-[#172554]/5 px-3 py-1 rounded-lg">
+                <p className="text-[10px] font-semibold text-[#172554] mt-3 bg-[#172554]/5 px-3 py-1.5 rounded-lg border border-[#172554]/10">
                   {therapist.clinic_name}
                 </p>
               )}
@@ -182,8 +176,8 @@ const PatientChat = () => {
           </div>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center p-8 text-center space-y-6">
-            <div className="w-20 h-20 bg-white rounded-[2.5rem] flex items-center justify-center shadow-inner border border-gray-100">
-              <MessageCircle className="text-gray-200 w-10 h-10" />
+            <div className="w-16 h-16 bg-white rounded-[1.5rem] flex items-center justify-center shadow-inner border border-gray-100">
+              <MessageCircle className="text-gray-300 w-8 h-8" />
             </div>
             <div className="max-w-[180px]">
               <p className="text-[11px] font-extrabold text-gray-800 uppercase tracking-widest">
@@ -203,18 +197,18 @@ const PatientChat = () => {
           /* NO THERAPIST ASSIGNED VIEW */
           <div className="flex-1 flex flex-col items-center justify-center p-12 text-center">
             <div className="relative mb-10 group">
-              <div className="w-28 h-28 bg-gray-50 rounded-[3rem] flex items-center justify-center shadow-inner border border-gray-100 transition-transform duration-500 group-hover:scale-110">
-                <Bot className="w-14 h-14 text-[#172554]" />
+              <div className="w-24 h-24 bg-gray-50 rounded-[2.5rem] flex items-center justify-center shadow-inner border border-gray-100 transition-transform duration-500 group-hover:scale-110">
+                <Bot className="w-12 h-12 text-[#172554]" />
               </div>
               <div className="absolute -bottom-2 -right-2 bg-white p-3 rounded-2xl shadow-xl border border-gray-50 transition-transform duration-500 group-hover:rotate-12">
-                <Smile className="w-6 h-6 text-[#064e3b]" />
+                <Smile className="w-5 h-5 text-[#5cb338]" />
               </div>
             </div>
 
-            <h3 className="text-4xl font-extrabold text-gray-800 tracking-tight">
+            <h3 className="text-3xl font-extrabold text-[#172554] tracking-tight">
               Hello there!
             </h3>
-            <p className="text-gray-400 max-w-sm mt-5 font-semibold leading-relaxed text-sm italic">
+            <p className="text-gray-400 max-w-sm mt-4 font-semibold leading-relaxed text-sm italic">
               This is your secure clinical space. Once your therapist sets up
               your account, you will be able to message them directly here.
             </p>
@@ -223,19 +217,19 @@ const PatientChat = () => {
           /* ACTIVE CHAT VIEW */
           <>
             {/* Chat Header */}
-            <div className="p-6 border-b border-gray-50 bg-white/80 backdrop-blur-md flex justify-between items-center z-10">
+            <div className="p-5 border-b border-gray-50 bg-white flex justify-between items-center z-10 shrink-0">
               <div className="flex items-center gap-4">
-                <div className="w-10 h-10 bg-gray-50 text-[#172554] rounded-xl flex items-center justify-center font-extrabold text-xs shadow-inner border border-gray-100">
+                <div className="w-10 h-10 bg-[#172554]/5 text-[#172554] rounded-[1rem] flex items-center justify-center font-extrabold text-sm border border-[#172554]/10">
                   {therapist.full_name?.charAt(0)}
                 </div>
                 <div>
-                  <h3 className="font-extrabold text-gray-800 tracking-tight">
+                  <h3 className="font-extrabold text-gray-800 tracking-tight text-sm">
                     {therapist.full_name}
                   </h3>
                   <div className="flex items-center gap-1.5 mt-0.5">
-                    <ShieldCheck className="w-3 h-3 text-[#064e3b]" />
-                    <p className="text-[9px] font-bold text-[#064e3b] uppercase tracking-widest">
-                      Secure Chat
+                    <ShieldCheck className="w-3 h-3 text-[#5cb338]" />
+                    <p className="text-[9px] font-bold text-[#5cb338] uppercase tracking-widest">
+                      Secure Connection
                     </p>
                   </div>
                 </div>
@@ -243,10 +237,13 @@ const PatientChat = () => {
             </div>
 
             {/* Messages Container */}
-            <div className="flex-1 overflow-y-auto p-8 space-y-6 bg-gray-50/10 custom-scrollbar">
+            <div 
+              ref={chatContainerRef}
+              className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 bg-gray-50/30 custom-scrollbar"
+            >
               {messages.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-center opacity-50">
-                  <MessageCircle className="w-12 h-12 text-[#172554]/30 mb-4" />
+                  <MessageCircle className="w-10 h-10 text-[#172554]/30 mb-4" />
                   <p className="text-xs font-bold text-gray-500">
                     Secure connection established.
                   </p>
@@ -258,12 +255,9 @@ const PatientChat = () => {
                 messages.map((msg) => {
                   const isMine = msg.sender_id === myId;
                   return (
-                    <div
-                      key={msg.id}
-                      className={`flex ${isMine ? "justify-end" : "justify-start"}`}
-                    >
+                    <div key={msg.id} className={`flex ${isMine ? "justify-end" : "justify-start"}`}>
                       <div
-                        className={`max-w-[75%] p-5 rounded-[2rem] shadow-sm ${
+                        className={`max-w-[85%] md:max-w-[70%] p-4 rounded-[1.5rem] shadow-sm ${
                           isMine
                             ? "bg-[#172554] text-white rounded-br-sm"
                             : "bg-white border border-gray-100 text-gray-800 rounded-bl-sm"
@@ -272,49 +266,35 @@ const PatientChat = () => {
                         <p className="text-sm font-semibold leading-relaxed">
                           {msg.content}
                         </p>
-                        <p
-                          className={`text-[9px] font-bold mt-3 text-right ${isMine ? "text-white/50" : "text-gray-400"}`}
-                        >
-                          {new Date(msg.created_at).toLocaleTimeString([], {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
+                        <p className={`text-[9px] font-bold mt-2 text-right ${isMine ? "text-white/50" : "text-gray-400"}`}>
+                          {new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                         </p>
                       </div>
                     </div>
                   );
                 })
               )}
-              <div ref={messagesEndRef} />
             </div>
 
             {/* Input Area */}
-            <div className="p-8 border-t border-gray-50 bg-white">
+            <div className="p-4 md:p-6 bg-white border-t border-gray-50 shrink-0">
               <form
                 onSubmit={handleSendMessage}
-                className="max-w-4xl mx-auto flex items-center gap-5 bg-gray-50 p-3 rounded-[2.5rem] border border-gray-100 focus-within:ring-4 focus-within:ring-[#172554]/5 transition-all shadow-sm"
+                className="max-w-4xl mx-auto flex items-center gap-3 bg-gray-50/80 p-1.5 pl-5 rounded-full border border-gray-200 focus-within:ring-2 focus-within:ring-[#172554]/10 transition-all shadow-sm"
               >
-                <button
-                  type="button"
-                  className="p-3 text-gray-400 hover:text-[#172554] transition-colors"
-                ></button>
                 <input
                   type="text"
                   placeholder="Message your therapist..."
-                  className="flex-1 bg-transparent border-none outline-none text-sm font-bold text-gray-700 px-2 placeholder:text-gray-400"
+                  className="flex-1 bg-transparent border-none outline-none text-sm font-semibold text-gray-700 py-2 placeholder:text-gray-400"
                   value={messageInput}
                   onChange={(e) => setMessageInput(e.target.value)}
                 />
                 <button
-                  type="button"
-                  className="p-3 text-gray-400 hover:text-[#172554] transition-colors"
-                ></button>
-                <button
                   type="submit"
                   disabled={!messageInput.trim()}
-                  className="bg-[#172554] p-4 rounded-[1.75rem] text-white shadow-xl shadow-[#172554]/20 hover:brightness-125 transition-all disabled:opacity-50 disabled:hover:brightness-100"
+                  className="bg-[#172554] p-2.5 rounded-full text-white hover:brightness-110 transition-all disabled:opacity-50 disabled:hover:brightness-100 flex items-center justify-center shrink-0"
                 >
-                  <Send className="w-5 h-5" />
+                  <Send className="w-4 h-4 ml-0.5" />
                 </button>
               </form>
             </div>
