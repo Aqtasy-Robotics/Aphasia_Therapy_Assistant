@@ -1,6 +1,15 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { supabase } from "../../supabaseClient";
-import { Loader2, Activity, ChevronDown, ChevronUp } from "lucide-react";
+import { 
+  Loader2, 
+  Activity, 
+  ChevronDown, 
+  ChevronUp, 
+  Terminal, 
+  User, 
+  ServerCog,
+  Cpu
+} from "lucide-react";
 
 const AgentSessionTrace = () => {
   const [patients, setPatients] = useState([]);
@@ -15,9 +24,7 @@ const AgentSessionTrace = () => {
     const load = async () => {
       try {
         setLoadingPatients(true);
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
+        const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
         const { data, error: err } = await supabase
@@ -70,7 +77,7 @@ const AgentSessionTrace = () => {
     loadSteps();
   }, [patientId]);
 
-  const grouped = React.useMemo(() => {
+  const grouped = useMemo(() => {
     const m = new Map();
     for (const row of steps) {
       const rid = row.run_id || "unknown";
@@ -79,117 +86,181 @@ const AgentSessionTrace = () => {
     }
     return Array.from(m.entries()).map(([run_id, items]) => ({
       run_id,
-      items: items.sort(
-        (a, b) => new Date(a.created_at) - new Date(b.created_at),
-      ),
+      items: items.sort((a, b) => new Date(a.created_at) - new Date(b.created_at)),
     }));
   }, [steps]);
 
   if (loadingPatients) {
     return (
-      <div className="flex justify-center py-24 text-[#012b1d]">
-        <Loader2 className="animate-spin w-10 h-10" />
+      <div className="flex h-[60vh] items-center justify-center flex-col gap-4">
+        <Loader2 className="w-10 h-10 animate-spin text-[#012b1d]" />
+        <span className="text-[10px] font-extrabold uppercase tracking-[0.3em] text-[#012b1d]">Syncing AI Traces...</span>
       </div>
     );
   }
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col sm:flex-row sm:items-end gap-4 justify-between">
+    <div className="max-w-6xl mx-auto pb-32 animate-in fade-in duration-700 font-sans antialiased">
+      
+      {/* HEADER SECTION */}
+      <header className="mb-12 flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
         <div>
-          <h1 className="text-2xl font-black text-[#012b1d] tracking-tight flex items-center gap-2">
-            <Activity className="w-7 h-7" />
-            Agent pipeline
+          <h1 className="text-4xl font-extrabold text-[#012b1d] tracking-tight flex items-center gap-4">
+            AI Agent Trace <Cpu className="w-8 h-8 text-[#5cb338]" />
           </h1>
-          <p className="text-slate-500 text-sm mt-1 max-w-xl">
-            LangGraph steps recorded during robot / GUI sessions (after SQL
-            migration). Stays in sync when you change the agentic pipeline —
-            step names come from node ids.
+          <p className="text-gray-400 font-semibold mt-2 text-sm italic max-w-xl leading-relaxed">
+            Transparent LangGraph step logs recorded during Waabi sessions. Monitor the robot's logic and decision-making pipeline.
           </p>
         </div>
-        <div className="min-w-[240px]">
-          <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">
-            Patient
+        <div className="bg-white/60 backdrop-blur-md px-6 py-3 rounded-2xl border border-white shadow-sm flex items-center gap-3 shrink-0">
+          <ServerCog className="w-4 h-4 text-[#064e3b]" />
+          <span className="text-[10px] font-extrabold text-[#012b1d] uppercase tracking-[0.3em] leading-none">
+            System Telemetry Active
+          </span>
+        </div>
+      </header>
+
+      {/* PATIENT SELECTOR CARD */}
+      <div className="bg-white rounded-[2.5rem] p-8 border border-gray-50 shadow-xl shadow-gray-200/40 mb-10 flex flex-col md:flex-row items-center gap-6">
+        <div className="p-4 bg-[#012b1d]/5 rounded-2xl text-[#012b1d]">
+          <User className="w-6 h-6" />
+        </div>
+        <div className="flex-1 w-full">
+          <label className="text-[10px] font-extrabold text-gray-400 uppercase tracking-[0.3em] ml-4 block mb-3">
+            Select Patient to Inspect
           </label>
-          <select
-            className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm bg-white"
-            value={patientId}
-            onChange={(e) => setPatientId(e.target.value)}
-          >
-            <option value="">Select patient…</option>
-            {patients.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.full_name}
-              </option>
-            ))}
-          </select>
+          <div className="relative">
+            <select
+              className="w-full bg-gray-50 hover:bg-white border border-transparent focus:border-gray-100 rounded-2xl px-8 py-5 font-bold text-gray-800 outline-none focus:ring-4 focus:ring-[#012b1d]/5 transition-all text-sm appearance-none cursor-pointer shadow-sm"
+              value={patientId}
+              onChange={(e) => setPatientId(e.target.value)}
+            >
+              <option value="">-- Choose a patient --</option>
+              {patients.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.full_name}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-6 top-1/2 -translate-y-1/2 text-[#012b1d] pointer-events-none w-5 h-5" />
+          </div>
         </div>
       </div>
 
       {error && (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 text-amber-900 text-sm px-4 py-3">
+        <div className="bg-red-50/50 border border-red-100 rounded-[2rem] p-6 text-red-600 text-sm font-semibold mb-8 flex items-center gap-3">
+          <Activity className="w-5 h-5" />
           {error}
         </div>
       )}
 
       {loadingSteps && patientId && (
-        <div className="flex justify-center py-12 text-slate-400">
-          <Loader2 className="animate-spin w-8 h-8" />
+        <div className="flex justify-center py-12">
+          <Loader2 className="animate-spin w-8 h-8 text-[#5cb338]" />
+        </div>
+      )}
+
+      {/* EMPTY STATES */}
+      {!loadingSteps && !patientId && (
+        <div className="bg-gray-50/50 rounded-[3rem] p-16 border border-gray-100 text-center flex flex-col items-center">
+          <Terminal className="w-12 h-12 text-gray-300 mb-4" />
+          <p className="text-[11px] font-extrabold text-gray-400 uppercase tracking-[0.3em]">Awaiting Target Selection</p>
         </div>
       )}
 
       {!loadingSteps && patientId && grouped.length === 0 && !error && (
-        <p className="text-slate-400 text-sm">No pipeline steps for this patient yet.</p>
+        <div className="bg-gray-50/50 rounded-[3rem] p-16 border border-gray-100 text-center flex flex-col items-center">
+          <Activity className="w-12 h-12 text-gray-300 mb-4" />
+          <p className="text-[11px] font-extrabold text-gray-400 uppercase tracking-[0.3em]">No Pipeline Traces Recorded</p>
+        </div>
       )}
 
-      <div className="space-y-4">
+      {/* TIMELINE ACCORDIONS */}
+      <div className="space-y-6">
         {grouped.map(({ run_id, items }) => {
           const open = expanded[run_id] !== false;
           return (
             <div
               key={run_id}
-              className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden"
+              className="bg-white rounded-[2.5rem] border border-gray-50 shadow-xl shadow-gray-200/30 overflow-hidden transition-all duration-300"
             >
               <button
                 type="button"
-                className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-slate-50"
-                onClick={() =>
-                  setExpanded((prev) => ({ ...prev, [run_id]: !open }))
-                }
+                className="w-full flex items-center justify-between px-8 py-6 text-left bg-transparent hover:bg-gray-50 transition-colors"
+                onClick={() => setExpanded((prev) => ({ ...prev, [run_id]: !open }))}
               >
-                <span className="font-mono text-xs text-slate-600 truncate pr-4">
-                  Run {run_id}
-                </span>
-                {open ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                <div className="flex items-center gap-4">
+                  <div className={`p-2 rounded-xl ${open ? 'bg-[#012b1d] text-white' : 'bg-gray-100 text-gray-400'}`}>
+                    <Terminal size={16} />
+                  </div>
+                  <div>
+                    <span className="font-extrabold text-[#012b1d] text-sm block">Session Trace</span>
+                    <span className="font-mono text-[10px] text-gray-400 uppercase tracking-widest mt-1 block truncate w-48 sm:w-auto">
+                      Run ID: {run_id}
+                    </span>
+                  </div>
+                </div>
+                <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-[#012b1d]">
+                  {open ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                </div>
               </button>
+
               {open && (
-                <ul className="divide-y divide-slate-100 border-t border-slate-100">
-                  {items.map((s) => (
-                    <li
-                      key={s.id}
-                      className="px-5 py-3 flex flex-col sm:flex-row sm:items-start gap-2 text-sm"
-                    >
-                      <span className="text-slate-400 shrink-0 w-44 font-mono text-xs">
-                        {new Date(s.created_at).toLocaleString()}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <span className="font-bold text-[#012b1d]">
-                          {s.step_name}
-                        </span>
-                        {s.detail && (
-                          <pre className="mt-1 text-xs text-slate-600 whitespace-pre-wrap break-words bg-slate-50 rounded-lg p-2">
-                            {JSON.stringify(s.detail, null, 2)}
-                          </pre>
+                <div className="p-8 pt-2 border-t border-gray-50">
+                  <ul className="relative">
+                    {items.map((s, index) => (
+                      <li key={s.id} className="relative pl-10 py-6 group">
+                        
+                        {/* Vertical Timeline Line */}
+                        {index !== items.length - 1 && (
+                          <div className="absolute left-2.5 top-8 bottom-[-24px] w-[2px] bg-gray-100" />
                         )}
-                        {s.report_id && (
-                          <p className="text-[10px] text-slate-400 mt-1 font-mono">
-                            report: {s.report_id}
-                          </p>
-                        )}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+                        
+                        {/* Timeline Pulse Dot */}
+                        <div className="absolute left-[5px] top-[30px] w-3 h-3 rounded-full bg-[#5cb338] shadow-[0_0_10px_#5cb338] z-10" />
+
+                        <div className="flex flex-col sm:flex-row sm:items-start gap-4 text-sm">
+                          {/* Timestamp */}
+                          <div className="shrink-0 w-32 pt-1">
+                            <span className="text-gray-400 font-extrabold text-[9px] uppercase tracking-[0.2em] block">
+                              {new Date(s.created_at).toLocaleDateString()}
+                            </span>
+                            <span className="text-[#012b1d] font-mono text-xs font-bold mt-1 block">
+                              {new Date(s.created_at).toLocaleTimeString()}
+                            </span>
+                          </div>
+
+                          {/* Data Payload */}
+                          <div className="flex-1 min-w-0 bg-gray-50 rounded-[1.5rem] p-6 border border-gray-100 group-hover:border-[#012b1d]/10 transition-colors">
+                            <div className="flex items-center justify-between mb-3">
+                              <span className="font-black text-[#012b1d] uppercase tracking-widest text-[11px]">
+                                NODE: {s.step_name}
+                              </span>
+                              {s.report_id && (
+                                <span className="bg-[#5cb338]/10 text-[#064e3b] px-3 py-1 rounded-full font-bold text-[9px] uppercase tracking-widest">
+                                  Report Generated
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Raw JSON "Terminal" Output */}
+                            {s.detail && (
+                              <pre className="mt-4 text-[11px] font-mono text-[#5cb338] bg-[#0f172a] rounded-2xl p-5 overflow-x-auto shadow-inner border border-gray-800 leading-relaxed">
+                                {JSON.stringify(s.detail, null, 2)}
+                              </pre>
+                            )}
+                            
+                            {s.report_id && (
+                              <p className="text-[10px] text-gray-400 mt-4 font-mono">
+                                System ID: {s.report_id}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               )}
             </div>
           );

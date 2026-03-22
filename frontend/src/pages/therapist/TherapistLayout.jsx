@@ -110,7 +110,7 @@ const TherapistLayout = () => {
             onClick={() => handleNav("/therapist-patients")}
           />
           <NavItem
-            label="Agent pipeline"
+            label="Agent Session Trace"
             active={isActive("/therapist-agent-pipeline")}
             onClick={() => handleNav("/therapist-agent-pipeline")}
           />
