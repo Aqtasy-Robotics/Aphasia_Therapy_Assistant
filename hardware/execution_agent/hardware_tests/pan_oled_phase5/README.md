@@ -78,6 +78,8 @@ Servo issues:
 
 OLED issues:
 
+- **`ModuleNotFoundError: No module named 'RPi'`** (SPI path): install GPIO support in the same venv — `pip install RPi.GPIO` (also listed in `requirements.txt`). Luma uses **RPi.GPIO** for SPI **DC** and **RST** lines.
+
 - **Static / snow on a 128x128 blue 7-pin SPI board:** that panel is almost always **SH1107** (monochrome), not **SSD1351** (color). Use `"oled_driver": "sh1107"` with `"interface": "spi"`. Using `ssd1351` on SH1107 hardware produces garbage pixels.
 - Confirm I2C is enabled: `sudo raspi-config` -> Interface Options -> I2C -> Enable.
 - Confirm the OLED address (common is `0x3C` or `0x3D`).

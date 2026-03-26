@@ -1,4 +1,6 @@
 # Minimal deps for the pan+eyes hardware test scripts
+# SPI OLED (DC/RST): luma.core uses RPi.GPIO unless another backend is configured.
+RPi.GPIO>=0.7.1
 gpiozero>=2.0
 luma.oled>=3.13.0
 luma.core>=2.4.0
