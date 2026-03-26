@@ -149,7 +149,7 @@ def fetch_target_words_for_patient(patient_id: str) -> list[str]:
         response = (
             client
             .table("sessions")
-            .select("target_words, session_date")
+            .select("id, target_words, session_date")
             .eq("patient_id", patient_id)
             .order("session_date", desc=True)
             .limit(1)
@@ -182,6 +182,63 @@ def fetch_target_words_for_patient(patient_id: str) -> list[str]:
 
     print(f"[agentic-db] No non-empty entries in target_words for patient_id={patient_id}.")
     return []
+
+
+def fetch_target_words_and_session_id(patient_id: str) -> tuple[Optional[str], list[str]]:
+    """Fetch session ID and target words from the latest ``public.sessions`` row.
+
+    Returns:
+        tuple[session_id, target_words] where session_id is the Supabase sessions.id
+        and target_words is a list of non-empty words in order.
+    """
+
+    if not patient_id:
+        print("[agentic-db] Cannot fetch target words without a patient_id.")
+        return None, []
+
+    client = _get_client()
+    if client is None:
+        print("[agentic-db] Supabase client unavailable; cannot fetch target words.")
+        return None, []
+
+    try:
+        response = (
+            client
+            .table("sessions")
+            .select("id, target_words, session_date")
+            .eq("patient_id", patient_id)
+            .order("session_date", desc=True)
+            .limit(1)
+            .execute()
+        )
+    except Exception as exc:
+        print(f"[agentic-db] Error querying public.sessions for target words: {exc}")
+        return None, []
+
+    data = getattr(response, "data", None) or []
+    if not data or not isinstance(data, list):
+        print(f"[agentic-db] No sessions found for patient_id={patient_id} in public.sessions.")
+        return None, []
+
+    row = data[0] or {}
+    session_id = row.get("id")
+    values = row.get("target_words")
+    if not isinstance(values, list) or not values:
+        print(f"[agentic-db] target_words empty or not an array for patient_id={patient_id}.")
+        return session_id, []
+
+    words: list[str] = []
+    for value in values:
+        candidate = str(value).strip()
+        if candidate:
+            words.append(candidate)
+
+    if words:
+        print(f"[agentic-db] Loaded {len(words)} target word(s) from session {session_id} for patient {patient_id}.")
+        return session_id, words
+
+    print(f"[agentic-db] No non-empty entries in target_words for patient_id={patient_id}.")
+    return session_id, []
 
 
 # ── Allowed values for difficulty_level ─────────────────────────────────────
@@ -249,7 +306,7 @@ def fetch_personalization_config(
         response = (
             client
             .table("sessions")
-            .select("therapy_goal, phonemes_to_focus_on, difficulty_level, session_date")
+            .select("id, therapy_goal, phonemes_to_focus_on, difficulty_level, session_date")
             .eq("patient_id", patient_id)
             .order("session_date", desc=True)
             .limit(1)

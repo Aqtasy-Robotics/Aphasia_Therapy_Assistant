@@ -12,16 +12,26 @@ High-level pipeline flow:
 """
 
 from __future__ import annotations  # enable postponed evaluation of type annotations
+import os
+import sys
 import time
 import uuid
 from typing import Any, Dict
 
 from langgraph.graph import StateGraph, END  # core LangGraph primitives for building the state machine
 
+# Allow running this file directly (python agentic/graph.py or python graph.py)
+# while still resolving absolute imports like `agentic.state`.
+if __package__ in (None, ""):
+    _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if _PROJECT_ROOT not in sys.path:
+        sys.path.insert(0, _PROJECT_ROOT)
+
 from agentic.state import SpeechTherapyState
 from agentic.db.supabase_store import (
     fetch_patient_id_by_name,
     fetch_target_words_for_patient,
+    fetch_target_words_and_session_id,
     fetch_personalization_config,
     insert_agent_pipeline_step,
     link_pipeline_steps_to_report,
@@ -154,6 +164,7 @@ def _build_initial_state(
     *,
     patient_name: str,
     patient_id: str,
+    session_id: str | None,
     assignment_id: str | None,
     personalization: dict,
     target_words: list[str],
@@ -181,6 +192,7 @@ def _build_initial_state(
         # Session identity (Supabase linkage)
         "patient_id":        patient_id,
         "assignment_id":     assignment_id,
+        "session_id":        session_id,
         "word_source":       "sessions_table",
         "session_start":     time.time(),
         "session_duration_secs": None,
@@ -243,7 +255,7 @@ def run_session_for_patient(
         patient_id=patient_id,
         assignment_id=assignment_id,
     )
-    target_words = fetch_target_words_for_patient(patient_id)
+    session_id, target_words = fetch_target_words_and_session_id(patient_id)
     if not target_words:
         raise ValueError(
             "No target words found in Supabase sessions.target_words for this patient."
@@ -253,6 +265,7 @@ def run_session_for_patient(
     initial_state = _build_initial_state(
         patient_name=patient_name,
         patient_id=patient_id,
+        session_id=session_id,
         assignment_id=assignment_id,
         personalization=personalization,
         target_words=target_words,

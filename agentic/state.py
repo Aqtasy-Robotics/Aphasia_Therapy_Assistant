@@ -46,6 +46,7 @@ class SpeechTherapyState(TypedDict):
     # ── Session identity ─────────────────────────────────────────
     patient_id:             Optional[str]    # Supabase patients.id
     assignment_id:          Optional[str]    # Supabase therapist_assignments.id
+    session_id:             Optional[str]    # Supabase sessions.id (source of target words)
     word_source:            Optional[str]    # 'therapist' | 'patient_category' | 'sessions_table'
     session_start:          Optional[float]  # time.time() at session start
     session_duration_secs:  Optional[int]

@@ -394,6 +394,8 @@ ScreenManager:
         box.add_widget(feedback)
         box.add_widget(actions)
         popup.open()
+        # Delay focus so Kivy can fully render popup before triggering keyboard.
+        Clock.schedule_once(lambda _dt: setattr(input_name, "focus", True), 0.2)
 
     def _start_session_worker(self, patient_name: str) -> None:
         if self.state.session_busy:

@@ -25,12 +25,26 @@ _AGENT_DIR = Path(__file__).resolve().parent
 _REPO_ROOT = find_repo_root(_AGENT_DIR)
 
 
+# Ensure on-screen keyboard is available for TextInput on touchscreen devices.
+# Kivy reads this config when it initializes Window/keyboard subsystems.
+os.environ.setdefault("KCFG_KIVY_KEYBOARD_MODE", "systemanddock")
+
+
 # Repo root on path helps imports when running from the execution_agent folder.
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 # Add src directory to path (Kivy is imported only after PortAudio check below).
 sys.path.insert(0, str(Path(__file__).parent / "src"))
+
+
+# Configure Kivy BEFORE importing any Kivy modules.
+def _configure_kivy_keyboard():
+    """Set up on-screen keyboard for touchscreen devices."""
+    # Use 'dock' mode: shows keyboard at bottom of screen when TextInput is focused.
+    os.environ.setdefault("KCFG_KIVY_KEYBOARD_MODE", "dock")
+    # Allow automatic keyboard triggering on focus.
+    os.environ.setdefault("KCFG_KIVY_KEYBOARD_LAYOUT", "qwerty")
 
 
 def _check_portaudio() -> None:
@@ -67,6 +81,7 @@ def _check_portaudio() -> None:
 
 if __name__ == "__main__":
     load_agent_env_files(_AGENT_DIR)
+    _configure_kivy_keyboard()
     _check_portaudio()
 
     from ui.body_app import SpeechTherapyApp, load_display_config  # noqa: PLC0415

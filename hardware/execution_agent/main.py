@@ -6,6 +6,10 @@ import signal
 import sys
 from pathlib import Path
 
+# Enable Kivy virtual keyboard for touchscreen text input (dock = keyboard at bottom).
+os.environ.setdefault("KCFG_KIVY_KEYBOARD_MODE", "dock")
+os.environ.setdefault("KCFG_KIVY_KEYBOARD_LAYOUT", "qwerty")
+
 from loguru import logger
 
 from src.communication.api_client import ApiClient
