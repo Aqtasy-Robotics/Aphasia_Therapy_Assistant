@@ -17,7 +17,6 @@ import sys
 import time
 import uuid
 from typing import Any, Dict
-from __future__ import annotations
 
 from langgraph.graph import StateGraph, END  # core LangGraph primitives for building the state machine
 
@@ -29,6 +28,7 @@ if __package__ in (None, ""):
         sys.path.insert(0, _PROJECT_ROOT)
 
 from agentic.state import SpeechTherapyState
+from agentic.nodes.perception_node import perception_node
 from agentic.db.supabase_store import (
     fetch_patient_id_by_name,
     fetch_target_words_for_patient,
