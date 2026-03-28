@@ -33,6 +33,8 @@ app = FastAPI(
 )
 
 url = os.getenv("SUPABASE_URL")
+
+
 key = os.getenv("SUPABASE_SERVICE_KEY")
 
 if not url or not key:
