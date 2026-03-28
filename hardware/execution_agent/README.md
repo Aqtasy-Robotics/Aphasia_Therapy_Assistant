@@ -64,6 +64,63 @@ execution_agent/
 
 ---
 
+## Local MCP Server (STDIO)
+
+You can expose local hardware controls as MCP tools for desktop agents.
+
+### Install dependency
+
+```bash
+pip install -r requirements.txt
+```
+
+### Start MCP server
+
+From `hardware/execution_agent`:
+
+```bash
+python -m mcp_server
+```
+
+### Tools exposed (v1)
+
+- `health_check`
+- `audio_list_devices`
+- `audio_listen`
+- `audio_speak`
+- `ui_start`
+- `ui_show`
+- `ui_events_read`
+- `ui_ready`
+
+### Remote Raspberry Pi (via FastAPI bridge)
+
+Use these from the **laptop** so commands run on the **Pi** (speaker, mic, Kivy). The bridge must be running (`uvicorn backend.main:app`) and the Pi must run `python main.py` with `SERVER_URL` pointing at that bridge.
+
+- `bridge_health_remote`
+- `bridge_enqueue_command`
+- `bridge_speak_on_robot`
+- `bridge_listen_on_robot`
+- `bridge_show_ui_on_robot`
+
+Full setup: **[`docs/BRIDGE_AND_MCP.md`](docs/BRIDGE_AND_MCP.md)**.
+
+### Example MCP client command config
+
+```json
+{
+  "mcpServers": {
+    "waabi-hardware-local": {
+      "command": "python",
+      "args": ["-m", "mcp_server"],
+      "cwd": "C:/Users/USER/Desktop/Aqtasy Robotics/Aphasia_Therapy_Assistant/hardware/execution_agent"
+    }
+  }
+}
+```
+
+---
+
 ## Installation on Raspberry Pi
 
 ### 1. Clone the Repository

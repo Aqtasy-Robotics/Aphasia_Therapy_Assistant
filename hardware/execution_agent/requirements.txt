@@ -42,3 +42,4 @@ sentence-transformers>=2.2.2
 wordfreq>=3.0.0
 pyttsx3>=2.90
 mem0ai>=0.1.0
+mcp>=1.2.0

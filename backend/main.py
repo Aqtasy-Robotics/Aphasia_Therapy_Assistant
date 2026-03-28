@@ -1,13 +1,15 @@
+import asyncio
 import logging
 import os
 import sys
 import time
 import uuid
+from collections import defaultdict, deque
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Any
 
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, Header, HTTPException
 from pydantic import BaseModel, Field
 from supabase import create_client, Client
 from dotenv import load_dotenv
@@ -39,6 +41,12 @@ if not url or not key:
 supabase: Client = create_client(url, key)
 
 bridge_log = logging.getLogger("robot_bridge")
+
+# In-memory FIFO of commands keyed by device_id (robot label or UUID). Laptop MCP/agents POST here; Pi polls GET /commands/{device_id}.
+_command_queue_lock = asyncio.Lock()
+_command_queues: Dict[str, deque] = defaultdict(lambda: deque(maxlen=500))
+
+_ALLOWED_BRIDGE_ACTIONS = frozenset({"speak", "listen", "show_ui", "show_face", "move_head"})
 
 
 def _profile_id_for_robot_command(device_id: str) -> Optional[str]:
@@ -91,12 +99,64 @@ class UiEventIn(BaseModel):
     timestamp: Optional[float] = None
 
 
+class EnqueueCommandIn(BaseModel):
+    """Enqueue a robot command for the given device (consumed by GET /commands/{device_id} on the Pi)."""
+
+    action: str = Field(..., description="One of: speak, listen, show_ui, show_face, move_head")
+    payload: Dict[str, Any] = Field(default_factory=dict)
+
+
+def _verify_bridge_command_key(x_bridge_key: Optional[str]) -> None:
+    expected = (os.getenv("BRIDGE_COMMAND_API_KEY") or "").strip()
+    if not expected:
+        return
+    if (x_bridge_key or "").strip() != expected:
+        raise HTTPException(status_code=401, detail="Invalid or missing X-Bridge-Key")
+
+
+@app.post("/commands/{device_id}/enqueue", tags=["Robot Bridge"])
+async def enqueue_robot_command(
+    device_id: str,
+    body: EnqueueCommandIn,
+    x_bridge_key: Optional[str] = Header(None, alias="X-Bridge-Key"),
+):
+    """Queue a command for a robot. The Pi polls GET /commands/{device_id} and executes it locally (speaker, mic, UI).
+
+    Set env ``BRIDGE_COMMAND_API_KEY`` and send the same value in header ``X-Bridge-Key`` for production.
+    If unset, enqueue is open (development only).
+    """
+    _verify_bridge_command_key(x_bridge_key)
+    action_norm = (body.action or "").strip().lower()
+    if action_norm not in _ALLOWED_BRIDGE_ACTIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"action must be one of: {sorted(_ALLOWED_BRIDGE_ACTIONS)}",
+        )
+    cmd = ExecutionCommand(
+        command_id=str(uuid.uuid4()),
+        action=action_norm,
+        payload=dict(body.payload or {}),
+        timestamp=datetime.utcnow(),
+    )
+    async with _command_queue_lock:
+        _command_queues[device_id].append(cmd)
+    bridge_log.info("Enqueued command id=%s device=%s action=%s", cmd.command_id, device_id, action_norm)
+    return {"status": "queued", "command_id": cmd.command_id, "device_id": device_id, "action": action_norm}
+
+
 @app.get("/health", tags=["Health"])
 async def health_check():
     return {"status": "online", "robot": "Waabi", "bridge": "Active"}
 
 @app.get("/commands/{device_id}", response_model=Optional[ExecutionCommand], tags=["Robot Bridge"])
 async def get_robot_command(device_id: str):
+    async with _command_queue_lock:
+        q = _command_queues.get(device_id)
+        if q and len(q) > 0:
+            cmd = q.popleft()
+            bridge_log.debug("Dequeued command id=%s device=%s action=%s", cmd.command_id, device_id, cmd.action)
+            return cmd
+
     # Dev-only: return a show_ui command so the Pi can verify server-driven screens without Supabase.
     if os.getenv("BRIDGE_TEST_SHOW_UI", "").lower() in ("1", "true", "yes"):
         now_iso = datetime.utcnow().isoformat()

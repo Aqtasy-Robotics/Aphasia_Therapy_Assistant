@@ -17,7 +17,8 @@ nltk>=3.8.1
 sentence-transformers>=2.2.2
 wordfreq>=3.0.0
 
-# ── Text-to-speech (execution agent) ────────────────────────────
+# ── Text-to-speech (execution_node: Piper primary, pyttsx3 fallback) ─
+piper-tts>=1.2.0
 pyttsx3>=2.90
 
 # ── Utilities ────────────────────────────────────────────────────

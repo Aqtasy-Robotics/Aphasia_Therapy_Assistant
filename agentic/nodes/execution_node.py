@@ -1,53 +1,70 @@
 """
 nodes/execution_node.py — Output delivery wrapped as a LangGraph node.
 
-Original main.py (Raspberry Pi execution agent) is preserved structurally.
-Changes made:
-  1. The hardware boot / polling loop from main.py is now called once at startup
-     via _boot_execution_agent() — the LangGraph node itself handles per-session output.
-  2. Audio TTS output uses pyttsx3 (offline, Pi-compatible).
-     If pyttsx3 is unavailable the node degrades gracefully to text-only.
-  3. Settings/loguru infrastructure from the original is retained and called
-     during node initialisation.
-  4. Node returns a state-dict patch (session_complete=True) when done.
-
-NOTE: The GPIO / OLED / servo logic referenced in settings is NOT removed —
-      it simply isn't exercised yet (Phase 2, same as original main.py comment).
+TTS pipeline (in order):
+  1. Piper TTS (ONNX) — same stack as hardware/execution_agent mouth.py.
+     Set ``PIPER_MODEL_PATH`` to the ``.onnx`` file (or load execution_agent
+     ``Settings`` which includes ``piper_model_path``).
+  2. pyttsx3 — fallback if Piper is unavailable or the model path is missing.
+  3. Terminal print — last resort.
+    
+sounddevice plays synthesized audio on the selected output device.
 """
 
 from __future__ import annotations
 
+import json
 import os
-import sys
 import tempfile
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from loguru import logger
 
 from agentic.db.mem0_store import add_session_memory
 from agentic.state import SpeechTherapyState
 
-# ── Optional TTS imports ─────────────────────────────────────────────────────
-# Primary:  pyttsx3  — offline, works on Raspberry Pi and laptop
-# Fallback: just print to terminal
+# ── Piper (primary TTS) ──────────────────────────────────────────────────────
+try:
+    try:
+        from piper import PiperVoice
+    except ImportError:
+        from piper_tts import PiperVoice  # type: ignore[no-redef]
+
+    _PIPER_AVAILABLE = True
+except Exception:
+    PiperVoice = None  # type: ignore[misc, assignment]
+    _PIPER_AVAILABLE = False
+
+try:
+    import numpy as np
+
+    _NP_AVAILABLE = True
+except Exception:
+    _NP_AVAILABLE = False
+
+# ── pyttsx3 fallback ─────────────────────────────────────────────────────────
 try:
     import pyttsx3
-    _TTS_AVAILABLE = True
-except Exception:
-    _TTS_AVAILABLE = False
 
-# sounddevice is used to enumerate the default output device (laptop speaker)
+    _PYTTSX3_AVAILABLE = True
+except Exception:
+    _PYTTSX3_AVAILABLE = False
+
+# sounddevice: playback + device selection
 try:
     import sounddevice as sd
+
     _SD_AVAILABLE = True
 except Exception:
     _SD_AVAILABLE = False
 
 
-# ── Lazy settings load ───────────────────────────────────────────────────────
+# ── Lazy settings / Piper cache ─────────────────────────────────────────────
 _settings = None
+_piper_exec_voice: Any = None
+_piper_exec_model_key: Optional[str] = None
 
 
 def _get_failure_reason_message(reason: str | None, target_word: str = "") -> str:
@@ -139,82 +156,177 @@ def _find_laptop_speaker() -> Optional[int]:
 
     return None
 
-# ── Audio output helper ──────────────────────────────────────────────────────
 
-def _speak(text: str) -> Optional[str]:
-    """
-    Convert feedback text to speech and play it through the laptop speaker.
+def _read_piper_sample_rate(model_path: Path) -> int:
+    cfg = model_path.with_suffix(".onnx.json")
+    try:
+        with cfg.open(encoding="utf-8") as fh:
+            data = json.load(fh)
+        return int(data.get("audio", {}).get("sample_rate", 22050))
+    except Exception:
+        return 22050
 
-    Steps:
-      1. Resolve the laptop's default output device index via sounddevice.
-      2. Initialise a fresh pyttsx3 engine, save speech to a temp .wav file.
-      3. Play the .wav back through the resolved output device using
-         sounddevice + soundfile (same stack used by perception_node for input).
-      4. If anything fails, fall back to pyttsx3's own runAndWait() playback
-         (which uses the OS default speaker anyway).
-      5. If pyttsx3 is entirely unavailable, print the text to terminal.
 
-    Returns the path to the saved .wav on success, else None.
-    """
-    if not _TTS_AVAILABLE:
-        logger.warning("pyttsx3 not available — printing feedback to terminal only.")
-        print(f"\n[TTS fallback] {text}\n")
+def _piper_model_path() -> Optional[Path]:
+    """Resolve Piper ``.onnx`` path: execution_agent Settings, then ``PIPER_MODEL_PATH``."""
+    s = _get_settings()
+    if s is not None:
+        raw = getattr(s, "piper_model_path", None)
+        if raw is not None:
+            p = Path(str(raw)).expanduser()
+            if p.is_file():
+                return p
+    env_p = (os.getenv("PIPER_MODEL_PATH") or "").strip()
+    if env_p:
+        p = Path(env_p).expanduser()
+        if p.is_file():
+            return p
+    return None
+
+
+def _playback_volume() -> float:
+    s = _get_settings()
+    if s is not None:
+        try:
+            return float(max(0.0, min(1.0, float(s.audio.volume))))
+        except (TypeError, ValueError):
+            pass
+    return 0.9
+
+
+def _resolve_playback_device() -> Optional[int]:
+    s = _get_settings()
+    if s is not None and getattr(s.audio, "output_device", None):
+        try:
+            from src.services.audio_utils import select_output_device
+
+            return int(select_output_device(s.audio.output_device))
+        except Exception as exc:
+            logger.debug("[execution_node] select_output_device skipped: {}", exc)
+    return _find_laptop_speaker()
+
+
+def _load_piper_voice(model_path: Path) -> Any:
+    global _piper_exec_voice, _piper_exec_model_key
+    if not _PIPER_AVAILABLE or PiperVoice is None:
+        raise RuntimeError("piper-tts not installed")
+    key = str(model_path.resolve())
+    if _piper_exec_voice is not None and _piper_exec_model_key == key:
+        return _piper_exec_voice
+    config_path = model_path.with_suffix(".onnx.json")
+    if not config_path.is_file():
+        raise FileNotFoundError(f"Piper config missing: {config_path}")
+    logger.info("[execution_node] Loading Piper model from {}", model_path)
+    _piper_exec_voice = PiperVoice.load(str(model_path), config_path=str(config_path))
+    _piper_exec_model_key = key
+    return _piper_exec_voice
+
+
+def _synthesize_piper_numpy(text: str, voice: Any) -> Any:
+    if not _NP_AVAILABLE:
+        raise RuntimeError("numpy required for Piper output")
+    chunks: list[Any] = []
+    for audio_bytes in voice.synthesize(text):
+        audio_int16 = np.frombuffer(audio_bytes, dtype=np.int16)
+        chunks.append(audio_int16.astype(np.float32) / 32768.0)
+    if not chunks:
+        raise ValueError("Piper produced no audio")
+    audio_array = np.concatenate(chunks)
+    if len(audio_array.shape) > 1:
+        audio_array = np.mean(audio_array, axis=1)
+    return audio_array
+
+
+def _speak_piper(text: str) -> Optional[str]:
+    if not _PIPER_AVAILABLE or not _NP_AVAILABLE or not _SD_AVAILABLE:
+        return None
+    model_path = _piper_model_path()
+    if model_path is None:
+        logger.info("[execution_node] Piper skipped — set PIPER_MODEL_PATH or execution_agent Settings.")
+        return None
+    wav_path: Optional[str] = None
+    try:
+        voice = _load_piper_voice(model_path)
+        audio = _synthesize_piper_numpy(text, voice)
+        sample_rate = _read_piper_sample_rate(model_path)
+        vol = _playback_volume()
+        audio = np.clip(audio * vol, -1.0, 1.0)
+        out_dev = _resolve_playback_device()
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
+        tmp.close()
+        wav_path = tmp.name
+        import soundfile as sf
+
+        sf.write(wav_path, audio, sample_rate, subtype="PCM_16")
+        logger.info("[execution_node] Piper TTS saved → {}", wav_path)
+        if out_dev is not None:
+            sd.play(audio, samplerate=sample_rate, device=out_dev)
+            sd.wait()
+            logger.info("[execution_node] Piper playback complete.")
+        else:
+            logger.warning("[execution_node] No output device — WAV saved but not played.")
+        return wav_path
+    except Exception as exc:
+        logger.warning("[execution_node] Piper TTS failed ({}); trying pyttsx3.", exc)
         return None
 
+
+def _speak_pyttsx3(text: str) -> Optional[str]:
+    if not _PYTTSX3_AVAILABLE:
+        return None
     engine = None
     wav_path: Optional[str] = None
-
     try:
-        # Step 1 — find the laptop speaker
-        output_device = _find_laptop_speaker()
+        import pyttsx3 as _ptts
 
-        # Step 2 — synthesise speech to a temp .wav
-        engine = pyttsx3.init()
+        output_device = _find_laptop_speaker()
+        engine = _ptts.init()
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
         tmp.close()
         wav_path = tmp.name
         engine.save_to_file(text, wav_path)
-        engine.runAndWait()   # writes the file; does NOT play yet
-        logger.info("[execution_node] TTS audio saved → {}", wav_path)
-
-        # Step 3 — play through the laptop speaker via sounddevice
+        engine.runAndWait()
+        logger.info("[execution_node] pyttsx3 TTS saved → {}", wav_path)
         if _SD_AVAILABLE and output_device is not None:
             import soundfile as sf
+
             data, sample_rate = sf.read(wav_path, dtype="float32")
-            logger.info(
-                "[execution_node] Playing audio on device [{}] at {} Hz",
-                output_device, sample_rate,
-            )
             sd.play(data, samplerate=sample_rate, device=output_device)
-            sd.wait()   # block until playback finishes
-            logger.info("[execution_node] Playback complete.")
+            sd.wait()
         else:
-            # Step 4 — sounddevice unavailable; let pyttsx3 play via OS default
-            logger.warning(
-                "[execution_node] sounddevice unavailable — "
-                "falling back to pyttsx3 default playback."
-            )
-            engine2 = pyttsx3.init()
+            engine2 = _ptts.init()
             engine2.say(text)
             engine2.runAndWait()
             try:
                 engine2.stop()
             except Exception:
                 pass
-
         return wav_path
-
     except Exception as exc:
-        logger.error("[execution_node] TTS/playback error: {}", exc)
-        # Last resort — print to terminal so feedback is never lost
-        print(f"\n[TTS fallback] {text}\n")
-        return wav_path   # still return the path if the file was written
+        logger.error("[execution_node] pyttsx3 error: {}", exc)
+        return wav_path
     finally:
         if engine is not None:
             try:
                 engine.stop()
             except Exception:
                 pass
+
+
+def _speak(text: str) -> Optional[str]:
+    """
+    Piper (preferred) → pyttsx3 → terminal print.
+    Returns path to a saved ``.wav`` when synthesis wrote a file, else None.
+    """
+    path = _speak_piper(text)
+    if path:
+        return path
+    path = _speak_pyttsx3(text)
+    if path:
+        return path
+    logger.warning("[execution_node] No TTS backend — printing feedback only.")
+    print(f"\n[TTS fallback] {text}\n")
+    return None
 
 
 # ── LangGraph node ───────────────────────────────────────────────────────────
@@ -255,14 +367,14 @@ def execution_node(state: SpeechTherapyState) -> dict:
         print(f"  PRACTICE:\n  {practice}")
     print("█" * 55 + "\n")
 
-    # ── Audio output through laptop speaker ──────────────────────
+    # ── Audio output (Piper → pyttsx3 → print) ───────────────────
     full_speech = f"{feedback_text}  {practice}" if practice else feedback_text
     audio_path  = _speak(full_speech)
 
     if audio_path:
         print(f"🔊 Audio saved → {audio_path}")
     else:
-        print("🔇 Text-only mode (TTS unavailable or not installed).")
+        print("🔇 Text-only mode (set PIPER_MODEL_PATH + piper-tts, or install pyttsx3).")
 
     history = list(state.get("session_history") or [])
     history.append(
