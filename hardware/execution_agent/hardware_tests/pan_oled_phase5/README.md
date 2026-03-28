@@ -45,6 +45,14 @@ If your wiring differs, update:
 - `oled.interface` (`i2c` or `spi`)
 - `oled.i2c_address` / `oled.rotate` / `oled_driver` (if needed)
 - SPI modules: `oled.spi_port`, `oled.spi_device`, `oled.spi_gpio_dc`, `oled.spi_gpio_rst`
+- **Dual OLED mode:** if `oled_left` + `oled_right` exist in config, the script drives
+  two displays and renders **one eye per display**.
+  - Left eye display: `oled_left` (recommended CE0 / `spi_device: 0`)
+  - Right eye display: `oled_right` (recommended CE1 / `spi_device: 1`)
+  - Recommended dual pin map:
+    - shared: `SCL->GPIO11`, `SDA->GPIO10`, `VCC->3V3`, `GND->GND`
+    - left: `CS->GPIO8(CE0)`, `DC->GPIO24`, `RST->GPIO25`
+    - right: `CS->GPIO7(CE1)`, `DC->GPIO23`, `RST->GPIO22`
 - **Orientation:** `oled.rotate` — luma uses `0..3` (steps of 90° clockwise). Try `1`, `2`, or `3` if the face is sideways in your enclosure.
 - **Eye position:** `oled.eye_layout` — `horizontal` (default) or `vertical` (stacked, good for portrait mounts). `oled.eyes_bias_x` — `-1.0`..`1.0`; **negative shifts both eyes left**, positive shifts right.
 
@@ -63,6 +71,13 @@ Optional flags:
 ------------------------
 ```bash
 python3 test_oled_eyes.py --duration 5.0 --expression neutral
+```
+
+For dual OLED (`oled_left` + `oled_right` in config), same command works and renders
+one eye on each display:
+
+```bash
+python3 test_oled_eyes.py --config test_config.json --duration 15 --expression auto
 ```
 
 Optional flags:

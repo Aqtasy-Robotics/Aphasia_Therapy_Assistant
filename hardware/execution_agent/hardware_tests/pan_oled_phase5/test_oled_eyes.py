@@ -284,8 +284,43 @@ def _draw_frame(
     return img
 
 
-def _init_oled(cfg: Dict[str, Any]) -> Any:
-    oled_cfg = cfg.get("oled", {})
+def _draw_single_eye_frame(
+    width: int,
+    height: int,
+    expression: str,
+    gaze_x: float,
+    gaze_y: float,
+    blink_factor: float,
+    micro_phase: float,
+    *,
+    eye_side: str,
+) -> Image.Image:
+    """Render one full-screen eye for dual-panel setups."""
+    profile = EXPRESSION_PROFILE.get(expression, EXPRESSION_PROFILE["neutral"])
+    openness = _clamp(profile["openness"] * (1.0 - blink_factor), 0.08, 0.95)
+    vertical_bias = _clamp(profile["vertical_bias"], -0.25, 0.25)
+
+    # Single-eye panels should use a wider eye than the shared single-screen mode.
+    eye_w = int(width * _clamp(profile["width_ratio"] * 1.9, 0.45, 0.88))
+    eye_h = int(height * openness * 0.60)
+    radius = max(2, int(min(eye_w, eye_h) * 0.36))
+
+    # Slight binocular feel: move left/right eye subtly in opposite horizontal direction.
+    side = str(eye_side).lower().strip()
+    side_parallax = -0.012 if side == "left" else 0.012
+    gaze_dx = int((gaze_x + side_parallax) * width * 0.12)
+    gaze_dy = int(gaze_y * height * 0.10)
+    cy = int(height * (0.5 + vertical_bias + (math.sin(micro_phase) * 0.02))) + gaze_dy
+    cx = (width // 2) + gaze_dx
+
+    img = Image.new("RGB", (width, height), "black")
+    draw = ImageDraw.Draw(img)
+    box = [cx - eye_w // 2, cy - eye_h // 2, cx + eye_w // 2, cy + eye_h // 2]
+    draw.rounded_rectangle(box, radius=radius, fill="white")
+    return img
+
+
+def _init_oled_from_settings(oled_cfg: Dict[str, Any]) -> Any:
     interface = str(oled_cfg.get("interface", "i2c")).lower()
     port = int(oled_cfg.get("i2c_port", 1))
     addr = int(str(oled_cfg.get("i2c_address", "0x3C")), 16)
@@ -379,6 +414,10 @@ def _init_oled(cfg: Dict[str, Any]) -> Any:
     raise RuntimeError(f"Unsupported oled_driver={driver!r}")
 
 
+def _init_oled(cfg: Dict[str, Any]) -> Any:
+    return _init_oled_from_settings(cfg.get("oled", {}))
+
+
 async def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="test_config.json")
@@ -389,6 +428,7 @@ async def main() -> int:
     args = parser.parse_args()
 
     cfg = _load_config(Path(args.config))
+    dual_mode = isinstance(cfg.get("oled_left"), dict) and isinstance(cfg.get("oled_right"), dict)
     oled_cfg = cfg.get("oled", {})
     print(
         "OLED config: interface={} driver={} spi_port={} spi_device={} dc={} rst={}".format(
@@ -411,15 +451,42 @@ async def main() -> int:
     gaze_y = _clamp(args.gaze_y, -1.0, 1.0)
     duration = max(0.0, float(args.duration))
 
-    device = _init_oled(cfg)
-    width = int(device.width)
-    height = int(device.height)
-
-    print(f"OLED init OK: {width}x{height} rotate={getattr(device, 'rotate', None)}")
+    device = None
+    left_device = None
+    right_device = None
+    if dual_mode:
+        left_cfg = cfg.get("oled_left", {})
+        right_cfg = cfg.get("oled_right", {})
+        print(
+            "Dual OLED config: LEFT spi_device={} dc={} rst={} | RIGHT spi_device={} dc={} rst={}".format(
+                left_cfg.get("spi_device", 0),
+                left_cfg.get("spi_gpio_dc", 24),
+                left_cfg.get("spi_gpio_rst", 25),
+                right_cfg.get("spi_device", 1),
+                right_cfg.get("spi_gpio_dc", 23),
+                right_cfg.get("spi_gpio_rst", 22),
+            )
+        )
+        left_device = _init_oled_from_settings(left_cfg)
+        right_device = _init_oled_from_settings(right_cfg)
+        print(
+            "Dual OLED init OK: LEFT {}x{} RIGHT {}x{}".format(
+                int(left_device.width),
+                int(left_device.height),
+                int(right_device.width),
+                int(right_device.height),
+            )
+        )
+    else:
+        device = _init_oled(cfg)
+        width = int(device.width)
+        height = int(device.height)
+        print(f"OLED init OK: {width}x{height} rotate={getattr(device, 'rotate', None)}")
 
     eye_layout = str(oled_cfg.get("eye_layout", "horizontal")).lower()
     eyes_bias_x = _clamp(float(oled_cfg.get("eyes_bias_x", 0.0)), -1.0, 1.0)
-    print(f"Eyes: layout={eye_layout} eyes_bias_x={eyes_bias_x} (negative = shift left)")
+    if not dual_mode:
+        print(f"Eyes: layout={eye_layout} eyes_bias_x={eyes_bias_x} (negative = shift left)")
 
     start = time.monotonic()
     next_blink_at = start + random.uniform(0.8, 1.6)
@@ -449,41 +516,100 @@ async def main() -> int:
             elif now > (next_blink_at + 0.12):
                 next_blink_at = now + random.uniform(1.0, 2.5)
 
-            image = _draw_frame(
-                width=width,
-                height=height,
-                expression=expr,
-                gaze_x=gaze_x,
-                gaze_y=gaze_y,
-                blink_factor=blink_factor,
-                micro_phase=elapsed * 3.0,
-                eye_layout=eye_layout,
-                eyes_bias_x=eyes_bias_x,
-            )
-            await asyncio.to_thread(device.display, _prep_image_for_device(image, device))
+            if dual_mode:
+                lw = int(left_device.width)
+                lh = int(left_device.height)
+                rw = int(right_device.width)
+                rh = int(right_device.height)
+                left_img = _draw_single_eye_frame(
+                    lw,
+                    lh,
+                    expr,
+                    gaze_x,
+                    gaze_y,
+                    blink_factor,
+                    elapsed * 3.0,
+                    eye_side="left",
+                )
+                right_img = _draw_single_eye_frame(
+                    rw,
+                    rh,
+                    expr,
+                    gaze_x,
+                    gaze_y,
+                    blink_factor,
+                    elapsed * 3.0,
+                    eye_side="right",
+                )
+                await asyncio.gather(
+                    asyncio.to_thread(left_device.display, _prep_image_for_device(left_img, left_device)),
+                    asyncio.to_thread(right_device.display, _prep_image_for_device(right_img, right_device)),
+                )
+            else:
+                image = _draw_frame(
+                    width=width,
+                    height=height,
+                    expression=expr,
+                    gaze_x=gaze_x,
+                    gaze_y=gaze_y,
+                    blink_factor=blink_factor,
+                    micro_phase=elapsed * 3.0,
+                    eye_layout=eye_layout,
+                    eyes_bias_x=eyes_bias_x,
+                )
+                await asyncio.to_thread(device.display, _prep_image_for_device(image, device))
             await asyncio.sleep(frame_delay)
 
         # Leave a neutral frame at the end.
-        final_img = _draw_frame(
-            width,
-            height,
-            "neutral",
-            gaze_x,
-            gaze_y,
-            0.0,
-            0.0,
-            eye_layout=eye_layout,
-            eyes_bias_x=eyes_bias_x,
-        )
-        await asyncio.to_thread(device.display, _prep_image_for_device(final_img, device))
+        if dual_mode:
+            left_img = _draw_single_eye_frame(
+                int(left_device.width),
+                int(left_device.height),
+                "neutral",
+                gaze_x,
+                gaze_y,
+                0.0,
+                0.0,
+                eye_side="left",
+            )
+            right_img = _draw_single_eye_frame(
+                int(right_device.width),
+                int(right_device.height),
+                "neutral",
+                gaze_x,
+                gaze_y,
+                0.0,
+                0.0,
+                eye_side="right",
+            )
+            await asyncio.gather(
+                asyncio.to_thread(left_device.display, _prep_image_for_device(left_img, left_device)),
+                asyncio.to_thread(right_device.display, _prep_image_for_device(right_img, right_device)),
+            )
+        else:
+            final_img = _draw_frame(
+                width,
+                height,
+                "neutral",
+                gaze_x,
+                gaze_y,
+                0.0,
+                0.0,
+                eye_layout=eye_layout,
+                eyes_bias_x=eyes_bias_x,
+            )
+            await asyncio.to_thread(device.display, _prep_image_for_device(final_img, device))
         return 0
     finally:
-        try:
-            await asyncio.to_thread(device.clear)
-        except Exception:
-            pass
-        if isinstance(device, Sh1107NativeI2C):
-            device.close()
+        for dev in (left_device, right_device, device):
+            if dev is None:
+                continue
+            try:
+                await asyncio.to_thread(dev.clear)
+            except Exception:
+                pass
+            if isinstance(dev, Sh1107NativeI2C):
+                dev.close()
 
 
 if __name__ == "__main__":

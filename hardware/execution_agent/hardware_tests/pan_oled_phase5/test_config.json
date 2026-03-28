@@ -27,6 +27,30 @@
     "cmd_control": "0x00",
     "data_control": "0x40",
     "safe_i2c": true
+  },
+  "oled_left": {
+    "interface": "spi",
+    "oled_driver": "sh1107",
+    "spi_port": 0,
+    "spi_device": 0,
+    "spi_gpio_dc": 24,
+    "spi_gpio_rst": 25,
+    "spi_bus_speed_hz": 8000000,
+    "width": 128,
+    "height": 128,
+    "rotate": 1
+  },
+  "oled_right": {
+    "interface": "spi",
+    "oled_driver": "sh1107",
+    "spi_port": 0,
+    "spi_device": 1,
+    "spi_gpio_dc": 23,
+    "spi_gpio_rst": 22,
+    "spi_bus_speed_hz": 8000000,
+    "width": 128,
+    "height": 128,
+    "rotate": 1
   }
 }
 
