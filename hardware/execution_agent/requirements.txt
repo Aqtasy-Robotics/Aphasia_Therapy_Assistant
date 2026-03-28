@@ -1,45 +1,30 @@
-# ── Execution Agent Dependencies ──
+# ── Raspberry Pi Dependencies ──
+# (Pi only records audio, runs GUI, and POSTs to laptop server)
+# All agent/AI/LangGraph code runs on the laptop — not needed here.
+ 
 # Core
-httpx>=0.27.0              # Async HTTP client for FastAPI polling
-python-dotenv>=1.0.0       # .env file loading
+requests>=2.32.0           # HTTP POST audio to laptop server
+python-dotenv>=1.0.0       # .env file loading (SAMPLE_RATE, RECORD_SECONDS etc.)
 pydantic>=2.5.0            # Data validation
 pydantic-settings>=2.2.1   # Pydantic BaseSettings for env + config
-
+ 
 # Audio
-sounddevice>=0.4.6         # Mic input & speaker output
-numpy>=1.26.0              # Audio buffer handling
-scipy>=1.12.0              # WAV file I/O
-
-# TTS (Local)
-piper-tts>=1.2.0           # Piper TTS engine (ONNX)
-
+sounddevice>=0.4.6         # Pi mic recording + speaker playback
+soundfile>=0.12.1          # Save/read WAV files
+numpy>=1.26.0              # Audio buffer handling (required by sounddevice)
+ 
+# UI – Kivy (7" Touchscreen)
+kivy>=2.3.0                # Touch UI framework
+ 
 # Hardware – GPIO & Servos
 gpiozero>=2.0              # Servo control
 # RPi.GPIO                 # Auto-installed on Pi, fallback mocked
-
+ 
 # Hardware – OLED Display
 luma.oled>=3.13.0          # SSD1351 / SH1106 OLED driver
 luma.core>=2.4.0           # Core rendering for luma
 Pillow>=10.2.0             # Image rendering for OLED faces
-
-# UI – Kivy (7" Touchscreen)
-kivy>=2.3.0                # Touch UI framework
-
+ 
 # Utilities
-loguru>=0.7.0              # Better logging
-
-# LangGraph therapy session (Kivy: patient name + mic → agentic/graph.py)
-# Requires repo-root .env with SUPABASE_*, GROQ_API, etc.
-supabase>=2.0.0
-langgraph>=0.2.0
-langchain>=0.2.0
-langchain-core>=0.2.0
-groq>=0.9.0
-soundfile>=0.12.1
-g2p-en>=2.1.0
-nltk>=3.8.1
-sentence-transformers>=2.2.2
-wordfreq>=3.0.0
-pyttsx3>=2.90
-mem0ai>=0.1.0
-mcp>=1.2.0
+loguru>=0.7.0              # Logging (used in body_app.py)
+httpx>=0.27.0              # Async HTTP (kept for any existing hardware drivers)

@@ -40,5 +40,13 @@
         "width": 800,
         "height": 480,
         "fullscreen": true
+    },
+
+    
+    "laptop_server": {
+        "url": "http://192.168.1.X:8000"
     }
+    
+
+
 }

@@ -17,6 +17,7 @@ import sys
 import time
 import uuid
 from typing import Any, Dict
+from __future__ import annotations
 
 from langgraph.graph import StateGraph, END  # core LangGraph primitives for building the state machine
 
@@ -132,6 +133,74 @@ def build_graph():
     graph.add_edge("therapist_review", END)  # once therapist_review_node runs, the graph terminates
 
     return graph.compile()  # return a compiled, ready-to-run LangGraph application
+
+"""
+ADD THIS FUNCTION TO graph.py — paste it after the existing build_graph() function.
+
+run_single_attempt() is called by laptop_server.py for each audio POST from the Pi.
+It runs the graph for exactly ONE perception attempt and returns early if the graph
+would loop back to perception (meaning the Pi needs to re-record).
+"""
+
+
+
+
+def run_single_attempt(
+    state: "SpeechTherapyState",
+) -> tuple[Dict[str, Any], bool]:
+    """
+    Run the compiled LangGraph for ONE perception → execution attempt.
+
+    The graph streams node-by-node. We watch for the special
+    ``perception_failure_reason == "no_audio"`` signal that perception_node
+    emits when ROBOT_REMOTE_MODE is set and no audio was in state (which means
+    the graph would loop back to perception asking for a new recording).
+
+    When we see that signal we break the stream early — before the graph tries
+    to call perception again — and return ``needs_retry=True`` so the server
+    can respond to the Pi with a "re-record" instruction.
+
+    Args:
+        state: The accumulated SpeechTherapyState dict for this session,
+               with ``audio_path`` already set to the temp file the server
+               saved from the Pi's POST body.
+
+    Returns:
+        (accumulated_state, needs_retry)
+        needs_retry=True  → Pi should record again and POST a new attempt.
+        needs_retry=False → execution_node ran; check ``session_complete``
+                            to know if there are more words.
+    """
+    compiled = build_graph()
+    acc: Dict[str, Any] = dict(state)
+
+    stream_gen = compiled.stream(state, stream_mode="updates")
+    try:
+        for update in stream_gen:
+            if not isinstance(update, dict):
+                continue
+
+            for node_name, patch in update.items():
+                if isinstance(patch, dict):
+                    acc.update(patch)
+
+            # perception_node sets this when ROBOT_REMOTE_MODE=1 and audio_path
+            # is None — it means the graph would loop but has no audio to use.
+            if acc.get("perception_failure_reason") == "no_audio":
+                # Reset so the next attempt starts clean
+                acc["perception_failure_reason"] = None
+                return acc, True  # needs_retry
+
+    except Exception:
+        raise
+    finally:
+        # Closing the generator stops LangGraph from executing further nodes.
+        try:
+            stream_gen.close()
+        except Exception:
+            pass
+
+    return acc, False  # execution completed normally
 
 
 def _summarize_patch(node_name: str, patch: Any) -> Dict[str, Any]:
