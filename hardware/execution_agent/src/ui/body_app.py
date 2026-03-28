@@ -486,6 +486,12 @@ ScreenManager:
         self._apply_state()
         self.emit_touch_event("open_settings")
 
+    def on_close_app(self) -> None:
+        """Stop the Kivy app and exit the process cleanly."""
+        if self._remote_session_id:
+            self._cleanup_remote_session()
+        self.stop()
+
     # ── Speak tap ─────────────────────────────────────────────────
 
     def on_speak_tap(self) -> None:

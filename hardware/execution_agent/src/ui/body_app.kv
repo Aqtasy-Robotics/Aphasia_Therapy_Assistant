@@ -70,6 +70,23 @@
             rounded_rectangle: (self.x, self.y, self.width, self.height, dp(25))
             width: 1.2
 
+<CloseButton@Button>:
+    size_hint: None, None
+    size: dp(52), dp(52)
+    text: "✕"
+    background_normal: ""
+    background_down: ""
+    background_color: 0, 0, 0, 0
+    color: 1, 1, 1, 1
+    bold: True
+    font_size: "22sp"
+    canvas.before:
+        Color:
+            rgba: (0.85, 0.15, 0.15, 1) if self.state == "normal" else (0.70, 0.10, 0.10, 1)
+        Ellipse:
+            pos: self.pos
+            size: self.size
+
 <HeaderBar@BoxLayout>:
     size_hint_y: None
     height: dp(64)
@@ -108,6 +125,8 @@
             BackButton:
                 on_release: app.on_nav_home()
             Widget:
+            CloseButton:
+                on_release: app.on_close_app()
 
         Widget:
 
@@ -166,6 +185,8 @@
             BackButton:
                 on_release: app.on_nav_home()
             Widget:
+            CloseButton:
+                on_release: app.on_close_app()
 
         Widget:
             size_hint_y: 0.12
@@ -223,6 +244,8 @@
             BackButton:
                 on_release: app.on_nav_home()
             Widget:
+            CloseButton:
+                on_release: app.on_close_app()
 
         BoxLayout:
             orientation: "vertical"
@@ -333,6 +356,8 @@
             BackButton:
                 on_release: app.on_nav_home()
             Widget:
+            CloseButton:
+                on_release: app.on_close_app()
         Widget:
         Label:
             text: root.empty_title
@@ -365,6 +390,8 @@
             BackButton:
                 on_release: app.on_nav_home()
             Widget:
+            CloseButton:
+                on_release: app.on_close_app()
         Widget:
         Label:
             text: "SUCCESS" if root.feedback_icon == "SUCCESS" else "TRY AGAIN"
@@ -396,6 +423,8 @@
             BackButton:
                 on_release: app.on_nav_home()
             Widget:
+            CloseButton:
+                on_release: app.on_close_app()
 
         BoxLayout:
             orientation: "vertical"
