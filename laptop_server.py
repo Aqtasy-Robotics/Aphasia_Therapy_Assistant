@@ -99,7 +99,11 @@ async def start_session(patient_name: str = Form(...)) -> Dict[str, Any]:
     if not target_words:
         raise HTTPException(
             status_code=404,
-            detail="No target words found for this patient in Supabase sessions.",
+            detail=(
+                "No target words found for this patient. "
+                "Add sessions.target_words/target_sentence for this patient, "
+                "or set DEFAULT_TARGET_WORDS in environment (comma-separated)."
+            ),
         )
 
     run_id = str(uuid.uuid4())

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import os
 from typing import Any, Dict, Optional
 
 import numpy as np
@@ -30,8 +31,8 @@ except ImportError:
 _input_device: Optional[int] = None
 _settings: Optional[Any] = None
 
-# Force USB microphone — change this string if your USB mic has a different name
-USB_DEVICE_SPEC = "usb"
+# Default substring for robot USB mics; override with config audio.input_device or PI_INPUT_DEVICE
+_DEFAULT_USB_SPEC = "usb"
 
 
 def _record_audio(
@@ -39,36 +40,50 @@ def _record_audio(
     sample_rate: int,
     channels: int,
     device: int,
-) -> np.ndarray:
+) -> tuple[np.ndarray, int]:
     """
     Record audio from the microphone.
 
-    Args:
-        duration_s: Recording duration in seconds.
-        sample_rate: Sample rate in Hz.
-        channels: Number of channels (1=mono, 2=stereo).
-        device: Input device index.
-
-    Returns:
-        Numpy array (float32, shape: [samples, channels]).
+    Returns (recording, actual_sample_rate). Retries at the device's default
+    sample rate if PortAudio rejects the requested rate (typical for USB mics at 16 kHz).
     """
     if not SD_AVAILABLE:
         raise RuntimeError("sounddevice not available")
 
-    try:
-        logger.info("Recording audio: {}s at {} Hz, {} channels, device={}", duration_s, sample_rate, channels, device)
-        num_samples = int(duration_s * sample_rate)
+    dev = sd.query_devices(device)
+    fallback_sr = int(float(dev.get("default_samplerate") or 44100))
+
+    def _run(sr: int) -> np.ndarray:
+        num_samples = int(duration_s * sr)
         recording = sd.rec(
             frames=num_samples,
-            samplerate=sample_rate,
+            samplerate=sr,
             channels=channels,
             device=device,
             dtype=np.float32,
         )
-        sd.wait()  # Wait until recording is finished
-        logger.info("Recording completed: {} samples captured", len(recording))
+        sd.wait()
         return recording
+
+    try:
+        logger.info("Recording audio: {}s at {} Hz, {} channels, device={}", duration_s, sample_rate, channels, device)
+        recording = _run(sample_rate)
+        logger.info("Recording completed: {} samples captured", len(recording))
+        return recording, sample_rate
     except Exception as exc:
+        err = str(exc).lower()
+        if sample_rate != fallback_sr and (
+            "sample rate" in err or "invalid" in err or "painvalidsample" in err.replace(" ", "")
+        ):
+            logger.warning(
+                "Recording at {} Hz failed ({}); retrying at {} Hz",
+                sample_rate,
+                exc,
+                fallback_sr,
+            )
+            recording = _run(fallback_sr)
+            logger.info("Recording completed: {} samples at {} Hz", len(recording), fallback_sr)
+            return recording, fallback_sr
         logger.error("Failed to record audio: {}", exc)
         raise RuntimeError(f"Audio recording failed: {exc}") from exc
 
@@ -168,33 +183,48 @@ async def listen(
         sample_rate = settings.audio.sample_rate
         channels = settings.audio.channels
 
-    # Always select USB mic, regardless of what settings say
+    def _mic_spec() -> str | None:
+        env = (os.getenv("PI_INPUT_DEVICE") or "").strip()
+        if env:
+            if env.lower() in ("default", "system", "auto"):
+                return None
+            return env
+        if settings is not None:
+            raw = getattr(settings.audio, "input_device", None)
+            if raw is not None and str(raw).strip():
+                s = str(raw).strip()
+                if s.lower() in ("default", "system", "auto"):
+                    return None
+                return s
+        return _DEFAULT_USB_SPEC
+
     if _input_device is None or _settings is not settings:
+        spec = _mic_spec()
         try:
-            logger.info("Selecting USB microphone (spec: '{}')", USB_DEVICE_SPEC)
-            _input_device = select_input_device(USB_DEVICE_SPEC)
+            logger.info("Selecting input microphone (spec: {!r})", spec)
+            _input_device = select_input_device(spec)
             _settings = settings
         except Exception as exc:
-            logger.error("Failed to select USB input device: {}", exc)
+            logger.error("Failed to select input device: {}", exc)
             return {
                 "driver": "ear",
                 "action": "listen",
                 "duration_s": duration_s,
                 "status": "error",
-                "error_message": f"USB device selection failed: {exc}",
+                "error_message": f"Input device selection failed: {exc}",
             }
 
     device = _input_device
 
     try:
         # Record audio in thread to avoid blocking
-        def _record() -> np.ndarray:
+        def _record() -> tuple[np.ndarray, int]:
             return _record_audio(duration_s, sample_rate, channels, device)
 
-        audio_array = await asyncio.to_thread(_record)
+        audio_array, used_sr = await asyncio.to_thread(_record)
 
-        # Convert to WAV bytes
-        wav_bytes = _numpy_to_wav_bytes(audio_array, sample_rate)
+        # Convert to WAV bytes (use actual capture rate after fallback)
+        wav_bytes = _numpy_to_wav_bytes(audio_array, used_sr)
 
         # Upload via api_client
         upload_success = await api_client.send_audio(wav_bytes)

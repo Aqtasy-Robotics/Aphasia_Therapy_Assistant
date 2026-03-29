@@ -9,6 +9,7 @@ UPDATED FOR PI → LAPTOP ARCHITECTURE:
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 import tempfile
 import time
@@ -21,6 +22,8 @@ from typing import Any, Dict, List
 import requests
 import sounddevice as sd
 import soundfile as sf
+
+from src.services.audio_utils import select_input_device
 
 from kivy.app import App
 from kivy.clock import Clock
@@ -54,7 +57,7 @@ DEFAULT_WORDS_BY_CATEGORY["all"] = (
     + DEFAULT_WORDS_BY_CATEGORY["people"]
 )
 
-# Pi mic recording settings (must match what Whisper expects)
+# Pi mic: prefer 16 kHz for speech; many USB mics only accept 44.1/48 kHz (code falls back).
 _PI_SAMPLE_RATE    = int(os.getenv("SAMPLE_RATE", 16000))
 _PI_RECORD_SECONDS = int(os.getenv("RECORD_SECONDS", 8))
 
@@ -66,45 +69,229 @@ _APP_READY = False
 
 # ── Pi audio helpers (module level, no Kivy dependency) ──────────────────────
 
+def _project_root() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
+def _configured_input_device_spec() -> str | None:
+    """
+    Mic selection for Kivy session recording (same idea as config.json / ear driver).
+
+    Priority: env PI_INPUT_DEVICE → config.json audio.input_device → None (OS default).
+    Use a name substring (e.g. \"usb\", \"respeaker\") or numeric PortAudio index as string.
+    """
+    env_spec = (os.getenv("PI_INPUT_DEVICE") or "").strip()
+    if env_spec:
+        if env_spec.lower() in ("default", "system", "auto"):
+            return None
+        return env_spec
+    try:
+        import json
+
+        with (_project_root() / "config.json").open("r", encoding="utf-8") as fh:
+            audio = json.load(fh).get("audio") or {}
+        raw = audio.get("input_device")
+        if raw is None or raw == "":
+            return None
+        s = str(raw).strip()
+        if not s or s.lower() in ("default", "system", "auto"):
+            return None
+        return s
+    except Exception:
+        return None
+
+
 def _find_pi_microphone() -> int:
-    """Return the default input device index on the Pi."""
+    """Resolve the PortAudio input device index for recording."""
+    spec = _configured_input_device_spec()
+    if spec:
+        try:
+            idx = select_input_device(spec)
+            dev = sd.query_devices()[idx]
+            print(f"[Pi] Using input device [{idx}] {dev['name']!r} (spec={spec!r})")
+            return idx
+        except Exception as exc:
+            print(f"[Pi] input_device spec {spec!r} failed ({exc}); falling back to default input.")
+
     try:
         default = sd.query_devices(kind="input")
         for idx, d in enumerate(sd.query_devices()):
             if d["name"] == default["name"] and d["max_input_channels"] >= 1:
+                print(f"[Pi] Using default input device [{idx}] {d['name']!r}")
                 return idx
     except Exception:
         pass
     for idx, d in enumerate(sd.query_devices()):
         if d["max_input_channels"] >= 1:
+            print(f"[Pi] Using first input device [{idx}] {d['name']!r}")
             return idx
     raise RuntimeError("No input device found on Pi.")
 
 
+def _is_invalid_sample_rate_error(exc: BaseException) -> bool:
+    """PortAudio PaInvalidSampleRate (-9997) or equivalent."""
+    s = str(exc).lower()
+    return (
+        "-9997" in s
+        or "invalid sample rate" in s
+        or "painvalidsample" in s.replace(" ", "")
+    )
+
+
+def _candidate_sample_rates(device_index: int) -> list[int]:
+    """Try several rates; USB mics on Pi often reject 16 kHz even if default_samplerate says otherwise."""
+    dev = sd.query_devices(device_index)
+    preferred = _PI_SAMPLE_RATE
+    default_sr = int(float(dev.get("default_samplerate") or 44100))
+    # Common USB capture rates first after preferred + reported default
+    pool = [preferred, default_sr, 48_000, 44_100, 32_000, 22_050, 16_000, 8_000]
+    out: list[int] = []
+    for r in pool:
+        if r > 0 and r not in out:
+            out.append(r)
+    return out
+
+
+def _configured_alsa_capture_device() -> str:
+    """
+    ALSA device for arecord (bypasses PortAudio). E.g. plughw:3,0 from ``arecord -l``.
+    Env ALSA_CAPTURE_DEVICE overrides config.json audio.alsa_capture_device.
+    """
+    env = (os.getenv("ALSA_CAPTURE_DEVICE") or "").strip()
+    if env:
+        return env
+    try:
+        import json
+
+        with (_project_root() / "config.json").open("r", encoding="utf-8") as fh:
+            audio = json.load(fh).get("audio") or {}
+        raw = audio.get("alsa_capture_device")
+        if raw is not None and str(raw).strip():
+            return str(raw).strip()
+    except Exception:
+        pass
+    return "default"
+
+
+def _record_pi_audio_sounddevice() -> str:
+    """Record via PortAudio; try multiple sample rates before giving up."""
+    device_index = _find_pi_microphone()
+    last_sr_error: BaseException | None = None
+
+    for sr in _candidate_sample_rates(device_index):
+        try:
+            frames = int(_PI_RECORD_SECONDS * sr)
+            print(f"[Pi] PortAudio: recording {_PI_RECORD_SECONDS}s @ {sr} Hz (device {device_index})…")
+            buf = sd.rec(
+                frames,
+                samplerate=sr,
+                channels=1,
+                dtype="float32",
+                device=device_index,
+            )
+            sd.wait()
+            audio = buf.squeeze()
+            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
+            sf.write(tmp.name, audio, sr)
+            tmp.close()
+            print(f"[Pi] Audio saved: {tmp.name} ({sr} Hz)")
+            return tmp.name
+        except Exception as exc:
+            if _is_invalid_sample_rate_error(exc):
+                last_sr_error = exc
+                print(f"[Pi] Sample rate {sr} Hz rejected ({exc!s}); trying next…")
+                continue
+            raise RuntimeError(f"Recording failed: {exc}") from exc
+
+    hint = (
+        " Try: export PI_RECORD_BACKEND=alsa "
+        "and ALSA_CAPTURE_DEVICE=plughw:CARD,DEV (see arecord -l)."
+    )
+    raise RuntimeError(
+        f"PortAudio: no working sample rate for this mic (last error: {last_sr_error!s}).{hint}"
+    ) from last_sr_error
+
+
+def _record_pi_audio_alsa() -> str:
+    """Record via ALSA arecord — avoids PortAudio entirely."""
+    alsa_dev = _configured_alsa_capture_device()
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
+    path = tmp.name
+    tmp.close()
+
+    cmd = [
+        "arecord",
+        "-q",
+        "-D",
+        alsa_dev,
+        "-f",
+        "S16_LE",
+        "-c",
+        "1",
+        "-r",
+        str(_PI_SAMPLE_RATE),
+        "-d",
+        str(_PI_RECORD_SECONDS),
+        "-t",
+        "wav",
+        path,
+    ]
+    print(f"[Pi] ALSA: recording {_PI_RECORD_SECONDS}s device={alsa_dev!r} → {path}")
+    try:
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=float(_PI_RECORD_SECONDS) + 15.0,
+            check=False,
+        )
+    except FileNotFoundError as exc:
+        raise RuntimeError(
+            "arecord not found. On the Pi: sudo apt install -y alsa-utils"
+        ) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError("arecord timed out") from exc
+
+    if proc.returncode != 0:
+        msg = (proc.stderr or proc.stdout or "unknown error").strip()
+        raise RuntimeError(f"arecord failed: {msg}")
+
+    if not os.path.isfile(path) or os.path.getsize(path) < 200:
+        raise RuntimeError(
+            "arecord wrote an empty WAV; check mic, cable, and alsamixer capture (F4)."
+        )
+
+    print(f"[Pi] ALSA audio saved: {path}")
+    return path
+
+
 def _record_pi_audio() -> str:
     """
-    Record from the Pi's microphone for _PI_RECORD_SECONDS seconds.
-    Saves to a temp WAV file and returns its path.
-    The caller is responsible for deleting the file.
+    Record mic to a temp WAV.
+
+    PI_RECORD_BACKEND:
+      - auto (default): PortAudio with multi-rate retry, then arecord if still failing.
+      - sounddevice: PortAudio only.
+      - alsa: arecord only.
     """
-    device_index = _find_pi_microphone()
-    print(f"[Pi] Recording {_PI_RECORD_SECONDS}s from device {device_index}…")
+    mode = (os.getenv("PI_RECORD_BACKEND") or "auto").strip().lower()
 
-    audio = sd.rec(
-        int(_PI_RECORD_SECONDS * _PI_SAMPLE_RATE),
-        samplerate=_PI_SAMPLE_RATE,
-        channels=1,
-        dtype="float32",
-        device=device_index,
-    )
-    sd.wait()
-    audio = audio.squeeze()
+    if mode == "alsa":
+        return _record_pi_audio_alsa()
 
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
-    sf.write(tmp.name, audio, _PI_SAMPLE_RATE)
-    tmp.close()
-    print(f"[Pi] Audio saved: {tmp.name}")
-    return tmp.name
+    if mode == "sounddevice":
+        return _record_pi_audio_sounddevice()
+
+    try:
+        return _record_pi_audio_sounddevice()
+    except Exception as exc:
+        print(f"[Pi] PortAudio path failed ({exc!s}); trying ALSA arecord…")
+        try:
+            return _record_pi_audio_alsa()
+        except Exception as exc2:
+            raise RuntimeError(
+                f"{exc!s} | ALSA fallback also failed: {exc2!s}"
+            ) from exc2
 
 
 def _play_audio_on_pi(wav_path: str) -> None:

@@ -7,7 +7,10 @@ into a `session_reports` row.
 
 from __future__ import annotations
 
+import base64
+import json
 import os
+import re
 import time
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -36,6 +39,25 @@ def _load_standard_env_files() -> None:
 
 _load_standard_env_files()
 
+
+def _jwt_payload_role(jwt: str) -> Optional[str]:
+    """Return ``role`` from a Supabase JWT payload without verifying the signature."""
+    parts = (jwt or "").split(".")
+    if len(parts) < 2:
+        return None
+    payload_b64 = parts[1]
+    pad = (-len(payload_b64)) % 4
+    if pad:
+        payload_b64 += "=" * pad
+    try:
+        raw = base64.urlsafe_b64decode(payload_b64.encode("ascii"))
+        data = json.loads(raw.decode("utf-8"))
+        role = data.get("role")
+        return str(role) if role is not None else None
+    except Exception:
+        return None
+
+
 _SUPABASE_URL: Optional[str] = os.getenv("SUPABASE_URL")
 _SUPABASE_SERVICE_KEY: Optional[str] = os.getenv("SUPABASE_SERVICE_KEY")
 _SESSION_REPORTS_TABLE: str = os.getenv("SESSION_REPORTS_TABLE", "session_reports")
@@ -46,6 +68,14 @@ _supabase: Optional[Client] = None
 if not _SUPABASE_URL or not _SUPABASE_SERVICE_KEY:
     print("[agentic-db] SUPABASE_URL or SUPABASE_SERVICE_KEY missing; persistence disabled.")
 else:
+    _key_role = _jwt_payload_role(_SUPABASE_SERVICE_KEY)
+    if _key_role == "anon":
+        print(
+            "[agentic-db] SUPABASE_SERVICE_KEY decodes to role 'anon' — this is the public key. "
+            "Use the service_role key from Supabase Dashboard → Settings → API, or a later .env "
+            "with override=True will break server-side reads (RLS → empty tables). "
+            "Fix: set SUPABASE_SERVICE_KEY in backend/.env to the service_role secret."
+        )
     try:
         _supabase = create_client(_SUPABASE_URL, _SUPABASE_SERVICE_KEY)
     except Exception as exc:  # pragma: no cover - defensive guard
@@ -149,7 +179,7 @@ def fetch_target_words_for_patient(patient_id: str) -> list[str]:
         response = (
             client
             .table("sessions")
-            .select("id, target_words, session_date")
+            .select("id, target_words, target_sentence, session_date")
             .eq("patient_id", patient_id)
             .order("session_date", desc=True)
             .limit(1)
@@ -161,20 +191,43 @@ def fetch_target_words_for_patient(patient_id: str) -> list[str]:
 
     data = getattr(response, "data", None) or []
     if not data or not isinstance(data, list):
-        print(f"[agentic-db] No sessions found for patient_id={patient_id} in public.sessions.")
+        print(f"[agentic-db] No sessions found for patient_id={patient_id} in public.sessions; trying fallbacks.")
+        fallback_words = _fetch_latest_report_target_words(patient_id)
+        if fallback_words:
+            print(f"[agentic-db] Loaded {len(fallback_words)} fallback target word(s) from {_SESSION_REPORTS_TABLE}.")
+            return fallback_words
+        env_words = _default_target_words_from_env()
+        if env_words:
+            print(f"[agentic-db] Using {len(env_words)} fallback target word(s) from DEFAULT_TARGET_WORDS.")
+            return env_words
         return []
 
     row = data[0] or {}
-    values = row.get("target_words")
-    if not isinstance(values, list) or not values:
+    words = _normalize_text_array_from_db(row.get("target_words"))
+    if not words:
+        sentence_words = _target_words_from_sentence(row.get("target_sentence"))
+        if sentence_words:
+            print(
+                f"[agentic-db] target_words empty for patient_id={patient_id}; "
+                f"derived {len(sentence_words)} word(s) from target_sentence."
+            )
+            return sentence_words
+        fallback_words = _fetch_latest_report_target_words(patient_id)
+        if fallback_words:
+            print(
+                f"[agentic-db] target_words empty for patient_id={patient_id}; "
+                f"loaded {len(fallback_words)} word(s) from {_SESSION_REPORTS_TABLE}."
+            )
+            return fallback_words
+        env_words = _default_target_words_from_env()
+        if env_words:
+            print(
+                f"[agentic-db] target_words empty for patient_id={patient_id}; "
+                f"using {len(env_words)} word(s) from DEFAULT_TARGET_WORDS."
+            )
+            return env_words
         print(f"[agentic-db] target_words empty or not an array for patient_id={patient_id}.")
         return []
-
-    words: list[str] = []
-    for value in values:
-        candidate = str(value).strip()
-        if candidate:
-            words.append(candidate)
 
     if words:
         print(f"[agentic-db] Loaded {len(words)} target word(s) for patient {patient_id}.")
@@ -205,7 +258,7 @@ def fetch_target_words_and_session_id(patient_id: str) -> tuple[Optional[str], l
         response = (
             client
             .table("sessions")
-            .select("id, target_words, session_date")
+            .select("id, target_words, target_sentence, session_date")
             .eq("patient_id", patient_id)
             .order("session_date", desc=True)
             .limit(1)
@@ -217,21 +270,44 @@ def fetch_target_words_and_session_id(patient_id: str) -> tuple[Optional[str], l
 
     data = getattr(response, "data", None) or []
     if not data or not isinstance(data, list):
-        print(f"[agentic-db] No sessions found for patient_id={patient_id} in public.sessions.")
+        print(f"[agentic-db] No sessions found for patient_id={patient_id} in public.sessions; trying fallbacks.")
+        fallback_words = _fetch_latest_report_target_words(patient_id)
+        if fallback_words:
+            print(f"[agentic-db] Loaded {len(fallback_words)} fallback target word(s) from {_SESSION_REPORTS_TABLE}.")
+            return None, fallback_words
+        env_words = _default_target_words_from_env()
+        if env_words:
+            print(f"[agentic-db] Using {len(env_words)} fallback target word(s) from DEFAULT_TARGET_WORDS.")
+            return None, env_words
         return None, []
 
     row = data[0] or {}
     session_id = row.get("id")
-    values = row.get("target_words")
-    if not isinstance(values, list) or not values:
+    words = _normalize_text_array_from_db(row.get("target_words"))
+    if not words:
+        sentence_words = _target_words_from_sentence(row.get("target_sentence"))
+        if sentence_words:
+            print(
+                f"[agentic-db] target_words empty for patient_id={patient_id}; "
+                f"derived {len(sentence_words)} word(s) from target_sentence."
+            )
+            return session_id, sentence_words
+        fallback_words = _fetch_latest_report_target_words(patient_id)
+        if fallback_words:
+            print(
+                f"[agentic-db] target_words empty for patient_id={patient_id}; "
+                f"loaded {len(fallback_words)} word(s) from {_SESSION_REPORTS_TABLE}."
+            )
+            return session_id, fallback_words
+        env_words = _default_target_words_from_env()
+        if env_words:
+            print(
+                f"[agentic-db] target_words empty for patient_id={patient_id}; "
+                f"using {len(env_words)} word(s) from DEFAULT_TARGET_WORDS."
+            )
+            return session_id, env_words
         print(f"[agentic-db] target_words empty or not an array for patient_id={patient_id}.")
         return session_id, []
-
-    words: list[str] = []
-    for value in values:
-        candidate = str(value).strip()
-        if candidate:
-            words.append(candidate)
 
     if words:
         print(f"[agentic-db] Loaded {len(words)} target word(s) from session {session_id} for patient {patient_id}.")
@@ -255,6 +331,79 @@ def _as_text_array(value: Any) -> list[str]:
 
     text = str(value).strip()
     return [text] if text else []
+
+
+def _normalize_text_array_from_db(value: Any) -> list[str]:
+    """Normalize Supabase/PostgREST text-array shaped values to ``list[str]``."""
+
+    if value is None:
+        return []
+
+    if isinstance(value, (list, tuple, set)):
+        return [str(item).strip() for item in value if str(item).strip()]
+
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return []
+
+        if text.startswith("{") and text.endswith("}"):
+            inner = text[1:-1].strip()
+            if not inner:
+                return []
+            return [
+                chunk.strip().strip('"').strip("'")
+                for chunk in inner.split(",")
+                if chunk.strip().strip('"').strip("'")
+            ]
+
+        if "," in text:
+            return [chunk.strip() for chunk in text.split(",") if chunk.strip()]
+
+        return [text]
+
+    scalar = str(value).strip()
+    return [scalar] if scalar else []
+
+
+def _target_words_from_sentence(value: Any) -> list[str]:
+    """Derive fallback target words from a sentence-like value."""
+    sentence = str(value or "").strip()
+    if not sentence:
+        return []
+    return [token for token in re.findall(r"[A-Za-z0-9']+", sentence) if token]
+
+
+def _default_target_words_from_env() -> list[str]:
+    """Optional startup fallback for demos when DB rows are not yet seeded."""
+    raw = os.getenv("DEFAULT_TARGET_WORDS", "")
+    if not raw.strip():
+        return []
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+def _fetch_latest_report_target_words(patient_id: str) -> list[str]:
+    """Fallback: load most recent target words from ``session_reports``."""
+    client = _get_client()
+    if client is None or not patient_id:
+        return []
+    try:
+        response = (
+            client
+            .table(_SESSION_REPORTS_TABLE)
+            .select("target_word, created_at")
+            .eq("patient_id", patient_id)
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        rows = getattr(response, "data", None) or []
+        if not rows or not isinstance(rows, list):
+            return []
+        row = rows[0] or {}
+        return _normalize_text_array_from_db(row.get("target_word"))
+    except Exception:
+        return []
 
 
 def _as_phoneme_text(value: Any) -> Optional[str]:
@@ -321,16 +470,12 @@ def fetch_personalization_config(
     # ── Normalize each field ──────────────────────────────────────────────────
 
     # therapy_goals: must be a list of non-empty strings.
-    raw_goals = row.get("therapy_goal") or row.get("therapy_goals") or []
-    if isinstance(raw_goals, str):
-        raw_goals = [raw_goals]
-    therapy_goals = [str(g).strip() for g in raw_goals if str(g).strip()] 
+    raw_goals = row.get("therapy_goal") or row.get("therapy_goals")
+    therapy_goals = _normalize_text_array_from_db(raw_goals)
 
     # phonemes_to_focus_on: must be a list of non-empty strings.
-    raw_phonemes = row.get("phonemes_to_focus_on") or []
-    if isinstance(raw_phonemes, str):
-        raw_phonemes = [raw_phonemes]
-    phonemes_to_focus_on = [str(p).strip() for p in raw_phonemes if str(p).strip()]
+    raw_phonemes = row.get("phonemes_to_focus_on")
+    phonemes_to_focus_on = _normalize_text_array_from_db(raw_phonemes)
 
     # difficulty_level: must be one of the allowed values; default to 'medium'.
     raw_difficulty = str(row.get("difficulty_level") or "").strip().lower()
