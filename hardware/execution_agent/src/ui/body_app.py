@@ -4,6 +4,12 @@ UPDATED FOR PI → LAPTOP ARCHITECTURE:
 - on_speak_tap → records audio from Pi mic → POST to laptop server → plays TTS response.
 - Session state persists across multiple button presses (retries + multi-word).
 - Laptop server URL is read from config.json → "laptop_server" → "url".
+
+WORD SYNC FIXES:
+- Words always come from Supabase via server response, never from hardcoded lists.
+- < > navigation arrows are disabled during an active LangGraph session.
+- Word display always matches the server's current target word.
+- _apply_payload no longer overrides server word with local list.
 """
 
 from __future__ import annotations
@@ -28,7 +34,7 @@ from src.services.audio_utils import select_input_device
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.lang import Builder
-from kivy.properties import NumericProperty, StringProperty
+from kivy.properties import NumericProperty, StringProperty, BooleanProperty
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
 from kivy.uix.label import Label
@@ -57,8 +63,8 @@ DEFAULT_WORDS_BY_CATEGORY["all"] = (
     + DEFAULT_WORDS_BY_CATEGORY["people"]
 )
 
-# Pi mic: prefer 16 kHz for speech; many USB mics only accept 44.1/48 kHz (code falls back).
-_PI_SAMPLE_RATE    = int(os.getenv("SAMPLE_RATE", 16000))
+# Pi mic recording settings
+_PI_SAMPLE_RATE    = int(os.getenv("SAMPLE_RATE", 44100))
 _PI_RECORD_SECONDS = int(os.getenv("RECORD_SECONDS", 8))
 
 _UI_COMMAND_QUEUE: Queue[Dict[str, Any]] = Queue(maxsize=256)
@@ -67,19 +73,13 @@ _APP_THREAD: Thread | None = None
 _APP_READY = False
 
 
-# ── Pi audio helpers (module level, no Kivy dependency) ──────────────────────
+# ── Pi audio helpers ──────────────────────────────────────────────────────────
 
 def _project_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
 def _configured_input_device_spec() -> str | None:
-    """
-    Mic selection for Kivy session recording (same idea as config.json / ear driver).
-
-    Priority: env PI_INPUT_DEVICE → config.json audio.input_device → None (OS default).
-    Use a name substring (e.g. \"usb\", \"respeaker\") or numeric PortAudio index as string.
-    """
     env_spec = (os.getenv("PI_INPUT_DEVICE") or "").strip()
     if env_spec:
         if env_spec.lower() in ("default", "system", "auto"):
@@ -87,7 +87,6 @@ def _configured_input_device_spec() -> str | None:
         return env_spec
     try:
         import json
-
         with (_project_root() / "config.json").open("r", encoding="utf-8") as fh:
             audio = json.load(fh).get("audio") or {}
         raw = audio.get("input_device")
@@ -102,7 +101,6 @@ def _configured_input_device_spec() -> str | None:
 
 
 def _find_pi_microphone() -> int:
-    """Resolve the PortAudio input device index for recording."""
     spec = _configured_input_device_spec()
     if spec:
         try:
@@ -129,7 +127,6 @@ def _find_pi_microphone() -> int:
 
 
 def _is_invalid_sample_rate_error(exc: BaseException) -> bool:
-    """PortAudio PaInvalidSampleRate (-9997) or equivalent."""
     s = str(exc).lower()
     return (
         "-9997" in s
@@ -139,11 +136,9 @@ def _is_invalid_sample_rate_error(exc: BaseException) -> bool:
 
 
 def _candidate_sample_rates(device_index: int) -> list[int]:
-    """Try several rates; USB mics on Pi often reject 16 kHz even if default_samplerate says otherwise."""
     dev = sd.query_devices(device_index)
     preferred = _PI_SAMPLE_RATE
     default_sr = int(float(dev.get("default_samplerate") or 44100))
-    # Common USB capture rates first after preferred + reported default
     pool = [preferred, default_sr, 48_000, 44_100, 32_000, 22_050, 16_000, 8_000]
     out: list[int] = []
     for r in pool:
@@ -153,16 +148,11 @@ def _candidate_sample_rates(device_index: int) -> list[int]:
 
 
 def _configured_alsa_capture_device() -> str:
-    """
-    ALSA device for arecord (bypasses PortAudio). E.g. plughw:3,0 from ``arecord -l``.
-    Env ALSA_CAPTURE_DEVICE overrides config.json audio.alsa_capture_device.
-    """
     env = (os.getenv("ALSA_CAPTURE_DEVICE") or "").strip()
     if env:
         return env
     try:
         import json
-
         with (_project_root() / "config.json").open("r", encoding="utf-8") as fh:
             audio = json.load(fh).get("audio") or {}
         raw = audio.get("alsa_capture_device")
@@ -174,7 +164,6 @@ def _configured_alsa_capture_device() -> str:
 
 
 def _record_pi_audio_sounddevice() -> str:
-    """Record via PortAudio; try multiple sample rates before giving up."""
     device_index = _find_pi_microphone()
     last_sr_error: BaseException | None = None
 
@@ -213,28 +202,17 @@ def _record_pi_audio_sounddevice() -> str:
 
 
 def _record_pi_audio_alsa() -> str:
-    """Record via ALSA arecord — avoids PortAudio entirely."""
     alsa_dev = _configured_alsa_capture_device()
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
     path = tmp.name
     tmp.close()
 
     cmd = [
-        "arecord",
-        "-q",
-        "-D",
-        alsa_dev,
-        "-f",
-        "S16_LE",
-        "-c",
-        "1",
-        "-r",
-        str(_PI_SAMPLE_RATE),
-        "-d",
-        str(_PI_RECORD_SECONDS),
-        "-t",
-        "wav",
-        path,
+        "arecord", "-q", "-D", alsa_dev,
+        "-f", "S16_LE", "-c", "1",
+        "-r", str(_PI_SAMPLE_RATE),
+        "-d", str(_PI_RECORD_SECONDS),
+        "-t", "wav", path,
     ]
     print(f"[Pi] ALSA: recording {_PI_RECORD_SECONDS}s device={alsa_dev!r} → {path}")
     try:
@@ -246,9 +224,7 @@ def _record_pi_audio_alsa() -> str:
             check=False,
         )
     except FileNotFoundError as exc:
-        raise RuntimeError(
-            "arecord not found. On the Pi: sudo apt install -y alsa-utils"
-        ) from exc
+        raise RuntimeError("arecord not found. On the Pi: sudo apt install -y alsa-utils") from exc
     except subprocess.TimeoutExpired as exc:
         raise RuntimeError("arecord timed out") from exc
 
@@ -257,31 +233,18 @@ def _record_pi_audio_alsa() -> str:
         raise RuntimeError(f"arecord failed: {msg}")
 
     if not os.path.isfile(path) or os.path.getsize(path) < 200:
-        raise RuntimeError(
-            "arecord wrote an empty WAV; check mic, cable, and alsamixer capture (F4)."
-        )
+        raise RuntimeError("arecord wrote an empty WAV; check mic, cable, and alsamixer capture (F4).")
 
     print(f"[Pi] ALSA audio saved: {path}")
     return path
 
 
 def _record_pi_audio() -> str:
-    """
-    Record mic to a temp WAV.
-
-    PI_RECORD_BACKEND:
-      - auto (default): PortAudio with multi-rate retry, then arecord if still failing.
-      - sounddevice: PortAudio only.
-      - alsa: arecord only.
-    """
     mode = (os.getenv("PI_RECORD_BACKEND") or "auto").strip().lower()
-
     if mode == "alsa":
         return _record_pi_audio_alsa()
-
     if mode == "sounddevice":
         return _record_pi_audio_sounddevice()
-
     try:
         return _record_pi_audio_sounddevice()
     except Exception as exc:
@@ -289,16 +252,12 @@ def _record_pi_audio() -> str:
         try:
             return _record_pi_audio_alsa()
         except Exception as exc2:
-            raise RuntimeError(
-                f"{exc!s} | ALSA fallback also failed: {exc2!s}"
-            ) from exc2
+            raise RuntimeError(f"{exc!s} | ALSA fallback also failed: {exc2!s}") from exc2
 
 
 def _play_audio_on_pi(wav_path: str) -> None:
-    """Play a WAV file through the Pi's speaker via sounddevice."""
     try:
         data, sample_rate = sf.read(wav_path, dtype="float32")
-        # Find default output device
         out_device = None
         try:
             default_out = sd.query_devices(kind="output")
@@ -308,7 +267,6 @@ def _play_audio_on_pi(wav_path: str) -> None:
                     break
         except Exception:
             pass
-
         print(f"[Pi] Playing TTS audio ({len(data)/sample_rate:.1f}s)…")
         sd.play(data, samplerate=sample_rate, device=out_device)
         sd.wait()
@@ -366,14 +324,18 @@ class UiState:
     settings_volume: float = 80.0
     settings_server_url: str = ""
     settings_device_id: str = ""
+    # ── WORD SYNC FIX: separate local browse list from Supabase session list ──
     words: List[str] = field(default_factory=lambda: list(DEFAULT_WORDS_BY_CATEGORY["all"]))
+    supabase_words: List[str] = field(default_factory=list)  # words from server
     current_index: int = 0
     category: str = "all"
     patient_name: str = ""
     session_busy: bool = False
+    # True while a LangGraph session is active — disables < > arrows
+    session_active: bool = False
 
 
-# ── Screen classes (unchanged) ────────────────────────────────────────────────
+# ── Screen classes ────────────────────────────────────────────────────────────
 
 class BaseUiScreen(Screen):
     pass
@@ -390,6 +352,8 @@ class PracticeWordScreen(BaseUiScreen):
     word           = StringProperty("Apple")
     mic_hint       = StringProperty("Click to speak")
     progress_value = NumericProperty(1.0)
+    # ── WORD SYNC FIX: expose nav_disabled so KV can grey out < > buttons ──
+    nav_disabled   = BooleanProperty(False)
 
 class EmptyStateScreen(BaseUiScreen):
     empty_title    = StringProperty("No Practiced Words Yet")
@@ -427,12 +391,8 @@ class SpeechTherapyApp(App):
         self.state           = UiState()
         self._last_feedback_ts = 0.0
         self._graph_module   = None
-
-        # Remote session tracking
-        self._remote_session_id: str | None = None   # set when session is active
-        self._laptop_server_url: str | None = None   # resolved lazily from config
-
-    # ── Build ─────────────────────────────────────────────────────
+        self._remote_session_id: str | None = None
+        self._laptop_server_url: str | None = None
 
     def build(self):
         kv_path = Path(__file__).with_name("body_app.kv")
@@ -473,24 +433,18 @@ ScreenManager:
     def on_stop(self) -> None:
         global _APP_READY
         _APP_READY = False
-        # Clean up any open session on the server
         if self._remote_session_id:
             self._cleanup_remote_session()
 
     # ── Config helpers ────────────────────────────────────────────
 
     def _get_server_url(self) -> str:
-        """Return the laptop server URL from config.json or env var."""
         if self._laptop_server_url:
             return self._laptop_server_url
-
-        # 1. Env var override (handy for testing)
         env_url = os.getenv("LAPTOP_SERVER_URL", "").strip()
         if env_url:
             self._laptop_server_url = env_url.rstrip("/")
             return self._laptop_server_url
-
-        # 2. config.json → "laptop_server" → "url"
         try:
             import json
             project_root = Path(__file__).resolve().parents[2]
@@ -502,15 +456,12 @@ ScreenManager:
                 return self._laptop_server_url
         except Exception as exc:
             logger.warning("Could not read laptop_server.url from config.json: %s", exc)
-
-        # 3. Fallback default (update this to your laptop IP)
         default = "http://192.168.1.100:8000"
-        logger.warning("Using default server URL: %s — set in config.json or LAPTOP_SERVER_URL env var", default)
+        logger.warning("Using default server URL: %s", default)
         self._laptop_server_url = default
         return default
 
     def _cleanup_remote_session(self) -> None:
-        """Tell the server to clean up the session (fire-and-forget)."""
         if not self._remote_session_id:
             return
         try:
@@ -558,22 +509,38 @@ ScreenManager:
 
     def _apply_payload(self, payload: Dict[str, Any]) -> None:
         screen = _parse_screen(payload)
+
+        # ── WORD SYNC FIX ─────────────────────────────────────────
+        # Only update the words list when NOT in an active session.
+        # During a session, words and word are always set by the server.
         words = payload.get("words")
         if isinstance(words, list) and words:
             self.state.words = [str(x) for x in words]
+            # Also track as supabase_words if this came from session start
+            if payload.get("_from_server"):
+                self.state.supabase_words = list(self.state.words)
+
         if "current_index" in payload:
             try:
                 idx = int(payload.get("current_index", 0))
-                self.state.current_index = max(0, min(idx, len(self.state.words) - 1))
+                total = len(self.state.words)
+                self.state.current_index = max(0, min(idx, total - 1))
             except Exception:
                 self.state.current_index = 0
+
+        # ── WORD SYNC FIX: word from server always wins ───────────
         if "word" in payload:
+            # Server explicitly sent a word — use it, don't override
             self.state.word = str(payload.get("word") or self.state.word)
-        elif self.state.words:
+        elif not self.state.session_active and self.state.words:
+            # No active session → sync word with local list index
             self.state.word = self.state.words[self.state.current_index]
+        # During active session without explicit word: keep current word unchanged
+        # ─────────────────────────────────────────────────────────
 
         self.state.category = str(payload.get("category", self.state.category))
         self.state.category_text = f"Category: {self.state.category}"
+
         total_words = max(len(self.state.words), 1)
         self.state.progress_text = f"Word {self.state.current_index + 1} of {total_words}"
         self.state.progress_value = float((self.state.current_index + 1) / total_words)
@@ -609,6 +576,8 @@ ScreenManager:
         practice.category_text  = self.state.category_text
         practice.progress_value = self.state.progress_value
         practice.mic_hint       = self.state.mic_hint
+        # ── WORD SYNC FIX: disable nav arrows during active session ──
+        practice.nav_disabled   = self.state.session_active
 
         feedback = self.root.get_screen("feedback")
         feedback.feedback_icon    = self.state.feedback_icon
@@ -627,12 +596,15 @@ ScreenManager:
             {"type": event_type, "payload": payload, "timestamp": time.time()},
         )
 
-    # ── Navigation callbacks (unchanged) ─────────────────────────
+    # ── Navigation callbacks ──────────────────────────────────────
 
     def on_nav_home(self) -> None:
-        # If a session is in progress, clean it up gracefully
         if self._remote_session_id:
             Thread(target=self._cleanup_remote_session, daemon=True).start()
+        # Reset session state when going home
+        self.state.session_active = False
+        self.state.session_busy   = False
+        self.state.supabase_words = []
         self.state.screen = "home"
         self._apply_state()
         self.emit_touch_event("back_home")
@@ -659,12 +631,20 @@ ScreenManager:
         self.emit_touch_event("select_category", category=category)
 
     def on_prev_word(self) -> None:
+        # ── WORD SYNC FIX: ignore < > during active LangGraph session ──
+        if self.state.session_active:
+            return
         self.state.current_index = max(0, self.state.current_index - 1)
+        self.state.word = self.state.words[self.state.current_index]
         self._apply_payload({"screen": "practice_word"})
         self.emit_touch_event("prev")
 
     def on_next_word(self) -> None:
+        # ── WORD SYNC FIX: ignore < > during active LangGraph session ──
+        if self.state.session_active:
+            return
         self.state.current_index = min(len(self.state.words) - 1, self.state.current_index + 1)
+        self.state.word = self.state.words[self.state.current_index]
         self._apply_payload({"screen": "practice_word"})
         self.emit_touch_event("next")
 
@@ -674,7 +654,6 @@ ScreenManager:
         self.emit_touch_event("open_settings")
 
     def on_close_app(self) -> None:
-        """Stop the Kivy app and exit the process cleanly."""
         if self._remote_session_id:
             self._cleanup_remote_session()
         self.stop()
@@ -682,11 +661,6 @@ ScreenManager:
     # ── Speak tap ─────────────────────────────────────────────────
 
     def on_speak_tap(self) -> None:
-        """
-        Called every time the mic button is pressed.
-        - First press (no active session): pings server, starts session, records.
-        - Subsequent presses (retry / next word): records and sends another attempt.
-        """
         if self.state.session_busy:
             return
         if not self.state.patient_name:
@@ -696,7 +670,7 @@ ScreenManager:
 
     def _open_patient_name_popup(self) -> None:
         box = BoxLayout(orientation="vertical", spacing=10, padding=12)
-        label     = Label(text="Enter patient full name", size_hint_y=None, height=34)
+        label      = Label(text="Enter patient full name", size_hint_y=None, height=34)
         input_name = TextInput(
             multiline=False,
             hint_text="Patient name from Supabase profiles.full_name",
@@ -738,18 +712,9 @@ ScreenManager:
         popup.open()
         Clock.schedule_once(lambda _dt: setattr(input_name, "focus", True), 0.2)
 
-    # ── Session worker (Pi → HTTP → laptop → Pi speaker) ─────────
+    # ── Session worker ────────────────────────────────────────────
 
     def _start_session_worker(self, patient_name: str) -> None:
-        """
-        Background thread that:
-        1. Starts a session on the laptop server (first call only).
-        2. Records audio from the Pi mic.
-        3. POSTs the audio to the laptop server.
-        4. Handles the response:
-           - retry   → update mic hint, allow next button press
-           - audio   → play TTS on Pi speaker, then either show next word or complete
-        """
         if self.state.session_busy:
             return
         self.state.session_busy = True
@@ -760,9 +725,7 @@ ScreenManager:
             pass
 
         server_url = self._get_server_url()
-
-        # Show recording state immediately so the user knows it's listening
-        self.state.mic_hint = "🎤 Recording…"
+        self.state.mic_hint = "Connecting…"
         self._apply_state()
         self.emit_touch_event("speak_tap", word=self.state.word, patient_name=patient_name)
 
@@ -771,7 +734,7 @@ ScreenManager:
             audio_path: str | None = None
 
             try:
-                # ── Step 1: Start session on first press ─────────────
+                # ── Step 1: Start session on first press ──────────────
                 if self._remote_session_id is None:
                     self.state.mic_hint = "Connecting to server…"
                     Clock.schedule_once(lambda _: self._apply_state(), 0)
@@ -785,18 +748,26 @@ ScreenManager:
                     session_data = resp.json()
                     self._remote_session_id = session_data["session_id"]
 
-                    # Update GUI with words from Supabase
-                    target_words  = session_data.get("target_words", self.state.words)
-                    target_word   = session_data.get("target_word", self.state.word)
+                    # ── WORD SYNC FIX: words from Supabase replace local list ──
+                    target_words = session_data.get("target_words") or []
+                    target_word  = session_data.get("target_word") or (target_words[0] if target_words else "")
 
                     def _init_words(_dt: float) -> None:
-                        self._apply_payload({
-                            "screen":        "practice_word",
-                            "words":         target_words,
-                            "current_index": 0,
-                            "word":          target_word,
-                            "category":      self.state.category,
-                        })
+                        # Mark session as active — disables < > arrows
+                        self.state.session_active = True
+                        # Replace words list entirely with Supabase words
+                        self.state.supabase_words = list(target_words)
+                        self.state.words          = list(target_words)
+                        self.state.current_index  = 0
+                        # Explicitly set word from server — never from local list
+                        self.state.word = target_word
+                        total = max(len(target_words), 1)
+                        self.state.progress_text  = f"Word 1 of {total}"
+                        self.state.progress_value = 1.0 / total
+                        self.state.category_text  = f"Category: {self.state.category}"
+                        self.state.screen         = "practice_word"
+                        self._apply_state()
+                        print(f"[UI] Session started — {len(target_words)} Supabase word(s): {target_words}")
                     Clock.schedule_once(_init_words, 0)
 
                 self.state.mic_hint = "🎤 Recording…"
@@ -813,7 +784,7 @@ ScreenManager:
                     resp = requests.post(
                         f"{server_url}/session/{self._remote_session_id}/attempt",
                         files={"audio": ("recording.wav", audio_file, "audio/wav")},
-                        timeout=90,  # graph + TTS can take a while
+                        timeout=90,
                     )
                 resp.raise_for_status()
 
@@ -821,13 +792,12 @@ ScreenManager:
                 content_type = resp.headers.get("content-type", "")
 
                 if "audio/wav" in content_type:
-                    # ── Got TTS audio ─────────────────────────────────
                     status        = resp.headers.get("X-Session-Status", "complete")
                     feedback_text = resp.headers.get("X-Feedback-Text", "")
                     next_word     = resp.headers.get("X-Target-Word", "")
                     current_index = int(resp.headers.get("X-Current-Index", "0") or "0")
 
-                    # Save TTS audio to a temp file and play it
+                    # Play TTS audio on Pi speaker
                     tts_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
                     tts_tmp.write(resp.content)
                     tts_tmp.close()
@@ -840,8 +810,9 @@ ScreenManager:
                             pass
 
                     if status == "complete":
-                        # Session finished — show feedback screen
-                        self._remote_session_id = None
+                        # ── Session finished ──────────────────────────
+                        self._remote_session_id   = None
+                        self.state.session_active = False
 
                         def _complete(_dt: float) -> None:
                             self._apply_payload({
@@ -849,47 +820,53 @@ ScreenManager:
                                 "message":  feedback_text or "Session complete!",
                                 "feedback": "correct",
                             })
-                            self.state.mic_hint = "Click to speak"
+                            self.state.mic_hint     = "Click to speak"
+                            self.state.session_active = False
                         Clock.schedule_once(_complete, 0)
 
                     else:
-                        # More words — update GUI and allow next press
-                        release_busy_in_finally = False  # UI callback handles it
+                        # ── Next word — update from server response ───
+                        release_busy_in_finally = False
 
-                        def _next_word(_dt: float) -> None:
-                            self._apply_payload({
-                                "screen":        "practice_word",
-                                "word":          next_word,
-                                "current_index": current_index,
-                            })
-                            self.state.mic_hint = "Click to speak"
-                            self.state.session_busy = False
+                        def _next_word(_dt: float, _nw=next_word, _ci=current_index) -> None:
+                            # ── WORD SYNC FIX: word always from server ──
+                            self.state.word          = _nw
+                            self.state.current_index = _ci
+                            total = max(len(self.state.words), 1)
+                            self.state.progress_text  = f"Word {_ci + 1} of {total}"
+                            self.state.progress_value = (_ci + 1) / total
+                            self.state.screen         = "practice_word"
+                            self.state.mic_hint       = "Click to speak"
+                            self.state.session_busy   = False
                             self._apply_state()
+                            print(f"[UI] Next word from server: {_nw!r} (index {_ci})")
                         Clock.schedule_once(_next_word, 0)
 
                 else:
-                    # ── JSON response (retry or text-only complete) ───
+                    # ── JSON response ─────────────────────────────────
                     data   = resp.json()
                     status = data.get("status", "retry")
 
                     if status == "retry":
                         hint = data.get("hint", "Please try again.")
-                        release_busy_in_finally = False  # UI callback handles it
+                        release_busy_in_finally = False
 
-                        def _retry(_dt: float) -> None:
-                            self.state.mic_hint = hint
+                        def _retry(_dt: float, _h=hint) -> None:
+                            self.state.mic_hint     = _h
                             self.state.session_busy = False
                             self._apply_state()
                         Clock.schedule_once(_retry, 0)
 
                     elif status == "complete":
-                        self._remote_session_id = None
+                        self._remote_session_id   = None
+                        self.state.session_active = False
                         feedback_text = data.get("feedback_text", "Session complete.")
 
-                        def _text_complete(_dt: float) -> None:
+                        def _text_complete(_dt: float, _ft=feedback_text) -> None:
+                            self.state.session_active = False
                             self._apply_payload({
                                 "screen":   "feedback",
-                                "message":  feedback_text,
+                                "message":  _ft,
                                 "feedback": "correct",
                             })
                             self.state.mic_hint = "Click to speak"
@@ -901,19 +878,22 @@ ScreenManager:
                         current_index = int(data.get("current_index", 0))
                         release_busy_in_finally = False
 
-                        def _text_next(_dt: float) -> None:
-                            self._apply_payload({
-                                "screen":        "practice_word",
-                                "word":          next_word,
-                                "current_index": current_index,
-                            })
-                            self.state.mic_hint = "Click to speak"
-                            self.state.session_busy = False
+                        def _text_next(_dt: float, _nw=next_word, _ci=current_index) -> None:
+                            # ── WORD SYNC FIX: word always from server ──
+                            self.state.word          = _nw
+                            self.state.current_index = _ci
+                            total = max(len(self.state.words), 1)
+                            self.state.progress_text  = f"Word {_ci + 1} of {total}"
+                            self.state.progress_value = (_ci + 1) / total
+                            self.state.screen         = "practice_word"
+                            self.state.mic_hint       = "Click to speak"
+                            self.state.session_busy   = False
                             self._apply_state()
                         Clock.schedule_once(_text_next, 0)
 
             except requests.exceptions.ConnectionError:
-                self._remote_session_id = None
+                self._remote_session_id   = None
+                self.state.session_active = False
                 self._on_session_error(
                     f"Cannot reach laptop server at {server_url}. "
                     "Check your Wi-Fi and that the server is running."
@@ -921,16 +901,15 @@ ScreenManager:
             except requests.exceptions.Timeout:
                 self._on_session_error("Server timed out. The laptop may be busy.")
             except Exception as exc:
-                self._remote_session_id = None
+                self._remote_session_id   = None
+                self.state.session_active = False
                 self._on_session_error(str(exc))
             finally:
-                # Delete audio file
                 if audio_path:
                     try:
                         os.unlink(audio_path)
                     except OSError:
                         pass
-                # Reset busy flag (unless a UI callback will do it)
                 if release_busy_in_finally:
                     def _reset_busy(_dt: float) -> None:
                         self.state.session_busy = False
@@ -943,6 +922,7 @@ ScreenManager:
 
     def _on_session_error(self, error_message: str) -> None:
         def _apply(_dt: float) -> None:
+            self.state.session_active = False
             self._apply_payload({
                 "screen":   "feedback",
                 "message":  f"Session failed: {error_message}",
@@ -953,10 +933,7 @@ ScreenManager:
             self.emit_touch_event("session_error", error=error_message)
         Clock.schedule_once(_apply, 0)
 
-    # ── Keep original show_ui / queue-driven update path intact ──
-
     def _load_graph_module(self):
-        """Kept for backward-compat; not used in remote HTTP mode."""
         if self._graph_module is not None:
             return self._graph_module
         here = Path(__file__).resolve()
@@ -971,7 +948,7 @@ ScreenManager:
         return self._graph_module
 
 
-# ── Public API (unchanged) ────────────────────────────────────────────────────
+# ── Public API ────────────────────────────────────────────────────────────────
 
 def ensure_app_running(
     *,

@@ -1,0 +1,6 @@
+# Add to your Pi venv if missing (EfficientWord-Net / hotword resampling)
+EfficientWord-Net>=1.0.5
+numpy
+scipy
+pyaudio
+elevenlabs

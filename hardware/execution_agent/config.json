@@ -44,10 +44,8 @@
 
     
     "laptop_server": {
-        "url": "http://192.168.8.102:8000",
+        "url": "http://192.168.8.103:8001",
         "_comment": "LangGraph session server (laptop_server.py). Keep on port 8000. Robot Bridge (backend/main.py) must run on port 8001 — see SERVER_URL in .env"
     }
     
-
-
 }
